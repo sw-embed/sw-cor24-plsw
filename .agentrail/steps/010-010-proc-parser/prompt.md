@@ -1,0 +1,1 @@
+Implement the procedure parser. Parse PROC name(params) OPTIONS(...) RETURNS(type); body END;. Parameters are typed: (A INT(24), B PTR). OPTIONS: FREESTANDING, NAKED, LEAF. RETURNS clause is optional. Body contains DCL statements followed by executable statements. Test: parse complete procedures with parameters and locals.

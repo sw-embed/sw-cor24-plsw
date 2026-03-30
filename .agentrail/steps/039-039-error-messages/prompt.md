@@ -1,0 +1,1 @@
+Improve error handling and messages. Add source line number tracking through lexer and parser. All error messages include line number. Error categories: SYNTAX ERROR, TYPE ERROR, UNDEFINED SYMBOL, STORAGE ERROR, INTERNAL ERROR. First error halts compilation with clear message. Test: introduce various errors in test programs, verify messages are helpful.

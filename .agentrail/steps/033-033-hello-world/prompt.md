@@ -1,0 +1,1 @@
+Build the first end-to-end demo: Hello World in PL/SW. Write examples/hello.plsw that declares a static string and calls UART output procedures. Compile with the PL/SW compiler on COR24 emulator. Verify the generated .s assembles and runs, printing 'Hello from PL/SW\!' to UART. This is the critical milestone proving the full pipeline works.

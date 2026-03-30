@@ -1,0 +1,1438 @@
+
+
+
+
+Okay, I want to recreate one of my favorite language families, IBM PL/S-III, PL/AS, and PL/X, but they are proprietary and confidential, it is very hard to find examples or documentation, so my recreation of this language would be a conceptual homage that in no way would be compatible.  But I would want the language I build to be practical (for me at least).  So what is is that I want:  A system development language like C, but with no runtime (free-standing).  Things like malloc are replaced with OS system services (Real Storage Manager GETMAIN).  I do not want C syntax, but something like PL/I (PL\I?).  Very important: metaprogramming: a compile time macro processor.  More like m4 than a C-preprocessor.  Here we can stray from the original.  I'm thinking of a macrolisp DSL that is tied into the AST for my PL/SW (Programming Language for Software Wrighter).  The other thing is that this is a transpiler, PL/SW to .s translator, not a compiler per-se. However it does have to target an ISA and worry about register usage.  PL/X had the ability to "drop into assembler" (like the asm! macro in Rust or (asm "label" "op r1,r2") in macrolisp.  BTW, Rust is the closest language I've found to PL/X (which used manual memory management, not a borrow checker).  I do not want to port Rust.  I want a PL/I-flavored C compiler (to .s not .o) with Macro pre-processor.  Makes sense?
+
+
+Thought for 12s
+Yes — it makes sense, and it is a very coherent language design target.
+
+What you are describing is not “recreate PL/S-III exactly.” It is more like this:
+
+Restated goal
+Build a freestanding systems language that:
+
+feels PL/I-ish, not C-ish
+
+translates to assembler source (.s), not object code
+
+has no mandatory runtime
+
+expects OS services instead of libc/runtime facilities
+
+allows controlled escape hatches into assembly
+
+includes a real compile-time metaprogramming system
+
+is practical for kernel / supervisor / low-level tools / bare-metal / OS-adjacent work
+
+That is a legitimate design space, and historically it is close in spirit to what PL/S was for IBM: a machine-oriented, PL/I-flavored systems language with inline assembler and explicit low-level control. IBM’s internal PL/S family was used for systems programming, was based on PL/I, and supported inline assembly and explicit register control. PL/S evolved through PL/S II, PL/S III, PL/AS, and later PL/X. IBM kept the compiler proprietary for competitive reasons. 
+
+High-level architecture
+The cleanest architecture is:
+
+PL/SW source
+  -> lexer/parser
+  -> AST
+  -> macro expansion on AST (or syntax objects)
+  -> semantic analysis / type checking
+  -> low-level normalized IR
+  -> instruction selection + register planning
+  -> assembler-source emission (.s)
+That is better than “just a text preprocessor + parser” because your macro system wants to be language-aware, not token-splicing in the C preprocessor sense.
+
+So I would frame it this way:
+
+Core idea
+PL/SW is a source-to-source systems compiler:
+
+source language: PL/I-inspired systems language
+
+output language: target ISA assembler
+
+no runtime unless the program explicitly links or includes one
+
+macro system operates on syntax/AST, not raw text
+
+That is a strong design.
+
+Why this direction is good
+Benefits
+1. You avoid the C trap
+You get low-level control without inheriting:
+
+C declarator syntax
+
+preprocessor weirdness
+
+header-file culture
+
+implicit runtime/library assumptions
+
+“undefined behavior as optimization fuel” as the central language philosophy
+
+2. Emitting .s is a feature, not a weakness
+For your goals, assembler output gives:
+
+inspectability
+
+deterministic debugging
+
+easy integration with existing assemblers/emulators
+
+easier experimentation with multiple back ends
+
+opportunity to hand-tune generated code when needed
+
+This is especially attractive if your ecosystem already centers on:
+
+your assembler
+
+your emulator
+
+your custom ISA(s)
+
+bootstrap toolchains
+
+3. AST macros can be far better than CPP
+A Lisp-like compile-time DSL tied to the AST can let you express:
+
+bitfield definitions
+
+register save/restore patterns
+
+syscall stubs
+
+dispatch tables
+
+storage layouts
+
+inline code generators
+
+declarative hardware register maps
+
+That is exactly the kind of thing a systems language benefits from.
+
+4. “Drop to asm” remains available
+PL/S-like or Rust-like escape hatches are important in system software:
+
+interrupt prolog/epilog
+
+exact register choreography
+
+MMIO sequences
+
+special instructions
+
+calling convention boundaries
+
+ABI glue
+
+This should exist, but be contained and typed where possible.
+
+The main design question
+The real question is not “does it make sense?”
+
+It is:
+
+What is the semantic center of gravity?
+You have three plausible choices.
+
+Option A: “PL/I-flavored structured assembler”
+This is the simplest and probably best starting point.
+
+Features:
+
+blocks
+
+declarations
+
+procedures
+
+conditionals
+
+loops
+
+typed scalars
+
+pointers / addresses
+
+structs
+
+arrays
+
+assembler escapes
+
+explicit storage classes
+
+optional explicit register hints
+
+This is the most realistic v1.
+
+Option B: “PL/I-ish systems language with C-like semantics”
+This means:
+
+predictable value semantics
+
+pointers
+
+structs/unions
+
+manual memory management
+
+no GC
+
+no exceptions
+
+no hidden runtime
+
+ABI-oriented procedures
+
+This is probably what you want operationally, even if the syntax is PL/I-like.
+
+Option C: “Macro-heavy compiler-construction platform”
+This leans harder into the compile-time DSL:
+
+macros create declarations, statements, types
+
+the language becomes partly a domain language workbench
+
+much more power, but much more risk
+
+This is a powerful long-term direction, but dangerous as a starting point.
+
+Recommendation
+Start with A + selected parts of B.
+
+That gives you:
+
+PL/I-flavored syntax
+
+structured language
+
+freestanding systems semantics
+
+enough low-level control to be practical
+
+a tractable compiler/transpiler
+
+Nonfunctional requirements
+For a project like this, I would explicitly optimize for:
+
+1. Auditability
+Generated .s should be readable and stable.
+
+2. Bootstrap friendliness
+Compiler written in Rust now, but language design should not assume Rust forever.
+
+3. Freestanding operation
+No required runtime, heap, or libc.
+
+4. Retargetability
+Even if backend 1 is COR24 or another ISA, don’t bake in one machine too early.
+
+5. Predictability
+No hidden allocations, hidden temporaries, or hidden control flow unless obvious.
+
+6. Metaprogramming safety
+Macros should be powerful, but they must not turn the language into undebuggable soup.
+
+Suggested language shape
+Syntax flavor
+A PL/I-like surface syntax could look something like:
+
+DCL COUNT FIXED BIN(24);
+DCL PTR POINTER;
+DCL BUF(256) CHAR;
+
+PROC MAIN OPTIONS(FREESTANDING);
+   DCL RC FIXED BIN(24);
+
+   IF COUNT = 0 THEN DO;
+      CALL INIT();
+   END;
+
+   DO WHILE COUNT > 0;
+      CALL STEP(COUNT);
+      COUNT = COUNT - 1;
+   END;
+END;
+But I would not try to preserve historical PL/I complexity.
+Instead, keep the flavor while simplifying aggressively.
+
+Keep
+DCL
+
+PROC
+
+DO ... END
+
+IF ... THEN
+
+named storage classes / attributes
+
+readable declaration syntax
+
+Drop or simplify
+too many defaulting rules
+
+overly rich PL/I string model at first
+
+condition handling / ON-units initially
+
+complicated decimal arithmetic
+
+huge attribute combinatorics
+
+Recommended semantic model
+Memory model
+For v1, make it brutally explicit:
+
+scalar values
+
+addresses / pointers
+
+l-values vs r-values
+
+static storage
+
+automatic stack storage
+
+based/pointed storage later
+
+no implicit heap
+
+A language like this should probably have explicit concepts like:
+
+STATIC
+
+AUTOMATIC
+
+EXTERNAL
+
+REGISTER hint
+
+VOLATILE
+
+ALIGNED
+
+AT(address) or equivalent for MMIO
+
+Procedures
+Procedures should support:
+
+explicit calling convention
+
+explicit return type or RETURNS(...)
+
+optional NORETURN
+
+optional LEAF
+
+optional ASM / NAKED
+
+optional clobber declarations if needed
+
+Types
+Start small:
+
+integer types by width/signedness
+
+address/pointer
+
+arrays
+
+records/structures
+
+bitfields later
+
+enums later
+
+unions maybe, but not immediately unless you need overlays
+
+Given your interests, bitfields and overlays will matter, but do them only once the core is sound.
+
+Macro architecture
+This is the most important part of your idea.
+
+What not to do
+Do not start with a CPP-style preprocessor as your primary metaprogramming system.
+
+That would undermine your best differentiator.
+
+What to do instead
+Use two layers:
+
+Layer 1: minimal lexical facilities
+Only:
+
+file inclusion
+
+conditional compilation by target/platform/feature
+
+maybe simple string interpolation
+
+Layer 2: AST-aware macros
+This is the real system.
+
+Macros should be able to produce:
+
+declarations
+
+statements
+
+expressions
+
+type fragments
+
+assembler fragments
+
+whole procedure skeletons
+
+A Macro Lisp DSL tied to syntax objects is a good idea.
+
+Best model
+Think:
+
+Lisp-ish macro language
+
+input is syntax nodes, not text
+
+output is validated syntax nodes
+
+hygienic by default where practical
+
+non-hygienic escape when explicitly requested
+
+Not fully hygienic if that gets in your way, but at least scoped and structured.
+
+Good use cases
+Examples of things your macros should excel at:
+
+MMIO register definitions
+%REGDEF UART_STATUS AT 16rFF0101
+   FIELD TX_READY BIT(0);
+   FIELD RX_READY BIT(1);
+END;
+Save area prolog generation
+%PROLOG USING(R1,R2,R3);
+Supervisor-call wrappers
+%SVC GETMAIN
+   INPUT  LENGTH: U24;
+   OUTPUT PTR: ADDRESS;
+END;
+Table-driven opcode families
+%DEFINE_SHIFT_OPS(...);
+This is where your language becomes genuinely valuable.
+
+Inline assembly / assembler escape
+You absolutely should include it.
+
+But design it carefully.
+
+Three levels of escape
+1. Expression-level intrinsic
+For single instructions or special ops.
+
+X = ASM_EXPR("add %0,%1,%2", A, B);
+2. Statement/block-level asm
+For short sequences.
+
+ASM DO;
+   "push r1";
+   "push r2";
+   "mvi r1,42";
+END;
+3. Full naked procedure / external assembler linkage
+For handlers, boot code, trampolines.
+
+PROC TIMER_ISR OPTIONS(NAKED, ASM);
+   ...
+END;
+Important constraint
+Do not let inline asm become the hidden implementation language of everything.
+That destroys the value of PL/SW.
+
+Make it:
+
+easy for genuine edge cases
+
+slightly inconvenient for routine work
+
+Backend design
+Because you emit .s, you still need a real backend discipline.
+
+Suggested backend layers
+1. Typed AST
+Language-level semantics.
+
+2. Lowered IR
+Desugar:
+
+loops
+
+procedure returns
+
+aggregates
+
+address calculations
+
+short-circuit logic
+
+3. Machine-aware IR
+Represent:
+
+virtual registers
+
+stack slots
+
+labels
+
+calls
+
+memory ops
+
+explicit widths
+
+4. Register planning / instruction selection
+Since this is transpiling to assembly, this layer matters a lot.
+
+You do not need an LLVM-scale backend.
+But you do need a consistent policy for:
+
+caller/callee saves
+
+register pressure
+
+spills
+
+temporaries
+
+condition codes / compare model
+
+multiword values if any
+
+Recommendation
+Start with a naive but explicit register allocator:
+
+linear-scan-ish
+
+or even template-based allocation with spilling
+
+prioritize debuggability over peak code quality
+
+That will get you much farther than overengineering early.
+
+Practical scope for v1
+A good v1 language would support:
+
+Core v1
+integer scalars
+
+pointers/addresses
+
+arrays
+
+records
+
+procedures
+
+local/static/external declarations
+
+assignments
+
+arithmetic and comparisons
+
+IF, DO WHILE, counted loops
+
+calls
+
+labels and GOTO only if you really need them
+
+inline asm
+
+AST macros for declarations/statements
+
+assembler emission
+
+Defer
+exceptions / condition handlers
+
+decimal arithmetic
+
+rich strings
+
+separate compilation complexity beyond what you need
+
+advanced optimization
+
+full PL/I compatibility ideas
+
+complicated macro reflection
+
+Source organization model
+A language like this also needs a sane module story.
+
+I would recommend:
+
+Compilation units
+Each file becomes one translation unit.
+
+Include/import
+Have both:
+
+textual include for declarations/macros
+
+semantic import for modules/interfaces later
+
+Interfaces
+Eventually define something like:
+
+public declarations
+
+external procedure declarations
+
+external storage declarations
+
+named ABI blocks
+
+Since you output .s, your symbol model should be explicit from day one.
+
+Risks
+1. Too much language, too early
+PL/I family languages can become huge fast.
+
+Mitigation: build a small “systems subset” and refuse feature creep early.
+
+2. Macro system swallowing the language
+Powerful macros can make everything inscrutable.
+
+Mitigation: require macro expansions to be inspectable; support “show expanded source” views.
+
+3. Backend complexity sneaks up
+Even with .s output, codegen and registers are still hard.
+
+Mitigation: pick one ABI and one ISA first; keep lowering simple.
+
+4. Surface nostalgia can distort practicality
+Trying to be too evocative of PL/S or PL/X may trap you in historical quirks.
+
+Mitigation: take the spirit, not the fossil.
+
+A good design philosophy
+I would describe PL/SW like this:
+
+A freestanding, PL/I-inspired systems language with explicit storage, predictable code generation, AST-based compile-time metaprogramming, and controlled inline assembly, transpiling to human-readable assembler.
+
+That is clear, differentiated, and practical.
+
+My recommendation for the first milestone
+Build a tiny end-to-end slice:
+
+Phase 1
+Support only:
+
+DCL
+
+integer scalar types
+
+pointer/address type
+
+PROC
+
+assignment
+
+IF
+
+DO WHILE
+
+procedure call
+
+RETURN
+
+ASM DO ... END
+
+one simple macro form
+
+.s emission for one ISA
+
+Test programs
+Write:
+
+hello/UART output stub
+
+MMIO LED toggle
+
+small counted loop
+
+simple structure access
+
+OS service wrapper like GETMAIN
+
+interrupt stub with inline asm
+
+If those feel good, the language is on the right track.
+
+Bottom line
+Yes, it makes sense.
+
+More specifically:
+
+Conceptually: very sound
+
+Architecturally: clean and achievable
+
+Practically: useful for your kind of work
+
+Historically: aligned with the spirit of PL/S-family systems languages without trying to clone proprietary IBM internals
+
+PL/S historically was exactly in the space of a PL/I-derived systems language with inline assembly and machine control, and IBM kept it proprietary while evolving it through PL/S II, PL/S III, PL/AS, and PL/X. 
+
+The part where you deliberately diverge — the AST-aware Macro Lisp metaprogramming system — is not a weakness. It is probably the best reason to build PL/SW at all.
+
+Suggested next artifact to define
+The next useful thing to pin down is a one-page language charter with:
+
+syntax principles
+
+semantic principles
+
+storage model
+
+procedure/calling model
+
+macro model
+
+asm escape model
+
+what is explicitly out of scope for v1
+
+I can draft that charter next.
+
+
+notes: you mentioned C defines (implying .h file discussiom).  My source file type will be .plsw and the .h (.mac) equivalent will be .msw  files.  DCL or DECLARE will support levels usually odd numbered to future-proof.  This allows for unions.  I didn't mention but this fits COR24 ISA because only CHARS and INTS (signed, different sizes). and bytes, words, bits. No floats.  Obviously arithmetic and logical shifts.  I have fuzzy memory about how to create macros.  they were .mac (like .h) IIRC in the JCL DD equivalent of an include path.  There may have been something like MACRODEF keyword.  To invoke (expand?) a macro (after including it) you would use something like ?GETMAIN(something) SUBPOOL(something) ADDRESS(pointer to set);  not sure how RC was handled (GETMAIN could fail).  Also there was a ?ESTAE macro to establish a recovery environment (think try/catch/finally).  and corresponding macros to un-establish the environment, free storage.  Other macros handled entry/exit linkage.  The PL/X macros could use GEN (GEND?) blocks to generate register operations directly.  The GETMAIN macro would generate an assembler SVC (software interrupt service call).  This whole model is what I want to recreate, explore, leverate.  Entire system components were written by one developer using macros that generated macros that generated macros (but you could read the assembler listing with interspersed PL/X code).  This is my focus--to recreate a system (not the exact syntax) that enables these abstractions and high-level code to generate low-level boile plate code.
+
+Yes — this sharpens the target a lot.
+
+What you want is not merely “a PL/I-flavored systems language.” You want a macro-centered systems construction environment where .plsw is the high-level language and .msw is the reusable metaprogramming/interface layer that expands into lower-level constructs, including direct assembler generation where needed.
+
+That is a much more specific and much more interesting design.
+
+Restated design target
+PL/SW should be:
+
+a freestanding systems language
+
+with PL/I-like declaration structure
+
+targeting assembler source
+
+with no float requirement
+
+and with a first-class macro facility that can:
+
+abstract OS services
+
+generate linkage boilerplate
+
+generate recovery/environment scaffolding
+
+generate inline or out-of-line assembler
+
+generate other macros
+
+and allow developers to build entire system subsystems from layered macro vocabularies
+
+That last part is the real heart of the system.
+
+The language is not the whole product
+The real product is:
+
+PL/SW language
++ MSW macro system
++ assembler generation facilities
++ listing / expansion visibility
++ conventions for system services and linkage
+That matches your goal much better than “just transpile a PL/I-like syntax to .s.”
+
+Your notes imply a two-layer architecture
+Layer 1: the core language
+The core .plsw language should stay relatively small:
+
+declarations
+
+procedures
+
+statements
+
+integer and character data
+
+records / unions via levels
+
+pointers / addresses
+
+shifts, masks, bit operations
+
+calls
+
+control flow
+
+limited inline asm escapes
+
+This should be understandable without metaprogramming magic.
+
+Layer 2: the macro/meta layer
+The .msw layer should provide:
+
+service invocation abstractions like ?GETMAIN(...)
+
+environment/recovery constructs like ?ESTAE(...)
+
+entry/exit/linkage macros
+
+structured resource cleanup macros
+
+assembler generation blocks
+
+syntax sugar that expands to core .plsw or raw .s
+
+macro libraries that can define domain-specific sublanguages
+
+That is where the real power lives.
+
+So I would explicitly make .msw a compiled macro/interface language, not “just include files.”
+
+Your declaration model makes sense
+Using DCL or DECLARE with levels is a very good fit.
+
+Why it fits your goals
+It gives you:
+
+familiar PL/I-family flavor
+
+structured layout specification
+
+future-proof support for overlays / unions
+
+a natural way to describe machine-oriented storage
+
+a path to records that map closely to hardware / control blocks / save areas
+
+For COR24, where your data model is intentionally narrow, this is especially attractive.
+
+Suggested approach
+Have declaration levels define storage trees.
+
+Example shape:
+
+DCL 1 SAVEAREA,
+      3 BACKPTR   PTR,
+      3 FORWPTR   PTR,
+      3 REGS,
+        5 R0      INT(24),
+        5 R1      INT(24),
+        5 R2      INT(24);
+And for unions / overlays, you can later introduce something like:
+
+DCL 1 TOKEN UNION,
+      3 AS_INT    INT(24),
+      3 AS_WORD   WORD,
+      3 AS_CHARS  CHAR(3);
+Or use level semantics plus an explicit attribute like UNION.
+
+That is much more expressive for systems layout than C syntax.
+
+COR24 constraints actually help
+Your target constraints are a strength here.
+
+Because COR24 is integer-centric, you can avoid a huge amount of compiler complexity.
+
+Good v1 type universe
+You probably only need:
+
+BIT
+
+BYTE
+
+WORD
+
+INT(n) or named integer widths
+
+CHAR
+
+PTR / ADDRESS
+
+arrays
+
+records
+
+unions / overlays
+
+And perhaps signed vs unsigned forms if needed.
+
+You do not need to pretend this is a general-purpose scientific language.
+
+That means your compiler can stay focused on:
+
+layout
+
+addressing
+
+expression lowering
+
+shifts/masks
+
+procedure linkage
+
+macro expansion
+
+assembler generation
+
+That is a very manageable and coherent scope.
+
+The macro invocation model you describe is excellent
+This kind of syntax:
+
+?GETMAIN(LENGTH) SUBPOOL(SP) ADDRESS(PTR);
+?ESTAE(EXITRTN) PARAM(DATA);
+is exactly the kind of thing that makes the language feel system-native rather than library-ish.
+
+It has several advantages.
+
+Why this is better than C-style macros or plain function calls
+1. It signals “compile-time construct”
+The leading ? clearly says:
+
+this is not a normal procedure call
+
+this is a macro expansion / code-generation form
+
+semantics may include generated declarations, labels, asm, error paths, save/restore, etc.
+
+That is very valuable.
+
+2. Keyworded arguments fit the domain
+System macros often have many optional clauses:
+
+address
+
+length
+
+subpool
+
+RC target
+
+cleanup action
+
+condition branch
+
+flags
+
+Named clauses are much better than positional calls.
+
+3. It supports machine-code generation patterns
+A macro like ?GETMAIN is not a function. It may:
+
+evaluate operands
+
+reserve temporaries
+
+emit one or more instructions
+
+branch on condition
+
+store results into variables
+
+generate labels
+
+optionally emit cleanup hooks
+
+That is exactly what a macro facility should be allowed to do.
+
+Strong recommendation: macros should be syntactic forms, not token tricks
+Do not model .msw macros as text substitution.
+
+Instead, model them as something like this:
+
+Macro definition conceptually
+A macro definition takes:
+
+a name
+
+a clause grammar
+
+a semantic expander
+
+optionally helper functions/macros
+
+For example:
+
+MACRODEF GETMAIN
+   REQUIRED LENGTH(expr);
+   OPTIONAL SUBPOOL(expr);
+   OPTIONAL ADDRESS(lvalue);
+   OPTIONAL RC(lvalue);
+   OPTIONAL ONFAIL(label-or-block);
+END;
+Then the implementation expands into AST or low-level IR.
+
+That gives you the power of the historical model without becoming opaque mush.
+
+You want macros that generate macros that generate macros
+That is the key statement in your note.
+
+This means your macro system cannot be shallow.
+
+You need staged metaprogramming.
+
+Practical design
+I would support three expansion categories:
+
+1. Surface macros
+Expand user syntax into core .plsw forms.
+
+Example:
+
+?DO_UNTIL(...)
+
+?WITH_SAVEAREA(...)
+
+2. Structural macros
+Generate declarations, procedures, labels, linkage, and cleanup scaffolding.
+
+Example:
+
+?ENTRY
+
+?EXIT
+
+?SAVE_REGS
+
+?RECOVERY_FRAME
+
+3. Codegen macros
+Emit low-level IR or raw assembler directly.
+
+Example:
+
+GEN DO ... END
+
+?SVC(...)
+
+?LOAD_REG(...)
+
+This staged model lets you build big abstractions out of smaller ones.
+
+GEN blocks are worth making first-class
+Your mention of GEN/GEND-style blocks is important.
+
+I would absolutely include this, but with structure.
+
+Suggested model
+A macro may contain a GEN region that emits machine operations in a structured way.
+
+For example:
+
+MACRODEF GETMAIN
+   ...
+   GEN DO;
+      LOAD R1, LENGTH;
+      SVC 10;
+      STORE R1, ADDRESS;
+      STORE RC_REG, RC;
+   END;
+END;
+But internally, I would not treat this as plain strings if you can avoid it.
+
+Instead, treat GEN as a mini machine DSL:
+
+register references
+
+instruction mnemonics
+
+labels
+
+relocations
+
+symbolic operands
+
+target-aware checking
+
+That gives you a path to correctness and retargetability.
+
+Listing and transparency are essential
+This is probably the most important tooling requirement.
+
+Because you want high-level code generating low-level boilerplate, the user must be able to inspect:
+
+original .plsw
+
+included .msw
+
+macro-expanded .plsw
+
+generated GEN / low-level forms
+
+final emitted .s
+
+And ideally a mixed listing like:
+
+source line
+expanded macro explanation
+generated assembler
+Why this matters
+Without this, the language will become untrustworthy.
+
+With this, you get the historical superpower:
+developers can write in abstractions but still read the assembler listing and understand what happened.
+
+That is exactly the mode you said you care about.
+
+So this should be a first-order design requirement, not a nice-to-have.
+
+Recovery/environment macros are a major opportunity
+The ?ESTAE-style idea is especially interesting.
+
+You do not need to recreate historical semantics exactly.
+You need your own model for:
+
+establish recovery environment
+
+unwind / cleanup / release storage
+
+branch to handler
+
+restore prior environment
+
+That suggests PL/SW should eventually have a structured abstraction for:
+
+resource scopes
+
+cleanup scopes
+
+recovery regions
+
+“finally”-like generated cleanup
+
+Two possible directions
+Direction A: macro-only
+All recovery semantics are built with macros that expand to explicit low-level code.
+
+Pros:
+
+simple core language
+
+maximum transparency
+
+historically faithful in spirit
+
+Cons:
+
+may become verbose
+
+harder to analyze semantically
+
+Direction B: core support plus macro sugar
+Introduce a small core notion of protected region / cleanup region, then let macros build on it.
+
+Pros:
+
+easier correctness guarantees
+
+easier tooling
+
+Cons:
+
+larger core language
+
+My recommendation
+For v1, use macro-only.
+Later, if patterns stabilize, promote common behavior into core constructs.
+
+Entry/exit/linkage macros should probably be central
+Because this is systems code, procedure prolog/epilog and conventions matter a lot.
+
+So instead of treating procedure entry as just syntax, I would expect heavy macro involvement.
+
+For example:
+
+PROC MYROUTINE OPTIONS(SYSTEM);
+   ?ENTRY SAVE(R1,R2) BASED(BR12) WORKAREA(MYWS);
+   ...
+   ?EXIT RC(0);
+END;
+These macros can generate:
+
+save-area management
+
+base register setup
+
+stack frame or static work area conventions
+
+return code setup
+
+cleanup ordering
+
+debugging hooks
+
+This is exactly the kind of abstraction that makes low-level code practical at scale.
+
+Source path / include path model
+Your note about .msw files being found on an include-like search path is good.
+
+I would define this explicitly.
+
+Suggested source model
+.plsw
+Primary source files containing procedures, declarations, and macro invocations.
+
+.msw
+Macro/interface files containing:
+
+macro definitions
+
+shared declarations
+
+constants
+
+service signatures
+
+storage/control-block templates
+
+conditional target definitions
+
+Search path
+A configurable ordered list of macro libraries, similar in spirit to include/DD allocation search.
+
+That gives you:
+
+system macro libraries
+
+target-specific macro libraries
+
+project-local macro libraries
+
+experimental macro packages
+
+Very natural for this kind of environment.
+
+One subtle but important distinction
+You should decide whether a macro expands to:
+
+Option 1: AST only
+Everything expands into normal .plsw syntax trees, and only later gets lowered.
+
+Pros:
+
+simpler conceptual model
+
+more uniform tooling
+
+Cons:
+
+harder to express some direct machine choreography
+
+Option 2: AST plus low-level emission forms
+Macros may generate either:
+
+high-level PL/SW syntax
+
+or low-level codegen nodes / GEN blocks
+
+Pros:
+
+more expressive
+
+closer to what you want historically
+
+Cons:
+
+compiler becomes more complex
+
+Recommendation
+Use Option 2, but carefully.
+
+Have a rule like:
+
+normal macros should prefer expanding to AST
+
+GEN regions are the sanctioned escape hatch for emitting machine-level operations
+
+That keeps things powerful without making everything machine soup.
+
+Suggested first-class macro categories
+I think your system should intentionally support these categories:
+
+1. Service macros
+Examples:
+
+?GETMAIN
+
+?FREEMAIN
+
+?ATTACH
+
+?WAIT
+
+?POST
+
+2. Recovery macros
+Examples:
+
+?ESTAE
+
+?UNESTAE
+
+?CLEANUP_SCOPE
+
+3. Linkage macros
+Examples:
+
+?ENTRY
+
+?EXIT
+
+?SAVE
+
+?RESTORE
+
+4. Data-layout macros
+Examples:
+
+register save areas
+
+control blocks
+
+DSECT-like structures
+
+MMIO register blocks
+
+5. Code-generation macros
+Examples:
+
+shifts / bitfield packing
+
+dispatch table generation
+
+instruction-family generation
+
+loop skeletons
+
+inline machine sequences
+
+6. Meta-macros
+Macros that define or parameterize other macros.
+
+That taxonomy will help keep the ecosystem coherent.
+
+A likely good compiler pipeline now
+With your clarified goals, I would refine the architecture like this:
+
+.plsw + .msw
+  -> parse source and macro definitions
+  -> build syntax objects / AST
+  -> resolve macro libraries via search path
+  -> macro expansion (possibly staged)
+  -> expanded AST + GEN nodes
+  -> semantic analysis / type & storage checks
+  -> lowering to machine-aware IR
+  -> emit .s
+  -> emit mixed listing
+The crucial addition is:
+
+macro libraries are parsed as real language artifacts
+
+expansion is staged
+
+mixed listing is a first-class output
+
+What to keep out of v1
+To protect the project, I would keep these out initially:
+
+floating point
+
+decimal arithmetic
+
+full exception semantics
+
+generalized hygienic macro theory
+
+many target ISAs at once
+
+sophisticated optimization
+
+separate compilation complexity beyond symbol import/export
+
+too many type categories
+
+You want the first version to prove the macro abstraction model, not solve every language problem.
+
+What v1 should prove
+A successful v1 should demonstrate these end-to-end cases:
+
+Example 1: service invocation
+?GETMAIN(LENGTH(256), SUBPOOL(0), ADDRESS(BUF), RC(RC));
+expands to correct setup + SVC + result capture.
+
+Example 2: entry/exit linkage
+A procedure with ?ENTRY and ?EXIT emits correct save/restore and return sequence.
+
+Example 3: recovery environment
+A protected block establishes and removes a recovery frame.
+
+Example 4: data-layout macro
+A macro generates a control block declaration with correct offsets.
+
+Example 5: meta-macro
+A macro library defines a family of related service macros from a smaller schema.
+
+If those work, you have the core of the language system.
+
+Bottom line
+Your clarification changes the center of gravity from:
+
+“PL/I-like systems language that transpiles to .s”
+
+to:
+
+“Macro-driven systems construction environment with a PL/I-like core language and a first-class macro/meta layer for generating structured low-level code.”
+
+That is stronger.
+
+It also suggests a good slogan for the project:
+
+PL/SW is not just a language
+It is a systems macro language with a structured systems language embedded inside it.
+
+Or, phrased the other way:
+
+It is a small systems language designed to be amplified by macro libraries.
+
+That feels much closer to what you actually want.
+
+My strongest recommendation
+When you write the design doc, put these three principles at the top:
+
+1. Macro expansion must be inspectable
+Always be able to see what code was generated.
+
+2. Core language stays small
+Power lives in macro libraries, not in endless core-language features.
+
+3. Low-level generation is a feature, not a leak
+The system is explicitly designed to let high-level abstractions generate machine-oriented boilerplate.
+
+The next best step is to define:
+
+the .msw macro definition syntax,
+
+the macro invocation grammar,
+
+and one concrete worked example for ?GETMAIN, ?ENTRY, and ?ESTAE.
+
+I can draft that mini-spec next.
+
+
+
+

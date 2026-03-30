@@ -1,0 +1,7 @@
+number = 18
+slug = "018-static-data"
+status = "pending"
+description = "Implement static data emission. String literals emitted in .data section with..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:15:43"

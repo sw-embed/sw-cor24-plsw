@@ -1,0 +1,7 @@
+number = 15
+slug = "015-emit-framework"
+status = "pending"
+description = "Implement the assembly emitter framework. Output buffer with emit_str(), emit..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:05:42"

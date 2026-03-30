@@ -1,0 +1,1 @@
+Build macro system demo. Write examples/system.msw with a service macro (e.g., ?GETMAIN or a simpler ?SVC_CALL). Write examples/macro.plsw that includes the .msw file and invokes the macro. Demonstrates: %INCLUDE, MACRODEF, ?MACRO() invocation, GEN block expansion. Verify correct assembly generated and runs on emulator.

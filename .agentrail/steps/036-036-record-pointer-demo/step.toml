@@ -1,0 +1,7 @@
+number = 36
+slug = "036-record-pointer-demo"
+status = "pending"
+description = "Build record and pointer demo. Write examples/record.plsw that declares a mul..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:16:43"

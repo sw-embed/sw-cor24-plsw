@@ -1,0 +1,7 @@
+number = 21
+slug = "021-recursion"
+status = "pending"
+description = "Implement nested calls and recursion support. Verify correct frame management..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:15:56"
