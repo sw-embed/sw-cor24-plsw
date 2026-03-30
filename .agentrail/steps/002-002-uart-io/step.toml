@@ -1,6 +1,6 @@
 number = 2
 slug = "002-uart-io"
-status = "pending"
+status = "in-progress"
 description = "Write UART I/O functions in C for the compiler: uart_putchar, uart_getchar, u..."
 role = "production"
 context_files = []

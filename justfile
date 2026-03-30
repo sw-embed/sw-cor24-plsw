@@ -13,9 +13,9 @@ build:
 run: build
     cor24-run --run {{main_s}} --terminal --echo --speed 0
 
-# Build and run with UART input from file
-run-file file: build
-    cor24-run --run {{main_s}} --terminal --speed 0 -u "{{file}}"
+# Build and run with UART input string (supports \n escapes)
+run-input input: build
+    cor24-run --run {{main_s}} --speed 0 -u "{{input}}"
 
 # Build and run with cycle limit (for testing)
 test: build

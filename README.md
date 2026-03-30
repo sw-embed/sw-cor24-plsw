@@ -9,7 +9,7 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Project planning complete. Implementation not yet started.
+Phase 0 complete — project structure, build system, and UART I/O bootstrap.
 
 ## Documentation
 
@@ -23,11 +23,14 @@ Project planning complete. Implementation not yet started.
 ## Build
 
 ```bash
-# Compile the PL/SW compiler (C -> COR24 assembly)
-tc24r src/plsw.c -o build/plsw.s
+# Build
+just build
 
-# Run compiler on emulator
-cor24-run --run build/plsw.s
+# Run interactively
+just run
+
+# Run with UART input string
+just run-input 'hello\n42\n'
 ```
 
 ## License
