@@ -1,6 +1,6 @@
 number = 1
 slug = "001-repo-structure"
-status = "pending"
+status = "in-progress"
 description = "Create the project directory structure and build system. Create src/ for comp..."
 role = "production"
 context_files = []
