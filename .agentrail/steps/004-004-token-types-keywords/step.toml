@@ -1,6 +1,6 @@
 number = 4
 slug = "004-token-types-keywords"
-status = "pending"
+status = "in-progress"
 description = "Define token types and keyword table for the PL/SW lexer. Token types: TOK_DC..."
 role = "production"
 context_files = []

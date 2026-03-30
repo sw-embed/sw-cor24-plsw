@@ -1,5 +1,6 @@
 #include "io.h"
 #include "arena.h"
+#include "token.h"
 
 #define LINE_MAX 128
 
@@ -106,6 +107,75 @@ void test_arena(void) {
     uart_putchar(10);
 }
 
+void test_kw(char *word, int expect_kw) {
+    int type = kw_lookup(word);
+    uart_putstr("  ");
+    uart_putstr(word);
+    uart_putstr(" -> ");
+    uart_putstr(tok_name(type));
+    if (expect_kw && type == TOK_IDENT) {
+        uart_putstr(" FAIL(expected keyword)");
+    }
+    if (!expect_kw && type != TOK_IDENT) {
+        uart_putstr(" FAIL(expected IDENT)");
+    }
+    uart_putchar(10);
+}
+
+void test_tokens(void) {
+    kw_init();
+
+    uart_puts("keywords (should match):");
+    test_kw("DCL", 1);
+    test_kw("DECLARE", 1);
+    test_kw("PROC", 1);
+    test_kw("IF", 1);
+    test_kw("THEN", 1);
+    test_kw("ELSE", 1);
+    test_kw("DO", 1);
+    test_kw("WHILE", 1);
+    test_kw("END", 1);
+    test_kw("CALL", 1);
+    test_kw("RETURN", 1);
+    test_kw("ASM", 1);
+    test_kw("STATIC", 1);
+    test_kw("AUTOMATIC", 1);
+    test_kw("EXTERNAL", 1);
+    test_kw("INT", 1);
+    test_kw("BYTE", 1);
+    test_kw("CHAR", 1);
+    test_kw("PTR", 1);
+    test_kw("WORD", 1);
+    test_kw("BIT", 1);
+    test_kw("OPTIONS", 1);
+    test_kw("RETURNS", 1);
+    test_kw("TO", 1);
+    test_kw("ADDR", 1);
+    test_kw("BASED", 1);
+    test_kw("NAKED", 1);
+
+    uart_puts("case insensitive (should match):");
+    test_kw("dcl", 1);
+    test_kw("Proc", 1);
+    test_kw("rEtUrN", 1);
+
+    uart_puts("identifiers (should NOT match):");
+    test_kw("myvar", 0);
+    test_kw("counter", 0);
+    test_kw("HELLO", 0);
+    test_kw("x", 0);
+
+    uart_puts("tok_name spot check:");
+    uart_putstr("  TOK_PLUS=");
+    uart_puts(tok_name(TOK_PLUS));
+    uart_putstr("  TOK_SEMI=");
+    uart_puts(tok_name(TOK_SEMI));
+    uart_putstr("  TOK_EOF=");
+    uart_puts(tok_name(TOK_EOF));
+    uart_putstr("  TOK_NE=");
+    uart_puts(tok_name(TOK_NE));
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -117,6 +187,10 @@ int main() {
 
     uart_puts("=== Arena Tests ===");
     test_arena();
+    uart_puts("");
+
+    uart_puts("=== Token Tests ===");
+    test_tokens();
     uart_puts("");
 
     uart_puts("=== REPL ===");

@@ -1,0 +1,1 @@
+Added freestanding string utilities (str_len, str_copy, str_ncopy, str_cmp, str_eq, mem_set, mem_copy) in str.h and 16KB bump arena allocator with save/restore watermarks in arena.h. Updated main.c with test harnesses that verify all operations on COR24 emulator. All tests pass: string ops return correct values, arena allocation/deallocation works correctly.
