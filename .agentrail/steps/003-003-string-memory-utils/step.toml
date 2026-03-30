@@ -1,6 +1,6 @@
 number = 3
 slug = "003-string-memory-utils"
-status = "pending"
+status = "in-progress"
 description = "Write string and memory utility functions: strcmp, strcpy, strlen, memset, me..."
 role = "production"
 context_files = []
