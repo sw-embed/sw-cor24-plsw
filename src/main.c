@@ -1,6 +1,6 @@
 #include "io.h"
 #include "arena.h"
-#include "token.h"
+#include "lexer.h"
 
 #define LINE_MAX 128
 
@@ -176,6 +176,48 @@ void test_tokens(void) {
     uart_puts(tok_name(TOK_NE));
 }
 
+void test_lexer(void) {
+    /* Test 1: DCL statement */
+    lex_dump("DCL stmt",
+        "DCL counter INT;");
+
+    /* Test 2: procedure with body */
+    lex_dump("PROC",
+        "foo: PROC(x, y) RETURNS(INT); RETURN(x + y); END foo;");
+
+    /* Test 3: control flow */
+    lex_dump("IF/DO",
+        "IF count > 0 THEN DO; CALL print(count); count = count - 1; END;");
+
+    /* Test 4: multi-char operators */
+    lex_dump("operators",
+        "a <= b != c >= d << 2 >> 1 ptr->field");
+
+    /* Test 5: numbers and strings */
+    lex_dump("literals",
+        "x = 42; msg = 'hello world';");
+
+    /* Test 6: comments stripped */
+    lex_dump("comments",
+        "DCL /* this is a comment */ x INT;");
+
+    /* Test 7: case insensitive keywords */
+    lex_dump("case",
+        "dcl Proc Return");
+
+    /* Test 8: macro syntax */
+    lex_dump("macro",
+        "?GETMAIN(LENGTH(256), TYPE(BYTE))");
+
+    /* Test 9: mixed punctuation */
+    lex_dump("punct",
+        "a.b, c(d); ~e & f | g ^ h");
+
+    /* Test 10: percent directive */
+    lex_dump("directive",
+        "%INCLUDE SYSLIB;");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -193,30 +235,22 @@ int main() {
     test_tokens();
     uart_puts("");
 
-    uart_puts("=== REPL ===");
+    uart_puts("=== Lexer Tests ===");
+    test_lexer();
+    uart_puts("");
+
+    uart_puts("=== REPL (tokenizer) ===");
     char line[LINE_MAX];
 
     while (1) {
         uart_putstr("> ");
         int len = uart_getline(line, LINE_MAX);
-
-        if (len == 0) {
-            continue;
-        }
-
-        /* echo back what was typed */
-        uart_putstr("got ");
-        print_int(len);
-        uart_putstr(" chars: ");
-        uart_puts(line);
-
-        /* test parse_int on the input */
-        int end = 0;
-        int val = parse_int(line, 0, &end);
-        if (end > 0) {
-            uart_putstr("parsed int: ");
-            print_int(val);
-            uart_putchar(10);
+        if (len == 0) continue;
+        lex_init(line, str_len(line));
+        while (1) {
+            lex_scan();
+            tok_print();
+            if (cur_type == TOK_EOF) break;
         }
     }
 

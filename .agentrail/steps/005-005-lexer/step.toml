@@ -1,6 +1,6 @@
 number = 5
 slug = "005-lexer"
-status = "pending"
+status = "in-progress"
 description = "Implement the PL/SW lexer. Scan input buffer character by character producing..."
 role = "production"
 context_files = []

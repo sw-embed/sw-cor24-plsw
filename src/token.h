@@ -64,6 +64,7 @@
 #define TOK_ASSIGN    75
 #define TOK_QUESTION  76
 #define TOK_PERCENT   77
+#define TOK_COLON     78
 
 #define TOK_EOF       99
 
@@ -76,45 +77,40 @@ struct token {
     char text[TOK_TEXT_MAX];
 };
 
-/* Keyword table entry */
-struct keyword {
-    char *name;
-    int type;
-};
-
-/* Keyword table -- searched linearly, case-insensitive */
+/* Keyword table -- parallel arrays (avoids tc24r struct member confusion) */
 #define KW_COUNT 27
 
-struct keyword kw_table[KW_COUNT];
+char *kw_names[KW_COUNT];
+int   kw_types[KW_COUNT];
 
 void kw_init(void) {
-    kw_table[0].name = "DCL";       kw_table[0].type = TOK_DCL;
-    kw_table[1].name = "DECLARE";   kw_table[1].type = TOK_DECLARE;
-    kw_table[2].name = "PROC";      kw_table[2].type = TOK_PROC;
-    kw_table[3].name = "IF";        kw_table[3].type = TOK_IF;
-    kw_table[4].name = "THEN";      kw_table[4].type = TOK_THEN;
-    kw_table[5].name = "ELSE";      kw_table[5].type = TOK_ELSE;
-    kw_table[6].name = "DO";        kw_table[6].type = TOK_DO;
-    kw_table[7].name = "WHILE";     kw_table[7].type = TOK_WHILE;
-    kw_table[8].name = "END";       kw_table[8].type = TOK_END;
-    kw_table[9].name = "CALL";      kw_table[9].type = TOK_CALL;
-    kw_table[10].name = "RETURN";   kw_table[10].type = TOK_RETURN;
-    kw_table[11].name = "ASM";      kw_table[11].type = TOK_ASM;
-    kw_table[12].name = "STATIC";   kw_table[12].type = TOK_STATIC;
-    kw_table[13].name = "AUTOMATIC"; kw_table[13].type = TOK_AUTO;
-    kw_table[14].name = "EXTERNAL"; kw_table[14].type = TOK_EXTERNAL;
-    kw_table[15].name = "INT";      kw_table[15].type = TOK_INT;
-    kw_table[16].name = "BYTE";     kw_table[16].type = TOK_BYTE;
-    kw_table[17].name = "CHAR";     kw_table[17].type = TOK_CHAR;
-    kw_table[18].name = "PTR";      kw_table[18].type = TOK_PTR;
-    kw_table[19].name = "WORD";     kw_table[19].type = TOK_WORD;
-    kw_table[20].name = "BIT";      kw_table[20].type = TOK_BIT;
-    kw_table[21].name = "OPTIONS";  kw_table[21].type = TOK_OPTIONS;
-    kw_table[22].name = "RETURNS";  kw_table[22].type = TOK_RETURNS;
-    kw_table[23].name = "TO";       kw_table[23].type = TOK_TO;
-    kw_table[24].name = "ADDR";     kw_table[24].type = TOK_ADDR;
-    kw_table[25].name = "BASED";    kw_table[25].type = TOK_BASED;
-    kw_table[26].name = "NAKED";    kw_table[26].type = TOK_NAKED;
+    kw_names[0]  = "DCL";       kw_types[0]  = TOK_DCL;
+    kw_names[1]  = "DECLARE";   kw_types[1]  = TOK_DECLARE;
+    kw_names[2]  = "PROC";      kw_types[2]  = TOK_PROC;
+    kw_names[3]  = "IF";        kw_types[3]  = TOK_IF;
+    kw_names[4]  = "THEN";      kw_types[4]  = TOK_THEN;
+    kw_names[5]  = "ELSE";      kw_types[5]  = TOK_ELSE;
+    kw_names[6]  = "DO";        kw_types[6]  = TOK_DO;
+    kw_names[7]  = "WHILE";     kw_types[7]  = TOK_WHILE;
+    kw_names[8]  = "END";       kw_types[8]  = TOK_END;
+    kw_names[9]  = "CALL";      kw_types[9]  = TOK_CALL;
+    kw_names[10] = "RETURN";    kw_types[10] = TOK_RETURN;
+    kw_names[11] = "ASM";       kw_types[11] = TOK_ASM;
+    kw_names[12] = "STATIC";    kw_types[12] = TOK_STATIC;
+    kw_names[13] = "AUTOMATIC"; kw_types[13] = TOK_AUTO;
+    kw_names[14] = "EXTERNAL";  kw_types[14] = TOK_EXTERNAL;
+    kw_names[15] = "INT";       kw_types[15] = TOK_INT;
+    kw_names[16] = "BYTE";      kw_types[16] = TOK_BYTE;
+    kw_names[17] = "CHAR";      kw_types[17] = TOK_CHAR;
+    kw_names[18] = "PTR";       kw_types[18] = TOK_PTR;
+    kw_names[19] = "WORD";      kw_types[19] = TOK_WORD;
+    kw_names[20] = "BIT";       kw_types[20] = TOK_BIT;
+    kw_names[21] = "OPTIONS";   kw_types[21] = TOK_OPTIONS;
+    kw_names[22] = "RETURNS";   kw_types[22] = TOK_RETURNS;
+    kw_names[23] = "TO";        kw_types[23] = TOK_TO;
+    kw_names[24] = "ADDR";      kw_types[24] = TOK_ADDR;
+    kw_names[25] = "BASED";     kw_types[25] = TOK_BASED;
+    kw_names[26] = "NAKED";     kw_types[26] = TOK_NAKED;
 }
 
 /* Convert a character to uppercase */
@@ -142,8 +138,8 @@ int str_eq_nocase(char *a, char *b) {
 int kw_lookup(char *name) {
     int i = 0;
     while (i < KW_COUNT) {
-        if (str_eq_nocase(name, kw_table[i].name)) {
-            return kw_table[i].type;
+        if (str_eq_nocase(name, kw_names[i])) {
+            return kw_types[i];
         }
         i = i + 1;
     }
@@ -207,6 +203,7 @@ char *tok_name(int type) {
     if (type == TOK_ASSIGN) return "=";
     if (type == TOK_QUESTION) return "?";
     if (type == TOK_PERCENT) return "%";
+    if (type == TOK_COLON) return ":";
     if (type == TOK_EOF) return "EOF";
     return "???";
 }
