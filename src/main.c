@@ -7,6 +7,7 @@
 #include "types.h"
 #include "layout.h"
 #include "emit.h"
+#include "codegen.h"
 
 #define LINE_MAX 128
 
@@ -1832,6 +1833,234 @@ void test_emit(void) {
     uart_putchar(10);
 }
 
+void test_codegen(void) {
+    /* Helper: reset all state for each test */
+
+    /* Test 1: Literal loading - small constant */
+    uart_puts("--- cg: literal small ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int n1 = nd_literal(42);
+    cg_expr(n1);
+    uart_putstr(emit_output());
+
+    /* Test 2: Literal loading - large constant */
+    uart_puts("--- cg: literal large ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int n2 = nd_literal(1000);
+    cg_expr(n2);
+    uart_putstr(emit_output());
+
+    /* Test 3: Literal loading - negative */
+    uart_puts("--- cg: literal neg ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int n3 = nd_literal(-5);
+    cg_expr(n3);
+    uart_putstr(emit_output());
+
+    /* Test 4: Simple addition (literal + literal) */
+    uart_puts("--- cg: add ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int add_n = nd_binop(TOK_PLUS, nd_literal(10), nd_literal(20));
+    cg_expr(add_n);
+    uart_putstr(emit_output());
+
+    /* Test 5: Subtraction */
+    uart_puts("--- cg: sub ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int sub_n = nd_binop(TOK_MINUS, nd_literal(50), nd_literal(8));
+    cg_expr(sub_n);
+    uart_putstr(emit_output());
+
+    /* Test 6: Multiplication */
+    uart_puts("--- cg: mul ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int mul_n = nd_binop(TOK_STAR, nd_literal(7), nd_literal(6));
+    cg_expr(mul_n);
+    uart_putstr(emit_output());
+
+    /* Test 7: Nested expression: (3 + 4) * 5 */
+    uart_puts("--- cg: nested ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int inner = nd_binop(TOK_PLUS, nd_literal(3), nd_literal(4));
+    int outer = nd_binop(TOK_STAR, inner, nd_literal(5));
+    cg_expr(outer);
+    uart_putstr(emit_output());
+
+    /* Test 8: Variable load (automatic) */
+    uart_puts("--- cg: var load ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    /* Insert a variable at offset -3 from fp */
+    int si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    int id_n = nd_ident("X");
+    cg_expr(id_n);
+    uart_putstr(emit_output());
+
+    /* Test 9: Variable load (static) */
+    uart_puts("--- cg: var static ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("Y", TYPE_INT24, 3, STOR_STATIC);
+    sym_offset[si] = 4096;
+    id_n = nd_ident("Y");
+    cg_expr(id_n);
+    uart_putstr(emit_output());
+
+    /* Test 10: Variable in expression: X + 10 */
+    uart_puts("--- cg: var + lit ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    int var_add = nd_binop(TOK_PLUS, nd_ident("X"), nd_literal(10));
+    cg_expr(var_add);
+    uart_putstr(emit_output());
+
+    /* Test 11: Comparison: ==  */
+    uart_puts("--- cg: eq ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int eq_n = nd_binop(TOK_EQ, nd_literal(5), nd_literal(5));
+    cg_expr(eq_n);
+    uart_putstr(emit_output());
+
+    /* Test 12: Comparison: < */
+    uart_puts("--- cg: lt ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int lt_n = nd_binop(TOK_LT, nd_literal(3), nd_literal(7));
+    cg_expr(lt_n);
+    uart_putstr(emit_output());
+
+    /* Test 13: Complex expression with spill: (a+b) * (c+d) */
+    uart_puts("--- cg: spill ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int ab = nd_binop(TOK_PLUS, nd_literal(1), nd_literal(2));
+    int cd = nd_binop(TOK_PLUS, nd_literal(3), nd_literal(4));
+    int abcd = nd_binop(TOK_STAR, ab, cd);
+    cg_expr(abcd);
+    uart_putstr(emit_output());
+
+    /* Test 14: Unary negate */
+    uart_puts("--- cg: negate ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int neg_n = nd_unop(TOK_MINUS, nd_literal(42));
+    cg_expr(neg_n);
+    uart_putstr(emit_output());
+
+    /* Test 15: Assignment codegen */
+    uart_puts("--- cg: assign ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("Z", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -6;
+    int asgn = nd_assign(nd_ident("Z"), nd_literal(99));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+
+    /* Test 16: BYTE variable (1-byte load/store) */
+    uart_puts("--- cg: byte var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("B", TYPE_BYTE, 1, STOR_AUTO);
+    sym_offset[si] = -1;
+    int byte_load = nd_ident("B");
+    cg_expr(byte_load);
+    uart_putstr(emit_output());
+
+    /* Test 17: Division (generates call to __plsw_div) */
+    uart_puts("--- cg: div ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    cg_div_emitted = 0;
+    int div_n = nd_binop(TOK_SLASH, nd_literal(100), nd_literal(7));
+    cg_expr(div_n);
+    uart_putstr(emit_output());
+
+    /* Test 18: Comparison operators: >, <=, >= */
+    uart_puts("--- cg: gt ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int gt_n = nd_binop(TOK_GT, nd_literal(10), nd_literal(3));
+    cg_expr(gt_n);
+    uart_putstr(emit_output());
+
+    uart_puts("--- cg: le ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int le_n = nd_binop(TOK_LE, nd_literal(5), nd_literal(10));
+    cg_expr(le_n);
+    uart_putstr(emit_output());
+
+    uart_puts("--- cg: ne ---");
+    arena_init();
+    ast_init();
+    emit_init();
+    cg_init();
+    int ne_n = nd_binop(TOK_NE, nd_literal(1), nd_literal(2));
+    cg_expr(ne_n);
+    uart_putstr(emit_output());
+
+    /* Test 19: error state should be clean */
+    uart_puts("--- cg: error check ---");
+    uart_putstr("  cg_err=");
+    print_int(cg_err);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -1891,6 +2120,10 @@ int main() {
 
     uart_puts("=== Emitter Framework Tests ===");
     test_emit();
+    uart_puts("");
+
+    uart_puts("=== Expression Codegen Tests ===");
+    test_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

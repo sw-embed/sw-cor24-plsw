@@ -1,6 +1,6 @@
 number = 16
 slug = "016-expr-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement expression code generation. Literal loading via mvi. Variable load/..."
 role = "production"
 context_files = []
