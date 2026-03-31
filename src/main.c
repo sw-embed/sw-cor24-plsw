@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "ast.h"
 #include "parser.h"
+#include "symtab.h"
 
 #define LINE_MAX 128
 
@@ -845,6 +846,225 @@ void test_toplevel_parser(void) {
         "DECLARE BUF(80) CHAR; PROC FILL; END;");
 }
 
+void test_symtab(void) {
+    int idx;
+
+    /* Test 1: init and insert at global scope */
+    uart_puts("--- global scope ---");
+    arena_init();
+    sym_init();
+
+    idx = sym_insert("COUNT", TYPE_INT24, 3, STOR_AUTO);
+    uart_putstr("insert COUNT: idx=");
+    print_int(idx);
+    uart_putchar(10);
+    sym_print(idx);
+
+    idx = sym_insert("FLAGS", TYPE_BYTE, 1, STOR_STATIC);
+    uart_putstr("insert FLAGS: idx=");
+    print_int(idx);
+    uart_putchar(10);
+    sym_print(idx);
+
+    idx = sym_insert("BUFPTR", TYPE_PTR, 3, STOR_AUTO);
+    uart_putstr("insert BUFPTR: idx=");
+    print_int(idx);
+    uart_putchar(10);
+
+    uart_putstr("global scope size: ");
+    print_int(sym_scope_size());
+    uart_putchar(10);
+
+    /* Test 2: lookup in global scope */
+    uart_puts("--- lookup global ---");
+    idx = sym_lookup("COUNT");
+    uart_putstr("lookup COUNT: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("FLAGS");
+    uart_putstr("lookup FLAGS: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("MISSING");
+    uart_putstr("lookup MISSING: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 3: case insensitive lookup */
+    uart_puts("--- case insensitive ---");
+    idx = sym_lookup("count");
+    uart_putstr("lookup count: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("Flags");
+    uart_putstr("lookup Flags: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 4: enter procedure scope */
+    uart_puts("--- proc scope ---");
+    sym_enter_scope();
+    uart_putstr("depth after enter: ");
+    print_int(sym_get_depth());
+    uart_putchar(10);
+
+    idx = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_flags[idx] = SYM_F_PARAM;
+    uart_putstr("insert X (param): idx=");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_insert("Y", TYPE_INT24, 3, STOR_AUTO);
+    sym_flags[idx] = SYM_F_PARAM;
+    uart_putstr("insert Y (param): idx=");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_insert("LOCAL", TYPE_BYTE, 1, STOR_AUTO);
+    uart_putstr("insert LOCAL: idx=");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 5: lookup from inner scope finds outer */
+    uart_puts("--- inner sees outer ---");
+    idx = sym_lookup("COUNT");
+    uart_putstr("lookup COUNT (from proc): ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("LOCAL");
+    uart_putstr("lookup LOCAL: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 6: shadowing */
+    uart_puts("--- shadowing ---");
+    idx = sym_insert("COUNT", TYPE_INT16, 2, STOR_AUTO);
+    uart_putstr("insert COUNT (shadow): idx=");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Lookup should find the inner (shadowed) one */
+    idx = sym_lookup("COUNT");
+    uart_putstr("lookup COUNT (should be inner): idx=");
+    print_int(idx);
+    uart_putstr(" type=");
+    uart_puts(nd_type_name(sym_type[idx]));
+
+    /* Test 7: local-only lookup */
+    uart_puts("--- local only ---");
+    idx = sym_lookup_local("COUNT");
+    uart_putstr("local COUNT: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup_local("FLAGS");
+    uart_putstr("local FLAGS (global only): ");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 8: dump current scope */
+    uart_puts("--- dump proc scope ---");
+    sym_dump_scope();
+
+    /* Test 9: exit scope, verify outer restored */
+    uart_puts("--- exit proc scope ---");
+    sym_exit_scope();
+    uart_putstr("depth after exit: ");
+    print_int(sym_get_depth());
+    uart_putchar(10);
+
+    /* COUNT should resolve to global again */
+    idx = sym_lookup("COUNT");
+    uart_putstr("lookup COUNT (should be global): idx=");
+    print_int(idx);
+    uart_putstr(" type=");
+    uart_puts(nd_type_name(sym_type[idx]));
+
+    /* LOCAL should not be found */
+    idx = sym_lookup("LOCAL");
+    uart_putstr("lookup LOCAL (should fail): ");
+    print_int(idx);
+    uart_putchar(10);
+
+    /* Test 10: duplicate detection */
+    uart_puts("--- duplicate ---");
+    sym_err = 0;
+    idx = sym_insert("COUNT", TYPE_INT24, 3, STOR_AUTO);
+    uart_putstr("insert COUNT again: idx=");
+    print_int(idx);
+    if (sym_err) {
+        uart_putstr(" err=");
+        uart_puts(sym_errmsg);
+    } else {
+        uart_putchar(10);
+    }
+
+    /* Test 11: nested scopes (2 levels deep) */
+    uart_puts("--- nested scopes ---");
+    sym_enter_scope();
+    sym_insert("A", TYPE_INT24, 3, STOR_AUTO);
+    sym_enter_scope();
+    sym_insert("B", TYPE_BYTE, 1, STOR_AUTO);
+
+    uart_putstr("depth: ");
+    print_int(sym_get_depth());
+    uart_putchar(10);
+
+    idx = sym_lookup("B");
+    uart_putstr("lookup B: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("A");
+    uart_putstr("lookup A: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("COUNT");
+    uart_putstr("lookup COUNT (global from depth 2): ");
+    print_int(idx);
+    uart_putchar(10);
+
+    sym_exit_scope();
+    idx = sym_lookup("B");
+    uart_putstr("lookup B after exit: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    idx = sym_lookup("A");
+    uart_putstr("lookup A after exit: ");
+    print_int(idx);
+    uart_putchar(10);
+
+    sym_exit_scope();
+
+    /* Test 12: dump all scopes */
+    uart_puts("--- dump all ---");
+    sym_dump_all();
+
+    /* Test 13: procedure symbol */
+    uart_puts("--- proc symbol ---");
+    idx = sym_insert("MAIN", TYPE_NONE, 0, STOR_AUTO);
+    sym_flags[idx] = SYM_F_PROC;
+    sym_print(idx);
+
+    /* Test 14: array symbol */
+    idx = sym_insert("BUFFER", TYPE_CHAR, 80, STOR_STATIC);
+    sym_flags[idx] = SYM_F_ARRAY;
+    sym_print(idx);
+
+    /* Test 15: symbol with offset */
+    sym_enter_scope();
+    idx = sym_insert("LOCALVAR", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[idx] = -3;
+    sym_print(idx);
+    sym_exit_scope();
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -888,6 +1108,10 @@ int main() {
 
     uart_puts("=== Top-Level Parser Tests ===");
     test_toplevel_parser();
+    uart_puts("");
+
+    uart_puts("=== Symbol Table Tests ===");
+    test_symtab();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

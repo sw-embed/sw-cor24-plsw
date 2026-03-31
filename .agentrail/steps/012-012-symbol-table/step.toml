@@ -1,6 +1,6 @@
 number = 12
 slug = "012-symbol-table"
-status = "pending"
+status = "in-progress"
 description = "Implement the scoped symbol table. Support global scope and per-procedure sco..."
 role = "production"
 context_files = []

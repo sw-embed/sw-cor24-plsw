@@ -9,9 +9,9 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 2 complete — parser and AST. Lexer, token system, AST node pool,
-DCL parser, expression parser, statement parser, procedure parser, and
-top-level program parser all implemented and tested.
+Phase 3 in progress — symbol table and type system. Phase 2 (parser/AST)
+complete. Scoped symbol table implemented with global and per-procedure
+scopes, shadowing, case-insensitive lookup, and duplicate detection.
 
 ## Documentation
 
