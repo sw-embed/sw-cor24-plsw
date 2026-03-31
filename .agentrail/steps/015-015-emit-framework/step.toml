@@ -1,6 +1,6 @@
 number = 15
 slug = "015-emit-framework"
-status = "pending"
+status = "in-progress"
 description = "Implement the assembly emitter framework. Output buffer with emit_str(), emit..."
 role = "production"
 context_files = []

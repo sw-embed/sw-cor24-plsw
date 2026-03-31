@@ -1,0 +1,1 @@
+Implemented storage layout computation in src/layout.h. Computes widths for scalars, arrays, and records from DCL AST nodes. Assigns parameter offsets from fp+9 per COR24 calling convention, AUTOMATIC locals at negative fp offsets, and STATIC variables from 0x1000. Tracks per-procedure frame sizes. 12-case test suite validates all scenarios on COR24 emulator. Completes Phase 3.

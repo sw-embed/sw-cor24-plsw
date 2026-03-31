@@ -6,6 +6,7 @@
 #include "symtab.h"
 #include "types.h"
 #include "layout.h"
+#include "emit.h"
 
 #define LINE_MAX 128
 
@@ -1690,6 +1691,147 @@ void test_layout(void) {
     }
 }
 
+void test_emit(void) {
+    /* Test 1: basic emit_str and emit_line */
+    uart_puts("--- basic emit ---");
+    emit_init();
+    emit_str("hello");
+    emit_nl();
+    emit_line("world");
+    uart_putstr("  len=");
+    print_int(emit_length());
+    uart_putchar(10);
+    uart_putstr("  buf: ");
+    uart_putstr(emit_output());
+
+    /* Test 2: emit_int */
+    uart_puts("--- emit_int ---");
+    emit_init();
+    emit_int(0);
+    emit_char(32);
+    emit_int(42);
+    emit_char(32);
+    emit_int(12345);
+    emit_char(32);
+    emit_int(-7);
+    uart_putstr("  ");
+    uart_puts(emit_output());
+
+    /* Test 3: label generation */
+    uart_puts("--- labels ---");
+    emit_init();
+    int l0 = emit_new_label();
+    int l1 = emit_new_label();
+    int l2 = emit_new_label();
+    uart_putstr("  l0=");
+    print_int(l0);
+    uart_putstr(" l1=");
+    print_int(l1);
+    uart_putstr(" l2=");
+    print_int(l2);
+    uart_putchar(10);
+    emit_label(l0);
+    emit_label(l1);
+    uart_putstr("  ");
+    uart_putstr(emit_output());
+
+    /* Test 4: named labels */
+    uart_puts("--- named labels ---");
+    emit_init();
+    emit_named_label("main");
+    emit_named_label("foo");
+    uart_putstr(emit_output());
+
+    /* Test 5: instructions */
+    uart_puts("--- instructions ---");
+    emit_init();
+    emit_instr0("nop");
+    emit_instr1("push", "fp");
+    emit_instr2("mov", "fp", "sp");
+    emit_instr("jmp     (r1)");
+    uart_putstr(emit_output());
+
+    /* Test 6: comments */
+    uart_puts("--- comments ---");
+    emit_init();
+    emit_comment("PL/SW source line");
+    emit_source_line("x = y + 1;");
+    uart_putstr(emit_output());
+
+    /* Test 7: section switching */
+    uart_puts("--- sections ---");
+    emit_init();
+    emit_str(EMIT_INDENT);
+    emit_line(".text");
+    emit_in_data = 0;
+    emit_global("main");
+    emit_named_label("main");
+    emit_prologue();
+    emit_epilogue();
+    emit_data_section();
+    emit_named_label("msg");
+    emit_ascii("Hello");
+    emit_zero();
+    emit_text_section();
+    emit_comment("back in text");
+    uart_putstr(emit_output());
+
+    /* Test 8: .globl directive */
+    uart_puts("--- globl ---");
+    emit_init();
+    emit_global("myproc");
+    uart_putstr(emit_output());
+
+    /* Test 9: data directives */
+    uart_puts("--- data directives ---");
+    emit_init();
+    emit_byte(65);
+    emit_word(1000);
+    uart_putstr(emit_output());
+
+    /* Test 10: prologue/epilogue match COR24 convention */
+    uart_puts("--- prologue/epilogue ---");
+    emit_init();
+    emit_prologue();
+    emit_epilogue();
+    uart_putstr(emit_output());
+
+    /* Test 11: generate a complete skeleton .s file */
+    uart_puts("--- skeleton .s ---");
+    emit_init();
+    emit_str(EMIT_INDENT);
+    emit_line(".text");
+    emit_in_data = 0;
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_line(".globl  _start");
+    emit_line("_start:");
+    emit_instr2("la", "r0", "_main");
+    emit_instr2("jal", "r1", "(r0)");
+    emit_line("_halt:");
+    emit_instr("bra     _halt");
+    emit_nl();
+    emit_global("main");
+    emit_named_label("main");
+    emit_prologue();
+    /* load 42 into r0 */
+    int ret_label = emit_new_label();
+    emit_instr2("lc", "r0", "42");
+    emit_label(ret_label);
+    emit_epilogue();
+    emit_data_section();
+    emit_named_label("greeting");
+    emit_ascii("Hi");
+    emit_zero();
+    uart_putstr(emit_output());
+
+    /* Test 12: error flag on buffer full (just check it's 0 normally) */
+    uart_puts("--- error check ---");
+    uart_putstr("  err=");
+    print_int(emit_err);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -1745,6 +1887,10 @@ int main() {
 
     uart_puts("=== Storage Layout Tests ===");
     test_layout();
+    uart_puts("");
+
+    uart_puts("=== Emitter Framework Tests ===");
+    test_emit();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

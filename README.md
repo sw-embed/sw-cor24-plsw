@@ -9,15 +9,13 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 3 complete — symbol table, type system, and storage layout. Scoped
-symbol table with global and per-procedure scopes, shadowing,
-case-insensitive lookup, and duplicate detection. Type system with width
-tracking, signedness, assignment/expression compatibility checking,
-pointer arithmetic rules, compound type descriptors for arrays and
-records with computed field offsets. Storage layout computation assigns
-stack offsets for AUTOMATIC locals (negative from fp), static addresses
-for STATIC variables, parameter offsets per COR24 calling convention
-(fp+9 base), and tracks per-procedure frame sizes.
+Phase 4 in progress — code generation. Assembly emitter framework
+implemented with output buffer, section management (.text/.data),
+unique label generation, instruction emission helpers, and COR24
+prologue/epilogue generation. Phase 3 complete with scoped symbol table,
+type system (width tracking, signedness, compatibility checking,
+compound type descriptors), and storage layout computation (stack
+offsets, static addresses, COR24 calling convention parameter offsets).
 
 ## Documentation
 
