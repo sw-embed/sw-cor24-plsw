@@ -1,6 +1,6 @@
 number = 18
 slug = "018-static-data"
-status = "pending"
+status = "in-progress"
 description = "Implement static data emission. String literals emitted in .data section with..."
 role = "production"
 context_files = []

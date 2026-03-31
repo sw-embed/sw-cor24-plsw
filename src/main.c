@@ -2228,6 +2228,246 @@ void test_assign_codegen(void) {
     uart_putchar(10);
 }
 
+void test_static_data(void) {
+    int errs;
+    int si;
+    int n;
+    int prog;
+    int idx;
+    int init_node;
+    int lbl;
+
+    errs = 0;
+
+    /* Test 1: Static variable with no initializer (zero-fill, word) */
+    uart_puts("--- static: zero word ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL COUNT INT(24);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 2: Static variable with INIT value (word) */
+    uart_puts("--- static: init word ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL LIMIT INT(24) INIT(100);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 3: Static byte variable with INIT */
+    uart_puts("--- static: init byte ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL FLAG BYTE INIT(255);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 4: Uninitialized byte (zero-fill) */
+    uart_puts("--- static: zero byte ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL STATUS BYTE;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 5: Multiple static declarations */
+    uart_puts("--- static: multiple ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL A INT(24) INIT(10); DCL B INT(24) INIT(20); DCL C BYTE INIT(42);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 6: Static array (zero-filled) */
+    uart_puts("--- static: zero array ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL BUF(8) BYTE;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 7: String literal registration and emission */
+    uart_puts("--- static: string literal ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    lbl = cg_add_string("Hello");
+    if (lbl < 0) {
+        uart_puts("  FAIL: cg_add_string failed");
+        errs = errs + 1;
+    } else {
+        uart_putstr("  string label: L");
+        print_int(lbl);
+        uart_putchar(10);
+        /* Emit the load instruction */
+        cg_load_string(lbl);
+        /* Emit the string table */
+        cg_emit_string_table();
+        uart_putstr(emit_output());
+    }
+
+    /* Test 8: Multiple string literals */
+    uart_puts("--- static: multi strings ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    lbl = cg_add_string("AB");
+    cg_load_string(lbl);
+    lbl = cg_add_string("CD");
+    cg_load_string(lbl);
+    cg_emit_string_table();
+    uart_putstr(emit_output());
+
+    /* Test 9: Static variable with INIT(0) -- explicit zero */
+    uart_puts("--- static: init zero ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL COUNTER INT(24) STATIC INIT(0);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        uart_putstr(emit_output());
+    }
+
+    /* Test 10: Codegen store/load with static var verifies runtime access */
+    uart_puts("--- static: codegen access ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    /* Manually set up a static variable and emit assignment + load */
+    si = sym_insert("TOTAL", TYPE_INT24, 3, STOR_STATIC);
+    sym_offset[si] = 0x1000;
+    /* Assign 42 to TOTAL */
+    n = nd_assign(nd_ident("TOTAL"), nd_literal(42));
+    cg_assign(n);
+    /* Load TOTAL back */
+    cg_expr(nd_ident("TOTAL"));
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Summary */
+    uart_putstr("static data errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -2295,6 +2535,10 @@ int main() {
 
     uart_puts("=== Assignment Codegen Tests ===");
     test_assign_codegen();
+    uart_puts("");
+
+    uart_puts("=== Static Data Tests ===");
+    test_static_data();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

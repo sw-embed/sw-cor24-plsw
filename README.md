@@ -9,9 +9,13 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 4 in progress — code generation. Assignment codegen validated
-with 10-test suite covering automatic/static variables, byte-width
-stores, complex expressions, assign-then-load-back verification,
+Phase 4 in progress — code generation. Static data emission validated
+with 10-test suite covering zero-fill words/bytes, INIT values for
+words and bytes, multiple declarations, zero-fill arrays, string
+literal registration with labeled .byte sequences, multiple string
+tables, explicit INIT(0), and runtime store/load verification via
+codegen. Assignment codegen validated with 10-test suite covering
+automatic/static variables, byte-width stores, complex expressions,
 multiple sequential assignments, large stack offsets, and negation.
 Expression codegen supports literal loading (lc/la), variable
 load/store (fp-relative and static), binary arithmetic (add, sub, mul),

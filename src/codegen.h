@@ -540,4 +540,176 @@ void cg_assign(int node) {
     }
 }
 
+/* --- Static data emission --- */
+
+/* String literal table: maps labels to string data.
+ * Used to collect string literals during codegen, then
+ * emit them all in the .data section at the end. */
+
+#define CG_STR_MAX 32     /* max string literals per compilation */
+
+int cg_str_count;          /* number of string literals collected */
+int cg_str_label[CG_STR_MAX];     /* label number for each string */
+char *cg_str_data[CG_STR_MAX];    /* pointer to string content */
+
+void cg_static_init(void) {
+    cg_str_count = 0;
+}
+
+/* Register a string literal for emission. Returns its label number. */
+int cg_add_string(char *s) {
+    int lbl;
+    if (cg_str_count >= CG_STR_MAX) {
+        cg_error("too many string literals");
+        return -1;
+    }
+    lbl = emit_new_label();
+    cg_str_label[cg_str_count] = lbl;
+    cg_str_data[cg_str_count] = s;
+    cg_str_count = cg_str_count + 1;
+    return lbl;
+}
+
+/* Emit a single string literal as .byte directives with null terminator */
+void cg_emit_string_bytes(char *s) {
+    int i;
+    int ch;
+
+    i = 0;
+    while (s[i]) {
+        emit_str(EMIT_INDENT);
+        emit_str(".byte   ");
+        emit_int(s[i]);
+        emit_nl();
+        i = i + 1;
+    }
+    /* Null terminator */
+    emit_str(EMIT_INDENT);
+    emit_line(".byte   0");
+}
+
+/* Emit all collected string literals in the .data section */
+void cg_emit_string_table(void) {
+    int i;
+    if (cg_str_count == 0) return;
+
+    emit_data_section();
+    emit_comment("String literals");
+
+    i = 0;
+    while (i < cg_str_count) {
+        emit_label(cg_str_label[i]);
+        cg_emit_string_bytes(cg_str_data[i]);
+        i = i + 1;
+    }
+}
+
+/* Emit a static variable in the .data section.
+ * Handles INIT values for scalars and zero-fill for uninitialized.
+ * sym_idx = symbol table index for the variable.
+ * init_node = AST node for INIT value, or NODE_NULL for zero. */
+
+void cg_emit_static_var(int sym_idx, int init_node) {
+    int w;
+    int addr;
+    int val;
+    int i;
+    char *sval;
+
+    w = sym_width[sym_idx];
+    addr = sym_offset[sym_idx];
+
+    emit_data_section();
+
+    /* Emit label at the static address */
+    emit_comment(sym_name[sym_idx]);
+    emit_named_label(sym_name[sym_idx]);
+
+    if (init_node != NODE_NULL && nd_kind[init_node] == NODE_LITERAL) {
+        if (nd_type[init_node] == TYPE_CHAR && nd_name[init_node]) {
+            /* String initializer: emit bytes */
+            sval = nd_name[init_node];
+            i = 0;
+            while (sval[i]) {
+                emit_str(EMIT_INDENT);
+                emit_str(".byte   ");
+                emit_int(sval[i]);
+                emit_nl();
+                i = i + 1;
+            }
+            /* Pad remaining space with zeros */
+            while (i < w) {
+                emit_str(EMIT_INDENT);
+                emit_line(".byte   0");
+                i = i + 1;
+            }
+        } else {
+            /* Numeric initializer */
+            val = nd_ival[init_node];
+            if (w == 1) {
+                emit_str(EMIT_INDENT);
+                emit_str(".byte   ");
+                emit_int(val);
+                emit_nl();
+            } else {
+                emit_str(EMIT_INDENT);
+                emit_str(".word   ");
+                emit_int(val);
+                emit_nl();
+            }
+        }
+    } else {
+        /* No initializer: zero-fill */
+        if (w == 1) {
+            emit_str(EMIT_INDENT);
+            emit_line(".byte   0");
+        } else if (w <= 3) {
+            emit_str(EMIT_INDENT);
+            emit_line(".word   0");
+        } else {
+            /* Large zero fill: emit individual bytes */
+            i = 0;
+            while (i < w) {
+                emit_str(EMIT_INDENT);
+                emit_line(".byte   0");
+                i = i + 1;
+            }
+        }
+    }
+}
+
+/* Walk a program AST and emit .data section for all static/global DCLs.
+ * Assumes layout_globals() has already been called to assign addresses. */
+
+void cg_emit_static_data(int prog_node) {
+    int child;
+    int idx;
+
+    if (prog_node == NODE_NULL) return;
+
+    child = nd_left[prog_node];
+    while (child != NODE_NULL) {
+        if (nd_kind[child] == NODE_DCL) {
+            idx = sym_lookup(nd_name[child]);
+            if (idx >= 0) {
+                cg_emit_static_var(idx, nd_right[child]);
+            }
+        }
+        child = nd_next[child];
+    }
+
+    /* Emit any collected string literals */
+    cg_emit_string_table();
+}
+
+/* Load address of a string literal into r0.
+ * Used when a string literal appears in an expression context. */
+
+void cg_load_string(int label_num) {
+    emit_str(EMIT_INDENT);
+    emit_str("la      r0,");
+    emit_label_ref(label_num);
+    emit_nl();
+}
+
 #endif /* CODEGEN_H */
