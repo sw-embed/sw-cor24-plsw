@@ -9,16 +9,17 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 4 in progress — code generation. Expression codegen implemented
-with literal loading (lc/la), variable load/store (fp-relative and
-static), binary arithmetic (add, sub, mul), software division via
-__plsw_div subroutine, all comparison operators (ceq/cls with carry
-flag materialization), unary negate, register allocation with spill to
-stack when pressure exceeds 3 registers, and assignment codegen.
-Assembly emitter framework provides output buffer, section management,
-label generation, instruction emission, and COR24 prologue/epilogue.
-Phase 3 complete with scoped symbol table, type system, and storage
-layout computation.
+Phase 4 in progress — code generation. Assignment codegen validated
+with 10-test suite covering automatic/static variables, byte-width
+stores, complex expressions, assign-then-load-back verification,
+multiple sequential assignments, large stack offsets, and negation.
+Expression codegen supports literal loading (lc/la), variable
+load/store (fp-relative and static), binary arithmetic (add, sub, mul),
+software division via __plsw_div, all comparison operators, unary
+negate, and register allocation with spill. Assembly emitter framework
+provides output buffer, section management, label generation,
+instruction emission, and COR24 prologue/epilogue. Phase 3 complete
+with scoped symbol table, type system, and storage layout computation.
 
 ## Documentation
 

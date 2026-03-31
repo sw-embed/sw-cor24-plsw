@@ -2061,6 +2061,173 @@ void test_codegen(void) {
     uart_putchar(10);
 }
 
+void test_assign_codegen(void) {
+    int si;
+    int asgn;
+    int errs = 0;
+
+    /* Test 1: Assign literal to automatic variable */
+    uart_puts("--- asgn: auto var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    asgn = nd_assign(nd_ident("X"), nd_literal(42));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 2: Assign literal to static variable */
+    uart_puts("--- asgn: static var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("S", TYPE_INT24, 3, STOR_STATIC);
+    sym_offset[si] = 4096;
+    asgn = nd_assign(nd_ident("S"), nd_literal(100));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 3: Assign expression (a + b) to variable */
+    uart_puts("--- asgn: expr ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("R", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -6;
+    asgn = nd_assign(nd_ident("R"), nd_binop(TOK_PLUS, nd_literal(10), nd_literal(20)));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 4: Assign to BYTE variable (1-byte store) */
+    uart_puts("--- asgn: byte var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("B", TYPE_BYTE, 1, STOR_AUTO);
+    sym_offset[si] = -1;
+    asgn = nd_assign(nd_ident("B"), nd_literal(65));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 5: Assign then load back (assign X=99, then generate load of X) */
+    uart_puts("--- asgn: assign+load ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("V", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -9;
+    asgn = nd_assign(nd_ident("V"), nd_literal(99));
+    cg_assign(asgn);
+    /* Now generate load of V into r0 */
+    cg_expr(nd_ident("V"));
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 6: Assign complex expression: X = (3 + 4) * 5 */
+    uart_puts("--- asgn: complex expr ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    {
+        int inner = nd_binop(TOK_PLUS, nd_literal(3), nd_literal(4));
+        int outer = nd_binop(TOK_STAR, inner, nd_literal(5));
+        asgn = nd_assign(nd_ident("X"), outer);
+        cg_assign(asgn);
+    }
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 7: Multiple assignments (X=10, Y=20, Z=X+Y pattern) */
+    uart_puts("--- asgn: multi ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    si = sym_insert("Y", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -6;
+    si = sym_insert("Z", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -9;
+    /* X = 10 */
+    cg_assign(nd_assign(nd_ident("X"), nd_literal(10)));
+    /* Y = 20 */
+    cg_assign(nd_assign(nd_ident("Y"), nd_literal(20)));
+    /* Z = X + Y */
+    cg_assign(nd_assign(nd_ident("Z"), nd_binop(TOK_PLUS, nd_ident("X"), nd_ident("Y"))));
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 8: Static byte variable assign */
+    uart_puts("--- asgn: static byte ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("SB", TYPE_BYTE, 1, STOR_STATIC);
+    sym_offset[si] = 8192;
+    asgn = nd_assign(nd_ident("SB"), nd_literal(255));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 9: Assign with negation: X = -42 */
+    uart_puts("--- asgn: neg expr ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("X", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -3;
+    asgn = nd_assign(nd_ident("X"), nd_unop(TOK_MINUS, nd_literal(42)));
+    cg_assign(asgn);
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Test 10: Large offset variable (outside 8-bit range) */
+    uart_puts("--- asgn: large offset ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    emit_init();
+    cg_init();
+    si = sym_insert("BIG", TYPE_INT24, 3, STOR_AUTO);
+    sym_offset[si] = -300;
+    asgn = nd_assign(nd_ident("BIG"), nd_literal(777));
+    cg_assign(asgn);
+    /* Also load it back to verify large-offset load path */
+    cg_expr(nd_ident("BIG"));
+    uart_putstr(emit_output());
+    if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
+
+    /* Summary */
+    uart_putstr("assign codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -2124,6 +2291,10 @@ int main() {
 
     uart_puts("=== Expression Codegen Tests ===");
     test_codegen();
+    uart_puts("");
+
+    uart_puts("=== Assignment Codegen Tests ===");
+    test_assign_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

@@ -1,6 +1,6 @@
 number = 17
 slug = "017-assign-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement assignment code generation. Simple variable assignment (evaluate ex..."
 role = "production"
 context_files = []
