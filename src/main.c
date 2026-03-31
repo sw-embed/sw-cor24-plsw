@@ -773,6 +773,78 @@ void test_proc_parser(void) {
         "PROC UART_PUTS(S PTR); DCL I INT(24); DCL CH CHAR; I = 0; DO WHILE (1); CALL PUTC(42); I = I + 1; END; END;");
 }
 
+void test_parse_program(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    int n = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_toplevel_parser(void) {
+    /* Test 1: single global DCL */
+    test_parse_program("single DCL",
+        "DCL COUNT INT(24);");
+
+    /* Test 2: multiple global DCLs */
+    test_parse_program("multi DCL",
+        "DCL X INT(24); DCL Y INT(24); DCL Z BYTE;");
+
+    /* Test 3: single PROC */
+    test_parse_program("single PROC",
+        "PROC FOO; RETURN; END;");
+
+    /* Test 4: DCL then PROC */
+    test_parse_program("DCL+PROC",
+        "DCL TOTAL INT(24); PROC ADD(A INT(24), B INT(24)) RETURNS(INT(24)); TOTAL = A + B; RETURN(TOTAL); END;");
+
+    /* Test 5: PROC then DCL (DCLs can follow PROCs at top level) */
+    test_parse_program("PROC+DCL",
+        "PROC INIT; RETURN; END; DCL STATUS BYTE;");
+
+    /* Test 6: multiple PROCs */
+    test_parse_program("multi PROC",
+        "PROC FIRST; RETURN; END; PROC SECOND; RETURN; END;");
+
+    /* Test 7: label: PROC syntax */
+    test_parse_program("label PROC",
+        "MAIN: PROC OPTIONS(FREESTANDING); CALL INIT(); END;");
+
+    /* Test 8: full program with globals, helpers, and main */
+    test_parse_program("full program",
+        "DCL COUNTER INT(24) STATIC INIT(0); DCL LIMIT INT(24) INIT(10); PROC INCR; COUNTER = COUNTER + 1; END; PROC MAIN OPTIONS(FREESTANDING); DO WHILE (COUNTER < LIMIT); CALL INCR(); END; END;");
+
+    /* Test 9: PROC with RETURNS and local DCLs */
+    test_parse_program("PROC locals",
+        "PROC SQUARE(N INT(24)) RETURNS(INT(24)); DCL R INT(24); R = N * N; RETURN(R); END;");
+
+    /* Test 10: record DCL + PROC that uses it */
+    test_parse_program("record+PROC",
+        "DCL 1 POINT, 3 X INT(24), 3 Y INT(24); PROC DIST(P PTR) RETURNS(INT(24)); RETURN(P->X + P->Y); END;");
+
+    /* Test 11: empty program */
+    test_parse_program("empty", "");
+
+    /* Test 12: DECLARE (long form) at top level */
+    test_parse_program("DECLARE",
+        "DECLARE BUF(80) CHAR; PROC FILL; END;");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -812,6 +884,10 @@ int main() {
 
     uart_puts("=== Procedure Parser Tests ===");
     test_proc_parser();
+    uart_puts("");
+
+    uart_puts("=== Top-Level Parser Tests ===");
+    test_toplevel_parser();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

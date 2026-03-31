@@ -1,6 +1,6 @@
 number = 11
 slug = "011-toplevel-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement the top-level parser. Parse a sequence of top-level DCL declaration..."
 role = "production"
 context_files = []

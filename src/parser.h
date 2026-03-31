@@ -290,9 +290,6 @@ int parse_dcl(void) {
 #define OPT_NAKED        2
 #define OPT_LEAF         4
 
-/* Forward declaration */
-int parse_proc(void);
-
 /* --- Expression parsing --- */
 
 /* Operator precedence levels (low to high) */
@@ -722,6 +719,67 @@ int parse_stmt(void) {
     return lhs;
 }
 
+/* --- Top-level parser --- */
+
+/* Forward declaration */
+int parse_proc(void);
+
+/* Parse a complete PL/SW program.
+   Top-level constructs: DCL declarations and PROC definitions.
+   Returns a PROGRAM node with all top-level items as children. */
+int parse_program(void) {
+    int prog = nd_alloc(NODE_PROGRAM);
+    if (prog == NODE_NULL) {
+        parse_error("node pool full");
+        return NODE_NULL;
+    }
+
+    while (!parse_err && cur_type != TOK_EOF) {
+        int child = NODE_NULL;
+
+        if (cur_type == TOK_DCL || cur_type == TOK_DECLARE) {
+            child = parse_dcl();
+        } else if (cur_type == TOK_PROC) {
+            child = parse_proc();
+        } else {
+            /* Skip label: NAME COLON before PROC */
+            if (cur_type == TOK_IDENT) {
+                /* Look ahead: could be LABEL: PROC */
+                int nlen = str_len(cur_text);
+                char *name = arena_alloc(nlen + 1);
+                if (name) str_copy(name, cur_text);
+                parse_advance();
+                if (cur_type == TOK_COLON) {
+                    parse_advance();
+                    /* Now expect PROC */
+                    if (cur_type == TOK_PROC) {
+                        child = parse_proc();
+                        /* Overwrite the PROC name with the label */
+                        if (child != NODE_NULL) {
+                            nd_name[child] = name;
+                        }
+                    } else {
+                        parse_error("expected PROC after label");
+                        break;
+                    }
+                } else {
+                    parse_error("unexpected top-level token");
+                    break;
+                }
+            } else {
+                parse_error("unexpected top-level token");
+                break;
+            }
+        }
+
+        if (child != NODE_NULL) {
+            nd_append(prog, child);
+        }
+    }
+
+    return prog;
+}
+
 /* --- Procedure parser --- */
 
 /* Parse a parameter: NAME TYPE
@@ -782,15 +840,22 @@ int parse_proc(void) {
     }
     parse_advance();
 
-    /* Procedure name -- may be a keyword token (like INIT) */
-    if (!is_alpha(cur_text[0])) {
-        parse_error("expected proc name");
-        return NODE_NULL;
+    /* Procedure name -- may be a keyword token (like INIT).
+       In label syntax (LABEL: PROC ...) the name follows PROC
+       only if the next token is an identifier/keyword name,
+       not ( or OPTIONS or RETURNS or ; */
+    name = 0;
+    if (cur_type != TOK_LPAREN && cur_type != TOK_OPTIONS
+        && cur_type != TOK_RETURNS && cur_type != TOK_SEMI) {
+        if (!is_alpha(cur_text[0])) {
+            parse_error("expected proc name");
+            return NODE_NULL;
+        }
+        nlen = str_len(cur_text);
+        name = arena_alloc(nlen + 1);
+        if (name) str_copy(name, cur_text);
+        parse_advance();
     }
-    nlen = str_len(cur_text);
-    name = arena_alloc(nlen + 1);
-    if (name) str_copy(name, cur_text);
-    parse_advance();
 
     /* Optional parameter list */
     params = NODE_NULL;
