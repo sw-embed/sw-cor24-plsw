@@ -559,6 +559,135 @@ void test_expr_parser(void) {
     test_parse_expr("bw chain", "a & b | c ^ d");
 }
 
+void test_parse_stmt(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    int n = parse_stmt();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_parse_block(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    /* Parse DO; ... END; as a block */
+    int n = parse_stmt();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_stmt_parser(void) {
+    /* Test 1: simple assignment */
+    test_parse_stmt("assign",
+        "x = 42;");
+
+    /* Test 2: assignment with expression */
+    test_parse_stmt("assign expr",
+        "x = a + b * c;");
+
+    /* Test 3: field assignment */
+    test_parse_stmt("field assign",
+        "rec.x = 10;");
+
+    /* Test 4: IF THEN */
+    test_parse_stmt("IF THEN",
+        "IF x = 0 THEN y = 1;");
+
+    /* Test 5: IF THEN ELSE */
+    test_parse_stmt("IF THEN ELSE",
+        "IF x > 0 THEN y = 1; ELSE y = 0;");
+
+    /* Test 6: IF THEN DO...END */
+    test_parse_stmt("IF THEN DO",
+        "IF x > 0 THEN DO; y = 1; z = 2; END;");
+
+    /* Test 7: IF THEN DO ELSE DO */
+    test_parse_stmt("IF ELSE DO",
+        "IF x THEN DO; a = 1; END; ELSE DO; b = 2; END;");
+
+    /* Test 8: DO WHILE */
+    test_parse_stmt("DO WHILE",
+        "DO WHILE (x > 0); x = x - 1; END;");
+
+    /* Test 9: DO count */
+    test_parse_stmt("DO count",
+        "DO I = 1 TO 10; CALL print(I); END;");
+
+    /* Test 10: CALL no args */
+    test_parse_stmt("CALL no args",
+        "CALL init();");
+
+    /* Test 11: CALL with args */
+    test_parse_stmt("CALL args",
+        "CALL print(42);");
+
+    /* Test 12: CALL multiple args */
+    test_parse_stmt("CALL multi",
+        "CALL move(x, y, z);");
+
+    /* Test 13: RETURN with expr */
+    test_parse_stmt("RETURN expr",
+        "RETURN(x + 1);");
+
+    /* Test 14: RETURN bare */
+    test_parse_stmt("RETURN bare",
+        "RETURN;");
+
+    /* Test 15: DO block */
+    test_parse_block("DO block",
+        "DO; x = 1; y = 2; z = 3; END;");
+
+    /* Test 16: nested IF */
+    test_parse_stmt("nested IF",
+        "IF a THEN IF b THEN x = 1;");
+
+    /* Test 17: compound block with mixed statements */
+    test_parse_block("compound",
+        "DO; DCL x INT; x = 0; IF x = 0 THEN CALL init(); RETURN(x); END;");
+
+    /* Test 18: DO WHILE with multiple stmts */
+    test_parse_stmt("DO WHILE multi",
+        "DO WHILE (n > 0); sum = sum + n; n = n - 1; END;");
+
+    /* Test 19: array subscript assign */
+    test_parse_stmt("array assign",
+        "buf(i) = 65;");
+
+    /* Test 20: nested DO blocks */
+    test_parse_stmt("nested DO",
+        "DO WHILE (1); DO WHILE (0); x = 1; END; END;");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -590,6 +719,10 @@ int main() {
 
     uart_puts("=== Expression Parser Tests ===");
     test_expr_parser();
+    uart_puts("");
+
+    uart_puts("=== Statement Parser Tests ===");
+    test_stmt_parser();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

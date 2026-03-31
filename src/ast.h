@@ -266,10 +266,25 @@ void nd_print(int n, int depth) {
 
 /* Recursively dump a tree */
 void nd_dump(int n, int depth) {
+    int d;
     if (n == NODE_NULL) return;
     nd_print(n, depth);
     nd_dump(nd_left[n], depth + 1);
     nd_dump(nd_right[n], depth + 1);
+    /* IF: dump else branch stored in nd_ival */
+    if (nd_kind[n] == NODE_IF && nd_ival[n] != NODE_NULL) {
+        d = 0;
+        while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
+        uart_puts("(ELSE)");
+        nd_dump(nd_ival[n], depth + 1);
+    }
+    /* DO_COUNT: dump end expression stored in nd_ival */
+    if (nd_kind[n] == NODE_DO_COUNT && nd_ival[n] != NODE_NULL) {
+        d = 0;
+        while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
+        uart_puts("(TO)");
+        nd_dump(nd_ival[n], depth + 1);
+    }
     nd_dump(nd_next[n], depth);
 }
 

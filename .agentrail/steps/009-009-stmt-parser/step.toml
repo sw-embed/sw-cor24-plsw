@@ -1,6 +1,6 @@
 number = 9
 slug = "009-stmt-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement the statement parser. Parse: assignment (var = expr;), IF (cond) TH..."
 role = "production"
 context_files = []

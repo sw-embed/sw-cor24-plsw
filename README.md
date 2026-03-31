@@ -9,7 +9,8 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 0 complete — project structure, build system, and UART I/O bootstrap.
+Phase 2 in progress — parser and AST. Lexer, token system, AST node pool,
+DCL parser, expression parser, and statement parser all implemented and tested.
 
 ## Documentation
 

@@ -323,6 +323,7 @@ int tok_prec(int type) {
 /* Forward declarations */
 int parse_expr(void);
 int parse_expr_prec(int min_prec);
+int parse_stmt(void);
 
 /* Parse a primary expression (atom + postfix) */
 int parse_primary(void) {
@@ -490,6 +491,225 @@ int parse_expr_prec(int min_prec) {
 /* Parse a full expression */
 int parse_expr(void) {
     return parse_expr_prec(PREC_OR);
+}
+
+/* --- Statement parsing --- */
+
+/* Parse a block of statements (until END or EOF).
+   Returns a BLOCK node with statements as children. */
+int parse_block(void) {
+    int blk = nd_alloc(NODE_BLOCK);
+    while (!parse_err && cur_type != TOK_END && cur_type != TOK_EOF) {
+        int s = parse_stmt();
+        if (s != NODE_NULL) {
+            nd_append(blk, s);
+        }
+    }
+    return blk;
+}
+
+/* Parse a single statement.
+   Handles: assignment, IF, DO (WHILE/count/block), CALL,
+   RETURN, DCL, and expression statements. */
+int parse_stmt(void) {
+    int n;
+    int cond;
+    int then_body;
+    int else_body;
+    int body;
+    int args;
+    int tail;
+    int expr;
+    int lhs;
+    int rhs;
+    int start_expr;
+    int end_expr;
+    char *name;
+    int nlen;
+
+    if (parse_err) return NODE_NULL;
+
+    /* IF (cond) THEN stmt ELSE stmt */
+    if (cur_type == TOK_IF) {
+        parse_advance();
+        cond = parse_expr();
+        parse_expect(TOK_THEN);
+
+        /* Then branch: DO;...END; block or single statement */
+        if (cur_type == TOK_DO) {
+            parse_advance();
+            parse_expect(TOK_SEMI);
+            then_body = parse_block();
+            parse_expect(TOK_END);
+            parse_expect(TOK_SEMI);
+        } else {
+            then_body = parse_stmt();
+        }
+
+        /* Optional ELSE */
+        else_body = NODE_NULL;
+        if (cur_type == TOK_ELSE) {
+            parse_advance();
+            if (cur_type == TOK_DO) {
+                parse_advance();
+                parse_expect(TOK_SEMI);
+                else_body = parse_block();
+                parse_expect(TOK_END);
+                parse_expect(TOK_SEMI);
+            } else {
+                else_body = parse_stmt();
+            }
+        }
+
+        n = nd_alloc(NODE_IF);
+        if (n != NODE_NULL) {
+            nd_left[n] = cond;
+            nd_right[n] = then_body;
+            nd_ival[n] = else_body;  /* else branch index, or NODE_NULL */
+        }
+        return n;
+    }
+
+    /* DO variants */
+    if (cur_type == TOK_DO) {
+        parse_advance();
+
+        /* DO WHILE (cond); ... END; */
+        if (cur_type == TOK_WHILE) {
+            parse_advance();
+            parse_expect(TOK_LPAREN);
+            cond = parse_expr();
+            parse_expect(TOK_RPAREN);
+            parse_expect(TOK_SEMI);
+            body = parse_block();
+            parse_expect(TOK_END);
+            parse_expect(TOK_SEMI);
+
+            n = nd_alloc(NODE_DO_WHILE);
+            if (n != NODE_NULL) {
+                nd_left[n] = cond;
+                nd_right[n] = body;
+            }
+            return n;
+        }
+
+        /* DO I = start TO end; ... END; */
+        if (cur_type == TOK_IDENT) {
+            nlen = str_len(cur_text);
+            name = arena_alloc(nlen + 1);
+            if (name) str_copy(name, cur_text);
+            parse_advance();
+
+            if (cur_type == TOK_EQ) {
+                parse_advance();
+                start_expr = parse_expr();
+                parse_expect(TOK_TO);
+                end_expr = parse_expr();
+                parse_expect(TOK_SEMI);
+                body = parse_block();
+                parse_expect(TOK_END);
+                parse_expect(TOK_SEMI);
+
+                n = nd_alloc(NODE_DO_COUNT);
+                if (n != NODE_NULL) {
+                    nd_name[n] = name;
+                    nd_left[n] = start_expr;
+                    nd_ival[n] = end_expr;  /* end expr node index */
+                    nd_right[n] = body;
+                }
+                return n;
+            }
+
+            parse_error("expected = in DO count");
+            return NODE_NULL;
+        }
+
+        /* DO; ... END; (simple block) */
+        parse_expect(TOK_SEMI);
+        body = parse_block();
+        parse_expect(TOK_END);
+        parse_expect(TOK_SEMI);
+        return body;
+    }
+
+    /* CALL proc(args); -- proc name may be a keyword token */
+    if (cur_type == TOK_CALL) {
+        parse_advance();
+        if (!is_alpha(cur_text[0])) {
+            parse_error("expected proc name after CALL");
+            return NODE_NULL;
+        }
+        nlen = str_len(cur_text);
+        name = arena_alloc(nlen + 1);
+        if (name) str_copy(name, cur_text);
+        parse_advance();
+
+        args = NODE_NULL;
+        if (cur_type == TOK_LPAREN) {
+            parse_advance();
+            tail = NODE_NULL;
+            if (cur_type != TOK_RPAREN) {
+                args = parse_expr();
+                tail = args;
+                while (cur_type == TOK_COMMA) {
+                    parse_advance();
+                    expr = parse_expr();
+                    if (tail != NODE_NULL) nd_next[tail] = expr;
+                    tail = expr;
+                }
+            }
+            parse_expect(TOK_RPAREN);
+        }
+        parse_expect(TOK_SEMI);
+
+        n = nd_alloc(NODE_CALL);
+        if (n != NODE_NULL) {
+            nd_name[n] = name;
+            nd_left[n] = args;
+        }
+        return n;
+    }
+
+    /* RETURN(expr); or RETURN; */
+    if (cur_type == TOK_RETURN) {
+        parse_advance();
+        expr = NODE_NULL;
+        if (cur_type == TOK_LPAREN) {
+            parse_advance();
+            expr = parse_expr();
+            parse_expect(TOK_RPAREN);
+        }
+        parse_expect(TOK_SEMI);
+        return nd_return(expr);
+    }
+
+    /* DCL / DECLARE */
+    if (cur_type == TOK_DCL || cur_type == TOK_DECLARE) {
+        return parse_dcl();
+    }
+
+    /* Assignment or expression statement.
+       Parse lvalue (primary + postfix), then check for = */
+    lhs = parse_primary();
+    if (lhs == NODE_NULL) return NODE_NULL;
+    lhs = parse_postfix(lhs);
+
+    if (cur_type == TOK_EQ) {
+        parse_advance();
+        rhs = parse_expr();
+        parse_expect(TOK_SEMI);
+
+        /* Convert CALL to ARRAY_ACCESS for subscript assignment */
+        if (nd_kind[lhs] == NODE_CALL) {
+            nd_kind[lhs] = NODE_ARRAY_ACCESS;
+        }
+
+        return nd_assign(lhs, rhs);
+    }
+
+    /* Expression statement (e.g., bare function call) */
+    parse_expect(TOK_SEMI);
+    return lhs;
 }
 
 #endif
