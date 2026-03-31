@@ -1,6 +1,6 @@
 number = 6
 slug = "006-ast-nodes"
-status = "pending"
+status = "in-progress"
 description = "Define AST node types and implement a pre-allocated node pool (256 nodes). No..."
 role = "production"
 context_files = []

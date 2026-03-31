@@ -1,6 +1,7 @@
 #include "io.h"
 #include "arena.h"
 #include "lexer.h"
+#include "ast.h"
 
 #define LINE_MAX 128
 
@@ -218,6 +219,119 @@ void test_lexer(void) {
         "%INCLUDE SYSLIB;");
 }
 
+void test_ast(void) {
+    arena_init();
+    ast_init();
+
+    /* Test 1: basic allocation */
+    uart_puts("alloc nodes:");
+    int prog = nd_alloc(NODE_PROGRAM);
+    uart_putstr("  program node idx=");
+    print_int(prog);
+    uart_putstr(" kind=");
+    uart_puts(nd_kind_name(nd_kind[prog]));
+
+    /* Test 2: literal and ident nodes */
+    int lit = nd_literal(42);
+    uart_putstr("  literal idx=");
+    print_int(lit);
+    uart_putstr(" val=");
+    print_int(nd_ival[lit]);
+    uart_putchar(10);
+
+    int id = nd_ident("counter");
+    uart_putstr("  ident idx=");
+    print_int(id);
+    uart_putstr(" name=");
+    uart_puts(nd_name[id]);
+
+    /* Test 3: binary op tree: counter + 42 */
+    int add = nd_binop(TOK_PLUS, id, lit);
+    uart_putstr("  binop idx=");
+    print_int(add);
+    uart_putstr(" op=");
+    uart_putstr(tok_name(nd_ival[add]));
+    uart_putstr(" left=");
+    print_int(nd_left[add]);
+    uart_putstr(" right=");
+    print_int(nd_right[add]);
+    uart_putchar(10);
+
+    /* Test 4: assignment: x = counter + 42 */
+    int x = nd_ident("x");
+    int asgn = nd_assign(x, add);
+    uart_putstr("  assign idx=");
+    print_int(asgn);
+    uart_putstr(" target=");
+    print_int(nd_left[asgn]);
+    uart_putstr(" value=");
+    print_int(nd_right[asgn]);
+    uart_putchar(10);
+
+    /* Test 5: unary op: ~x */
+    int neg = nd_unop(TOK_TILDE, x);
+    uart_putstr("  unop idx=");
+    print_int(neg);
+    uart_putstr(" op=");
+    uart_putstr(tok_name(nd_ival[neg]));
+    uart_putchar(10);
+
+    /* Test 6: call node: print(x) */
+    int call = nd_call("print", x);
+    uart_putstr("  call idx=");
+    print_int(call);
+    uart_putstr(" name=");
+    uart_putstr(nd_name[call]);
+    uart_putstr(" args=");
+    print_int(nd_left[call]);
+    uart_putchar(10);
+
+    /* Test 7: return node */
+    int ret = nd_return(lit);
+    uart_putstr("  return idx=");
+    print_int(ret);
+    uart_putstr(" expr=");
+    print_int(nd_left[ret]);
+    uart_putchar(10);
+
+    /* Test 8: append children to program */
+    nd_append(prog, asgn);
+    nd_append(prog, call);
+    nd_append(prog, ret);
+    uart_putstr("  program children: ");
+    print_int(nd_left[prog]);
+    uart_putstr(" -> ");
+    print_int(nd_next[nd_left[prog]]);
+    uart_putstr(" -> ");
+    print_int(nd_next[nd_next[nd_left[prog]]]);
+    uart_putchar(10);
+
+    /* Test 9: pool count */
+    uart_putstr("  pool used: ");
+    print_int(nd_count);
+    uart_putstr("/");
+    print_int(NODE_POOL_MAX);
+    uart_putchar(10);
+
+    /* Test 10: tree dump */
+    uart_puts("tree dump:");
+    nd_dump(prog, 0);
+
+    /* Test 11: DCL node with type info */
+    int dcl = nd_alloc(NODE_DCL);
+    nd_set_name(dcl, "buffer");
+    nd_type[dcl] = TYPE_BYTE;
+    nd_stor[dcl] = STOR_STATIC;
+    nd_level[dcl] = 1;
+    uart_putstr("  dcl name=");
+    uart_putstr(nd_name[dcl]);
+    uart_putstr(" type=");
+    uart_putstr(nd_type_name(nd_type[dcl]));
+    uart_putstr(" level=");
+    print_int(nd_level[dcl]);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -237,6 +351,10 @@ int main() {
 
     uart_puts("=== Lexer Tests ===");
     test_lexer();
+    uart_puts("");
+
+    uart_puts("=== AST Tests ===");
+    test_ast();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
