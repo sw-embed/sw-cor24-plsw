@@ -1,5 +1,5 @@
-/* parser.h -- PL/SW declaration parser */
-/* Parses DCL statements into AST nodes */
+/* parser.h -- PL/SW parser */
+/* Parses DCL statements and expressions into AST nodes */
 
 #ifndef PARSER_H
 #define PARSER_H
@@ -281,6 +281,215 @@ int parse_dcl(void) {
     parse_expect(TOK_SEMI);
 
     return n;
+}
+
+/* --- Expression parsing --- */
+
+/* Operator precedence levels (low to high) */
+#define PREC_NONE    0
+#define PREC_OR      1   /* OR (logical) */
+#define PREC_AND     2   /* AND (logical) */
+#define PREC_BOR     3   /* | (bitwise OR) */
+#define PREC_BXOR    4   /* ^ (bitwise XOR) */
+#define PREC_BAND    5   /* & (bitwise AND) */
+#define PREC_EQ      6   /* = != */
+#define PREC_CMP     7   /* < > <= >= */
+#define PREC_SHIFT   8   /* << >> */
+#define PREC_ADD     9   /* + - */
+#define PREC_MUL    10   /* * / */
+
+/* Get precedence of a binary operator token */
+int tok_prec(int type) {
+    if (type == TOK_OR) return PREC_OR;
+    if (type == TOK_AND) return PREC_AND;
+    if (type == TOK_PIPE) return PREC_BOR;
+    if (type == TOK_CARET) return PREC_BXOR;
+    if (type == TOK_AMP) return PREC_BAND;
+    if (type == TOK_EQ) return PREC_EQ;
+    if (type == TOK_NE) return PREC_EQ;
+    if (type == TOK_LT) return PREC_CMP;
+    if (type == TOK_GT) return PREC_CMP;
+    if (type == TOK_LE) return PREC_CMP;
+    if (type == TOK_GE) return PREC_CMP;
+    if (type == TOK_SHL) return PREC_SHIFT;
+    if (type == TOK_SHR) return PREC_SHIFT;
+    if (type == TOK_PLUS) return PREC_ADD;
+    if (type == TOK_MINUS) return PREC_ADD;
+    if (type == TOK_STAR) return PREC_MUL;
+    if (type == TOK_SLASH) return PREC_MUL;
+    return PREC_NONE;
+}
+
+/* Forward declarations */
+int parse_expr(void);
+int parse_expr_prec(int min_prec);
+
+/* Parse a primary expression (atom + postfix) */
+int parse_primary(void) {
+    /* Unary minus */
+    if (cur_type == TOK_MINUS) {
+        parse_advance();
+        int operand = parse_primary();
+        return nd_unop(TOK_MINUS, operand);
+    }
+    /* Bitwise NOT ~ */
+    if (cur_type == TOK_TILDE) {
+        parse_advance();
+        int operand = parse_primary();
+        return nd_unop(TOK_TILDE, operand);
+    }
+    /* Logical NOT */
+    if (cur_type == TOK_NOT) {
+        parse_advance();
+        int operand = parse_primary();
+        return nd_unop(TOK_NOT, operand);
+    }
+
+    /* ADDR(expr) -- address-of */
+    if (cur_type == TOK_ADDR) {
+        parse_advance();
+        parse_expect(TOK_LPAREN);
+        int operand = parse_expr();
+        parse_expect(TOK_RPAREN);
+        int n = nd_alloc(NODE_ADDR);
+        if (n != NODE_NULL) {
+            nd_left[n] = operand;
+        }
+        return n;
+    }
+
+    /* Parenthesized sub-expression */
+    if (cur_type == TOK_LPAREN) {
+        parse_advance();
+        int e = parse_expr();
+        parse_expect(TOK_RPAREN);
+        return e;
+    }
+
+    /* Number literal */
+    if (cur_type == TOK_NUM) {
+        int n = nd_literal(cur_ival);
+        parse_advance();
+        return n;
+    }
+
+    /* String literal */
+    if (cur_type == TOK_STRING) {
+        int n = nd_alloc(NODE_LITERAL);
+        if (n != NODE_NULL) {
+            nd_set_name(n, cur_text);
+            nd_type[n] = TYPE_CHAR;
+        }
+        parse_advance();
+        return n;
+    }
+
+    /* Identifier -- may be followed by call(args) */
+    if (cur_type == TOK_IDENT) {
+        int nlen = str_len(cur_text);
+        char *name = arena_alloc(nlen + 1);
+        if (name) str_copy(name, cur_text);
+        parse_advance();
+
+        /* Function call / array subscript: name(args...) */
+        if (cur_type == TOK_LPAREN) {
+            parse_advance();
+            int args = NODE_NULL;
+            int tail = NODE_NULL;
+            if (cur_type != TOK_RPAREN) {
+                args = parse_expr();
+                tail = args;
+                while (cur_type == TOK_COMMA) {
+                    parse_advance();
+                    int a = parse_expr();
+                    if (tail != NODE_NULL) {
+                        nd_next[tail] = a;
+                    }
+                    tail = a;
+                }
+            }
+            parse_expect(TOK_RPAREN);
+            int n = nd_alloc(NODE_CALL);
+            if (n != NODE_NULL) {
+                nd_name[n] = name;
+                nd_left[n] = args;
+            }
+            return n;
+        }
+
+        /* Plain identifier */
+        int n = nd_alloc(NODE_IDENT);
+        if (n != NODE_NULL) {
+            nd_name[n] = name;
+        }
+        return n;
+    }
+
+    parse_error("expected expression");
+    return NODE_NULL;
+}
+
+/* Parse postfix operators: .field and ->field */
+int parse_postfix(int left) {
+    while (!parse_err) {
+        if (cur_type == TOK_DOT) {
+            parse_advance();
+            if (cur_type != TOK_IDENT) {
+                parse_error("expected field name");
+                return left;
+            }
+            int n = nd_alloc(NODE_FIELD_ACCESS);
+            if (n != NODE_NULL) {
+                nd_left[n] = left;
+                nd_set_name(n, cur_text);
+            }
+            parse_advance();
+            left = n;
+            continue;
+        }
+        if (cur_type == TOK_ARROW) {
+            parse_advance();
+            if (cur_type != TOK_IDENT) {
+                parse_error("expected field name after ->");
+                return left;
+            }
+            int n = nd_alloc(NODE_DEREF);
+            if (n != NODE_NULL) {
+                nd_left[n] = left;
+                nd_set_name(n, cur_text);
+            }
+            parse_advance();
+            left = n;
+            continue;
+        }
+        break;
+    }
+    return left;
+}
+
+/* Precedence-climbing expression parser */
+int parse_expr_prec(int min_prec) {
+    int left = parse_primary();
+    if (left == NODE_NULL) return NODE_NULL;
+    left = parse_postfix(left);
+
+    while (!parse_err) {
+        int prec = tok_prec(cur_type);
+        if (prec == PREC_NONE || prec < min_prec) break;
+
+        int op = cur_type;
+        parse_advance();
+        int right = parse_expr_prec(prec + 1);
+        left = nd_binop(op, left, right);
+        left = parse_postfix(left);
+    }
+
+    return left;
+}
+
+/* Parse a full expression */
+int parse_expr(void) {
+    return parse_expr_prec(PREC_OR);
 }
 
 #endif

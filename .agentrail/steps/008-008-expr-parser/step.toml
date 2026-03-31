@@ -1,6 +1,6 @@
 number = 8
 slug = "008-expr-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement the expression parser with operator precedence. Precedence levels (..."
 role = "production"
 context_files = []

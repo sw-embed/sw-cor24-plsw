@@ -434,6 +434,131 @@ void test_parser(void) {
         "DCL 1 CONFIG STATIC, 3 BAUD INT(24), 3 PARITY BYTE;");
 }
 
+void test_parse_expr(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    int n = parse_expr();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_expr_parser(void) {
+    /* Test 1: simple literal */
+    test_parse_expr("literal", "42");
+
+    /* Test 2: identifier */
+    test_parse_expr("ident", "x");
+
+    /* Test 3: binary add */
+    test_parse_expr("add", "x + 1");
+
+    /* Test 4: binary sub */
+    test_parse_expr("sub", "a - b");
+
+    /* Test 5: multiply */
+    test_parse_expr("mul", "a * b");
+
+    /* Test 6: divide */
+    test_parse_expr("div", "a / b");
+
+    /* Test 7: precedence: a + b * c  =>  a + (b*c) */
+    test_parse_expr("prec add*mul", "a + b * c");
+
+    /* Test 8: left associativity: a - b - c => (a-b)-c */
+    test_parse_expr("left assoc", "a - b - c");
+
+    /* Test 9: parenthesized: (a + b) * c */
+    test_parse_expr("parens", "(a + b) * c");
+
+    /* Test 10: unary minus */
+    test_parse_expr("unary -", "-x");
+
+    /* Test 11: bitwise NOT */
+    test_parse_expr("unary ~", "~flags");
+
+    /* Test 12: logical NOT */
+    test_parse_expr("NOT", "NOT done");
+
+    /* Test 13: comparison operators */
+    test_parse_expr("cmp <", "a < b");
+    test_parse_expr("cmp >=", "x >= 10");
+    test_parse_expr("cmp !=", "a != 0");
+
+    /* Test 14: equality */
+    test_parse_expr("eq =", "x = 0");
+
+    /* Test 15: shift operators */
+    test_parse_expr("shl", "x << 2");
+    test_parse_expr("shr", "x >> 1");
+
+    /* Test 16: bitwise AND/OR/XOR */
+    test_parse_expr("bw and", "a & b");
+    test_parse_expr("bw or", "a | b");
+    test_parse_expr("bw xor", "a ^ b");
+
+    /* Test 17: logical AND/OR */
+    test_parse_expr("log and", "a AND b");
+    test_parse_expr("log or", "a OR b");
+
+    /* Test 18: complex precedence: a OR b AND c = d */
+    test_parse_expr("complex prec", "a OR b AND c = d");
+
+    /* Test 19: function call */
+    test_parse_expr("call 0 args", "foo()");
+    test_parse_expr("call 1 arg", "print(x)");
+    test_parse_expr("call 2 args", "add(x, y)");
+    test_parse_expr("call 3 args", "f(a, b, c)");
+
+    /* Test 20: nested calls */
+    test_parse_expr("nested call", "f(g(x))");
+
+    /* Test 21: call in expression */
+    test_parse_expr("call in expr", "f(x) + g(y)");
+
+    /* Test 22: ADDR */
+    test_parse_expr("ADDR", "ADDR(buffer)");
+
+    /* Test 23: field access */
+    test_parse_expr("field", "point.x");
+
+    /* Test 24: chained field */
+    test_parse_expr("chain field", "a.b.c");
+
+    /* Test 25: pointer dereference */
+    test_parse_expr("deref", "p->field");
+
+    /* Test 26: complex expression with all features */
+    test_parse_expr("complex",
+        "(a + b) * c - f(x, y) + point.z");
+
+    /* Test 27: unary in binary */
+    test_parse_expr("unary in bin", "-a + b");
+
+    /* Test 28: nested parens */
+    test_parse_expr("nested parens", "((a + b))");
+
+    /* Test 29: shift with add */
+    test_parse_expr("shift+add", "a + b << 2");
+
+    /* Test 30: bitwise precedence chain */
+    test_parse_expr("bw chain", "a & b | c ^ d");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -461,6 +586,10 @@ int main() {
 
     uart_puts("=== DCL Parser Tests ===");
     test_parser();
+    uart_puts("");
+
+    uart_puts("=== Expression Parser Tests ===");
+    test_expr_parser();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
