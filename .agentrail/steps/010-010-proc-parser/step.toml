@@ -1,6 +1,6 @@
 number = 10
 slug = "010-proc-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement the procedure parser. Parse PROC name(params) OPTIONS(...) RETURNS(..."
 role = "production"
 context_files = []

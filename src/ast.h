@@ -27,6 +27,7 @@
 #define NODE_ADDR         17
 #define NODE_DEREF        18
 #define NODE_BLOCK        19
+#define NODE_PARAM        20
 
 /* Type info constants */
 #define TYPE_NONE    0
@@ -205,6 +206,7 @@ char *nd_kind_name(int kind) {
     if (kind == NODE_ADDR)          return "ADDR";
     if (kind == NODE_DEREF)         return "DEREF";
     if (kind == NODE_BLOCK)         return "BLOCK";
+    if (kind == NODE_PARAM)         return "PARAM";
     return "???";
 }
 
@@ -261,14 +263,49 @@ void nd_print(int n, int depth) {
             print_int(nd_ival[n]);
         }
     }
+    if (nd_kind[n] == NODE_PROC) {
+        /* nd_ival stores option flags (bit 0=FREESTANDING, 1=NAKED, 2=LEAF) */
+        if (nd_ival[n] & 1) uart_putstr(" FREESTANDING");
+        if (nd_ival[n] & 2) uart_putstr(" NAKED");
+        if (nd_ival[n] & 4) uart_putstr(" LEAF");
+        /* nd_stor stores return type */
+        if (nd_stor[n] != TYPE_NONE) {
+            uart_putstr(" returns=");
+            uart_putstr(nd_type_name(nd_stor[n]));
+        }
+    }
     uart_putchar(10);
 }
 
 /* Recursively dump a tree */
 void nd_dump(int n, int depth) {
     int d;
+    int p;
     if (n == NODE_NULL) return;
     nd_print(n, depth);
+    /* PROC: dump params then body with labels */
+    if (nd_kind[n] == NODE_PROC) {
+        /* Dump parameter list */
+        p = nd_left[n];
+        if (p != NODE_NULL) {
+            d = 0;
+            while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
+            uart_puts("(PARAMS)");
+            while (p != NODE_NULL) {
+                nd_print(p, depth + 2);
+                p = nd_next[p];
+            }
+        }
+        /* Dump body */
+        if (nd_right[n] != NODE_NULL) {
+            d = 0;
+            while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
+            uart_puts("(BODY)");
+            nd_dump(nd_right[n], depth + 2);
+        }
+        nd_dump(nd_next[n], depth);
+        return;
+    }
     nd_dump(nd_left[n], depth + 1);
     nd_dump(nd_right[n], depth + 1);
     /* IF: dump else branch stored in nd_ival */

@@ -283,6 +283,16 @@ int parse_dcl(void) {
     return n;
 }
 
+/* --- Procedure parsing --- */
+
+/* Option flag bits for PROC OPTIONS */
+#define OPT_FREESTANDING 1
+#define OPT_NAKED        2
+#define OPT_LEAF         4
+
+/* Forward declaration */
+int parse_proc(void);
+
 /* --- Expression parsing --- */
 
 /* Operator precedence levels (low to high) */
@@ -710,6 +720,157 @@ int parse_stmt(void) {
     /* Expression statement (e.g., bare function call) */
     parse_expect(TOK_SEMI);
     return lhs;
+}
+
+/* --- Procedure parser --- */
+
+/* Parse a parameter: NAME TYPE
+   Returns a PARAM node with name and type set. */
+int parse_param(void) {
+    int n;
+    int nlen;
+    char *name;
+    int type;
+
+    if (!is_alpha(cur_text[0])) {
+        parse_error("expected param name");
+        return NODE_NULL;
+    }
+    nlen = str_len(cur_text);
+    name = arena_alloc(nlen + 1);
+    if (name) str_copy(name, cur_text);
+    parse_advance();
+
+    type = parse_type();
+
+    n = nd_alloc(NODE_PARAM);
+    if (n != NODE_NULL) {
+        nd_name[n] = name;
+        nd_type[n] = type;
+    }
+    return n;
+}
+
+/* Parse PROC name(params) OPTIONS(...) RETURNS(type); body END;
+   Syntax:
+     PROC NAME;                           -- no params, no options
+     PROC NAME(A INT, B PTR);             -- with params
+     PROC NAME OPTIONS(FREESTANDING);     -- with options
+     PROC NAME(A INT) RETURNS(INT);       -- with return type
+     PROC NAME(A INT) OPTIONS(NAKED) RETURNS(BYTE); body END;
+
+   PROC node layout:
+     nd_name  = procedure name
+     nd_left  = first parameter (PARAM nodes linked via nd_next)
+     nd_right = body (BLOCK node)
+     nd_ival  = option flags (OPT_FREESTANDING | OPT_NAKED | OPT_LEAF)
+     nd_stor  = return type (TYPE_ constant, TYPE_NONE if no RETURNS) */
+int parse_proc(void) {
+    int n;
+    int nlen;
+    char *name;
+    int params;
+    int ptail;
+    int p;
+    int opts;
+    int ret_type;
+    int body;
+
+    if (cur_type != TOK_PROC) {
+        parse_error("expected PROC");
+        return NODE_NULL;
+    }
+    parse_advance();
+
+    /* Procedure name -- may be a keyword token (like INIT) */
+    if (!is_alpha(cur_text[0])) {
+        parse_error("expected proc name");
+        return NODE_NULL;
+    }
+    nlen = str_len(cur_text);
+    name = arena_alloc(nlen + 1);
+    if (name) str_copy(name, cur_text);
+    parse_advance();
+
+    /* Optional parameter list */
+    params = NODE_NULL;
+    ptail = NODE_NULL;
+    if (cur_type == TOK_LPAREN) {
+        parse_advance();
+        if (cur_type != TOK_RPAREN) {
+            params = parse_param();
+            ptail = params;
+            while (cur_type == TOK_COMMA && !parse_err) {
+                parse_advance();
+                p = parse_param();
+                if (ptail != NODE_NULL) nd_next[ptail] = p;
+                ptail = p;
+            }
+        }
+        parse_expect(TOK_RPAREN);
+    }
+
+    /* Optional OPTIONS(keyword, ...) */
+    opts = 0;
+    if (cur_type == TOK_OPTIONS) {
+        parse_advance();
+        parse_expect(TOK_LPAREN);
+        while (cur_type != TOK_RPAREN && !parse_err) {
+            if (cur_type == TOK_FREESTANDING) {
+                opts = opts | OPT_FREESTANDING;
+                parse_advance();
+            } else if (cur_type == TOK_NAKED) {
+                opts = opts | OPT_NAKED;
+                parse_advance();
+            } else if (cur_type == TOK_LEAF) {
+                opts = opts | OPT_LEAF;
+                parse_advance();
+            } else {
+                parse_error("unknown OPTION");
+                return NODE_NULL;
+            }
+            if (cur_type == TOK_COMMA) parse_advance();
+        }
+        parse_expect(TOK_RPAREN);
+    }
+
+    /* Optional RETURNS(type) */
+    ret_type = TYPE_NONE;
+    if (cur_type == TOK_RETURNS) {
+        parse_advance();
+        parse_expect(TOK_LPAREN);
+        ret_type = parse_type();
+        if (ret_type == TYPE_NONE) {
+            parse_error("expected type in RETURNS");
+            return NODE_NULL;
+        }
+        parse_expect(TOK_RPAREN);
+    }
+
+    /* Semicolon after declaration header */
+    parse_expect(TOK_SEMI);
+
+    /* Parse body: statements until END */
+    body = parse_block();
+
+    /* Expect END and optional proc name after END */
+    parse_expect(TOK_END);
+    /* Optional name after END (e.g. END foo;) -- skip if identifier */
+    if (is_alpha(cur_text[0]) && cur_type != TOK_SEMI) {
+        parse_advance();
+    }
+    parse_expect(TOK_SEMI);
+
+    /* Build PROC node */
+    n = nd_alloc(NODE_PROC);
+    if (n != NODE_NULL) {
+        nd_name[n] = name;
+        nd_left[n] = params;
+        nd_right[n] = body;
+        nd_ival[n] = opts;
+        nd_stor[n] = ret_type;
+    }
+    return n;
 }
 
 #endif

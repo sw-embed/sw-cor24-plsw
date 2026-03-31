@@ -37,6 +37,8 @@
 #define TOK_NOT       29
 #define TOK_OR        30
 #define TOK_AND       31
+#define TOK_FREESTANDING 32
+#define TOK_LEAF      33
 
 #define TOK_IDENT     40
 #define TOK_NUM       41
@@ -82,7 +84,7 @@ struct token {
 };
 
 /* Keyword table -- parallel arrays (avoids tc24r struct member confusion) */
-#define KW_COUNT 31
+#define KW_COUNT 33
 
 char *kw_names[KW_COUNT];
 int   kw_types[KW_COUNT];
@@ -119,6 +121,8 @@ void kw_init(void) {
     kw_names[28] = "NOT";       kw_types[28] = TOK_NOT;
     kw_names[29] = "OR";        kw_types[29] = TOK_OR;
     kw_names[30] = "AND";       kw_types[30] = TOK_AND;
+    kw_names[31] = "FREESTANDING"; kw_types[31] = TOK_FREESTANDING;
+    kw_names[32] = "LEAF";      kw_types[32] = TOK_LEAF;
 }
 
 /* Convert a character to uppercase */
@@ -187,6 +191,8 @@ char *tok_name(int type) {
     if (type == TOK_NOT) return "NOT";
     if (type == TOK_OR) return "OR";
     if (type == TOK_AND) return "AND";
+    if (type == TOK_FREESTANDING) return "FREESTANDING";
+    if (type == TOK_LEAF) return "LEAF";
     if (type == TOK_IDENT) return "IDENT";
     if (type == TOK_NUM) return "NUM";
     if (type == TOK_STRING) return "STRING";

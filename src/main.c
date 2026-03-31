@@ -688,6 +688,91 @@ void test_stmt_parser(void) {
         "DO WHILE (1); DO WHILE (0); x = 1; END; END;");
 }
 
+void test_parse_proc(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    int n = parse_proc();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_proc_parser(void) {
+    /* Test 1: minimal procedure -- no params, no options */
+    test_parse_proc("minimal",
+        "PROC FOO; RETURN; END;");
+
+    /* Test 2: one parameter */
+    test_parse_proc("one param",
+        "PROC SQUARE(X INT(24)) RETURNS(INT(24)); RETURN(X * X); END;");
+
+    /* Test 3: two parameters */
+    test_parse_proc("two params",
+        "PROC ADD(A INT(24), B INT(24)) RETURNS(INT(24)); RETURN(A + B); END;");
+
+    /* Test 4: three params, mixed types */
+    test_parse_proc("mixed params",
+        "PROC FILL(BUF PTR, VAL BYTE, LEN INT(24)); END;");
+
+    /* Test 5: OPTIONS(FREESTANDING) */
+    test_parse_proc("FREESTANDING",
+        "PROC MAIN OPTIONS(FREESTANDING); CALL INIT(); END;");
+
+    /* Test 6: OPTIONS(NAKED) */
+    test_parse_proc("NAKED",
+        "PROC IRQ OPTIONS(NAKED); END;");
+
+    /* Test 7: OPTIONS(LEAF) */
+    test_parse_proc("LEAF",
+        "PROC GETVAL OPTIONS(LEAF) RETURNS(INT(24)); RETURN(42); END;");
+
+    /* Test 8: multiple options */
+    test_parse_proc("multi opts",
+        "PROC HANDLER OPTIONS(NAKED, LEAF); END;");
+
+    /* Test 9: body with DCL and statements */
+    test_parse_proc("body DCL+stmts",
+        "PROC COMPUTE(X INT(24)) RETURNS(INT(24)); DCL RESULT INT(24); RESULT = X * 2 + 1; RETURN(RESULT); END;");
+
+    /* Test 10: body with IF */
+    test_parse_proc("body IF",
+        "PROC ABS(X INT(24)) RETURNS(INT(24)); IF X < 0 THEN RETURN(-X); RETURN(X); END;");
+
+    /* Test 11: body with DO WHILE loop */
+    test_parse_proc("body loop",
+        "PROC COUNTDOWN(N INT(24)); DO WHILE (N > 0); CALL PRINT(N); N = N - 1; END; END;");
+
+    /* Test 12: END with proc name */
+    test_parse_proc("END name",
+        "PROC FOO; RETURN; END FOO;");
+
+    /* Test 13: empty param list () */
+    test_parse_proc("empty parens",
+        "PROC NOOP(); END;");
+
+    /* Test 14: CHAR param */
+    test_parse_proc("CHAR param",
+        "PROC PUTC(CH CHAR); END;");
+
+    /* Test 15: complex realistic procedure */
+    test_parse_proc("realistic",
+        "PROC UART_PUTS(S PTR); DCL I INT(24); DCL CH CHAR; I = 0; DO WHILE (1); CALL PUTC(42); I = I + 1; END; END;");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -723,6 +808,10 @@ int main() {
 
     uart_puts("=== Statement Parser Tests ===");
     test_stmt_parser();
+    uart_puts("");
+
+    uart_puts("=== Procedure Parser Tests ===");
+    test_proc_parser();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

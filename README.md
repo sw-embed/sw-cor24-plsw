@@ -10,7 +10,8 @@ human-readable COR24 assembler source (.s).
 ## Status
 
 Phase 2 in progress — parser and AST. Lexer, token system, AST node pool,
-DCL parser, expression parser, and statement parser all implemented and tested.
+DCL parser, expression parser, statement parser, and procedure parser all
+implemented and tested.
 
 ## Documentation
 
