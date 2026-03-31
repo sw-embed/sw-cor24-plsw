@@ -5,6 +5,7 @@
 #include "parser.h"
 #include "symtab.h"
 #include "types.h"
+#include "layout.h"
 
 #define LINE_MAX 128
 
@@ -1278,6 +1279,417 @@ void test_types(void) {
     uart_puts(type_compat_arg(TYPE_RECORD, TYPE_INT24) ? "FAIL" : "OK");
 }
 
+void test_layout(void) {
+    int prog;
+    int proc;
+    int fsize;
+    int idx;
+
+    /* Test 1: simple scalar DCL widths */
+    uart_puts("--- scalar widths ---");
+    arena_init();
+    ast_init();
+    parse_init("DCL X INT(24);");
+    int n = parse_dcl();
+    uart_putstr("  INT(24) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL B BYTE;");
+    n = parse_dcl();
+    uart_putstr("  BYTE width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL P PTR;");
+    n = parse_dcl();
+    uart_putstr("  PTR width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL C CHAR;");
+    n = parse_dcl();
+    uart_putstr("  CHAR width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL W WORD;");
+    n = parse_dcl();
+    uart_putstr("  WORD width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    /* Test 2: array widths */
+    uart_puts("--- array widths ---");
+    arena_init();
+    ast_init();
+    parse_init("DCL BUF(80) CHAR;");
+    n = parse_dcl();
+    uart_putstr("  CHAR(80) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL NUMS(10) INT(24);");
+    n = parse_dcl();
+    uart_putstr("  INT24(10) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL FLAGS(8) BIT;");
+    n = parse_dcl();
+    uart_putstr("  BIT(8) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    /* Test 3: record widths */
+    uart_puts("--- record widths ---");
+    types_init();
+    arena_init();
+    ast_init();
+    parse_init("DCL 1 POINT, 3 X INT(24), 3 Y INT(24);");
+    n = parse_dcl();
+    uart_putstr("  POINT(2xINT24) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    arena_init();
+    ast_init();
+    parse_init("DCL 1 DEV, 3 ID BYTE, 3 NAME(8) CHAR, 3 STATUS WORD;");
+    n = parse_dcl();
+    uart_putstr("  DEV(BYTE+CHAR8+WORD) width=");
+    print_int(layout_dcl_width(n));
+    uart_putchar(10);
+
+    /* Test 4: parameter layout */
+    uart_puts("--- param layout ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC ADD(A INT(24), B INT(24)) RETURNS(INT(24)); RETURN(A + B); END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+        uart_putstr("  frame_size=");
+        print_int(fsize);
+        uart_putchar(10);
+
+        idx = sym_lookup("A");
+        uart_putstr("  A: offset=");
+        print_int(sym_offset[idx]);
+        uart_putstr(" width=");
+        print_int(sym_width[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("B");
+        uart_putstr("  B: offset=");
+        print_int(sym_offset[idx]);
+        uart_putstr(" width=");
+        print_int(sym_width[idx]);
+        uart_putchar(10);
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 5: local variable layout */
+    uart_puts("--- local layout ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC CALC(X INT(24)); DCL RESULT INT(24); DCL TEMP BYTE; DCL BUF(10) CHAR; RETURN; END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+        uart_putstr("  frame_size=");
+        print_int(fsize);
+        uart_putchar(10);
+
+        idx = sym_lookup("X");
+        uart_putstr("  X(param): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("RESULT");
+        uart_putstr("  RESULT(auto): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("TEMP");
+        uart_putstr("  TEMP(auto): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("BUF");
+        uart_putstr("  BUF(auto): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 6: static local variables */
+    uart_puts("--- static locals ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC FOO; DCL COUNTER INT(24) STATIC; DCL LOCAL BYTE; RETURN; END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+        uart_putstr("  frame_size=");
+        print_int(fsize);
+        uart_putchar(10);
+
+        idx = sym_lookup("COUNTER");
+        uart_putstr("  COUNTER(static): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("LOCAL");
+        uart_putstr("  LOCAL(auto): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        layout_print_frame();
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 7: global declarations */
+    uart_puts("--- global layout ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("DCL GCOUNT INT(24); DCL GBUF(80) CHAR; DCL GFLAG BYTE STATIC;");
+    prog = parse_program();
+    if (!parse_err && prog != NODE_NULL) {
+        layout_globals(prog);
+
+        idx = sym_lookup("GCOUNT");
+        uart_putstr("  GCOUNT: offset=");
+        print_int(sym_offset[idx]);
+        uart_putstr(" width=");
+        print_int(sym_width[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("GBUF");
+        uart_putstr("  GBUF: offset=");
+        print_int(sym_offset[idx]);
+        uart_putstr(" width=");
+        print_int(sym_width[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("GFLAG");
+        uart_putstr("  GFLAG: offset=");
+        print_int(sym_offset[idx]);
+        uart_putstr(" width=");
+        print_int(sym_width[idx]);
+        uart_putchar(10);
+
+        layout_print_frame();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 8: mixed param types (BYTE, PTR, INT24) */
+    uart_puts("--- mixed params ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC FILL(DST PTR, VAL BYTE, LEN INT(24)); RETURN; END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+
+        idx = sym_lookup("DST");
+        uart_putstr("  DST(PTR): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("VAL");
+        uart_putstr("  VAL(BYTE): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("LEN");
+        uart_putstr("  LEN(INT24): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 9: record as local variable */
+    uart_puts("--- record local ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC SETUP; DCL 1 PT, 3 X INT(24), 3 Y INT(24); DCL Z INT(24); RETURN; END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+        uart_putstr("  frame_size=");
+        print_int(fsize);
+        uart_putchar(10);
+
+        idx = sym_lookup("PT");
+        if (idx >= 0) {
+            uart_putstr("  PT(record): offset=");
+            print_int(sym_offset[idx]);
+            uart_putstr(" width=");
+            print_int(sym_width[idx]);
+            uart_putchar(10);
+        }
+
+        idx = sym_lookup("Z");
+        uart_putstr("  Z(auto): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 10: empty procedure (no params, no locals) */
+    uart_puts("--- empty proc ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("PROC NOP; END;");
+    proc = parse_proc();
+    if (!parse_err && proc != NODE_NULL) {
+        fsize = layout_proc(proc);
+        uart_putstr("  frame_size=");
+        print_int(fsize);
+        uart_putchar(10);
+        sym_exit_scope();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 11: globals + proc combined */
+    uart_puts("--- globals+proc ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("DCL TOTAL INT(24); DCL LIMIT INT(24); PROC INCR; DCL STEP INT(24); TOTAL = TOTAL + STEP; END;");
+    prog = parse_program();
+    if (!parse_err && prog != NODE_NULL) {
+        layout_globals(prog);
+
+        idx = sym_lookup("TOTAL");
+        uart_putstr("  TOTAL(global): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("LIMIT");
+        uart_putstr("  LIMIT(global): offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        /* Now lay out the proc */
+        int child = nd_left[prog];
+        while (child != NODE_NULL) {
+            if (nd_kind[child] == NODE_PROC) {
+                fsize = layout_proc(child);
+                uart_putstr("  INCR frame_size=");
+                print_int(fsize);
+                uart_putchar(10);
+
+                idx = sym_lookup("STEP");
+                uart_putstr("  STEP(local): offset=");
+                print_int(sym_offset[idx]);
+                uart_putchar(10);
+
+                sym_exit_scope();
+                break;
+            }
+            child = nd_next[child];
+        }
+
+        layout_print_frame();
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 12: multiple static allocations track correctly */
+    uart_puts("--- static tracking ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+
+    parse_init("DCL A INT(24); DCL B(10) BYTE; DCL C WORD;");
+    prog = parse_program();
+    if (!parse_err && prog != NODE_NULL) {
+        layout_globals(prog);
+
+        idx = sym_lookup("A");
+        uart_putstr("  A: offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("B");
+        uart_putstr("  B: offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        idx = sym_lookup("C");
+        uart_putstr("  C: offset=");
+        print_int(sym_offset[idx]);
+        uart_putchar(10);
+
+        uart_putstr("  static_next=");
+        print_int(layout_static_next);
+        uart_putchar(10);
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -1329,6 +1741,10 @@ int main() {
 
     uart_puts("=== Type System Tests ===");
     test_types();
+    uart_puts("");
+
+    uart_puts("=== Storage Layout Tests ===");
+    test_layout();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

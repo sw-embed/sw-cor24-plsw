@@ -9,12 +9,15 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 3 in progress — symbol table and type system. Phase 2 (parser/AST)
-complete. Scoped symbol table with global and per-procedure scopes,
-shadowing, case-insensitive lookup, and duplicate detection. Type system
-with width tracking, signedness, assignment/expression compatibility
-checking, pointer arithmetic rules, compound type descriptors for arrays
-and records with computed field offsets.
+Phase 3 complete — symbol table, type system, and storage layout. Scoped
+symbol table with global and per-procedure scopes, shadowing,
+case-insensitive lookup, and duplicate detection. Type system with width
+tracking, signedness, assignment/expression compatibility checking,
+pointer arithmetic rules, compound type descriptors for arrays and
+records with computed field offsets. Storage layout computation assigns
+stack offsets for AUTOMATIC locals (negative from fp), static addresses
+for STATIC variables, parameter offsets per COR24 calling convention
+(fp+9 base), and tracks per-procedure frame sizes.
 
 ## Documentation
 
