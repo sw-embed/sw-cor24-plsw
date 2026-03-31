@@ -1,6 +1,6 @@
 number = 13
 slug = "013-type-system"
-status = "pending"
+status = "in-progress"
 description = "Implement the type representation and checking system. Internal type tags: TY..."
 role = "production"
 context_files = []

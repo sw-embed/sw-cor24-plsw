@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "parser.h"
 #include "symtab.h"
+#include "types.h"
 
 #define LINE_MAX 128
 
@@ -1065,6 +1066,218 @@ void test_symtab(void) {
     sym_exit_scope();
 }
 
+void test_type_compat(char *label, int from, int to, int expect) {
+    uart_putstr("  ");
+    uart_putstr(label);
+    uart_putstr(": ");
+    uart_putstr(nd_type_name(from));
+    uart_putstr(" -> ");
+    uart_putstr(nd_type_name(to));
+    tc_err = 0;
+    int ok = type_compat_assign(from, to);
+    if (ok == expect) {
+        uart_puts(" OK");
+    } else {
+        uart_puts(" FAIL");
+    }
+}
+
+void test_type_binop(char *label, int op, int lt, int rt, int expect) {
+    uart_putstr("  ");
+    uart_putstr(label);
+    uart_putstr(": ");
+    uart_putstr(nd_type_name(lt));
+    uart_putstr(" ");
+    uart_putstr(tok_name(op));
+    uart_putstr(" ");
+    uart_putstr(nd_type_name(rt));
+    tc_err = 0;
+    int result = type_binop_result(op, lt, rt);
+    uart_putstr(" => ");
+    uart_putstr(nd_type_name(result));
+    if (result == expect) {
+        uart_puts(" OK");
+    } else {
+        uart_putstr(" FAIL(expected ");
+        uart_putstr(nd_type_name(expect));
+        uart_puts(")");
+    }
+}
+
+void test_types(void) {
+    int desc;
+    int fidx;
+    int rec;
+
+    /* Test 1: type widths */
+    uart_puts("--- type widths ---");
+    uart_putstr("  BIT="); print_int(type_width(TYPE_BIT)); uart_putchar(10);
+    uart_putstr("  INT8="); print_int(type_width(TYPE_INT8)); uart_putchar(10);
+    uart_putstr("  BYTE="); print_int(type_width(TYPE_BYTE)); uart_putchar(10);
+    uart_putstr("  CHAR="); print_int(type_width(TYPE_CHAR)); uart_putchar(10);
+    uart_putstr("  INT16="); print_int(type_width(TYPE_INT16)); uart_putchar(10);
+    uart_putstr("  WORD="); print_int(type_width(TYPE_WORD)); uart_putchar(10);
+    uart_putstr("  INT24="); print_int(type_width(TYPE_INT24)); uart_putchar(10);
+    uart_putstr("  PTR="); print_int(type_width(TYPE_PTR)); uart_putchar(10);
+
+    /* Test 2: type classification */
+    uart_puts("--- type classification ---");
+    uart_putstr("  INT24 is_integer: "); print_int(type_is_integer(TYPE_INT24)); uart_putchar(10);
+    uart_putstr("  PTR is_integer: "); print_int(type_is_integer(TYPE_PTR)); uart_putchar(10);
+    uart_putstr("  INT24 is_signed: "); print_int(type_is_signed(TYPE_INT24)); uart_putchar(10);
+    uart_putstr("  BYTE is_signed: "); print_int(type_is_signed(TYPE_BYTE)); uart_putchar(10);
+    uart_putstr("  PTR is_ptr: "); print_int(type_is_ptr(TYPE_PTR)); uart_putchar(10);
+    uart_putstr("  INT24 is_ptr: "); print_int(type_is_ptr(TYPE_INT24)); uart_putchar(10);
+    uart_putstr("  INT24 is_scalar: "); print_int(type_is_scalar(TYPE_INT24)); uart_putchar(10);
+    uart_putstr("  PTR is_scalar: "); print_int(type_is_scalar(TYPE_PTR)); uart_putchar(10);
+    uart_putstr("  RECORD is_scalar: "); print_int(type_is_scalar(TYPE_RECORD)); uart_putchar(10);
+
+    /* Test 3: assignment compatibility */
+    uart_puts("--- assignment compat ---");
+    test_type_compat("same", TYPE_INT24, TYPE_INT24, 1);
+    test_type_compat("int->int", TYPE_INT8, TYPE_INT24, 1);
+    test_type_compat("int->byte", TYPE_INT24, TYPE_BYTE, 1);
+    test_type_compat("byte->char", TYPE_BYTE, TYPE_CHAR, 1);
+    test_type_compat("int->ptr", TYPE_INT24, TYPE_PTR, 1);
+    test_type_compat("ptr->int", TYPE_PTR, TYPE_INT24, 1);
+    test_type_compat("ptr->ptr", TYPE_PTR, TYPE_PTR, 1);
+    test_type_compat("none->int", TYPE_NONE, TYPE_INT24, 1);
+    test_type_compat("rec->int", TYPE_RECORD, TYPE_INT24, 0);
+    test_type_compat("arr->int", TYPE_ARRAY, TYPE_INT24, 0);
+
+    /* Test 4: binary operator result types */
+    uart_puts("--- binop results ---");
+    test_type_binop("add ints", TOK_PLUS, TYPE_INT24, TYPE_INT24, TYPE_INT24);
+    test_type_binop("add mixed", TOK_PLUS, TYPE_INT8, TYPE_INT24, TYPE_INT24);
+    test_type_binop("sub bytes", TOK_MINUS, TYPE_BYTE, TYPE_BYTE, TYPE_BYTE);
+    test_type_binop("mul int16", TOK_STAR, TYPE_INT16, TYPE_INT16, TYPE_INT16);
+    test_type_binop("cmp eq", TOK_EQ, TYPE_INT24, TYPE_INT24, TYPE_INT24);
+    test_type_binop("cmp lt", TOK_LT, TYPE_INT8, TYPE_INT24, TYPE_INT24);
+    test_type_binop("ptr+int", TOK_PLUS, TYPE_PTR, TYPE_INT24, TYPE_PTR);
+    test_type_binop("int+ptr", TOK_PLUS, TYPE_INT24, TYPE_PTR, TYPE_PTR);
+    test_type_binop("ptr-int", TOK_MINUS, TYPE_PTR, TYPE_INT24, TYPE_PTR);
+    test_type_binop("ptr-ptr", TOK_MINUS, TYPE_PTR, TYPE_PTR, TYPE_INT24);
+    test_type_binop("and", TOK_AND, TYPE_INT24, TYPE_INT24, TYPE_INT24);
+    test_type_binop("or", TOK_OR, TYPE_INT24, TYPE_INT24, TYPE_INT24);
+    test_type_binop("bw and", TOK_AMP, TYPE_BYTE, TYPE_BYTE, TYPE_BYTE);
+    test_type_binop("shift", TOK_SHL, TYPE_INT24, TYPE_INT8, TYPE_INT24);
+
+    /* Test 5: unary operator result types */
+    uart_puts("--- unop results ---");
+    tc_err = 0;
+    uart_putstr("  neg INT24: ");
+    uart_puts(nd_type_name(type_unop_result(TOK_MINUS, TYPE_INT24)));
+    tc_err = 0;
+    uart_putstr("  not BYTE: ");
+    uart_puts(nd_type_name(type_unop_result(TOK_TILDE, TYPE_BYTE)));
+    tc_err = 0;
+    uart_putstr("  NOT INT24: ");
+    uart_puts(nd_type_name(type_unop_result(TOK_NOT, TYPE_INT24)));
+
+    /* Test 6: array type descriptor */
+    uart_puts("--- array descriptor ---");
+    types_init();
+    desc = td_make_array(TYPE_BYTE, 80);
+    uart_putstr("  array desc idx=");
+    print_int(desc);
+    uart_putchar(10);
+    td_print(desc);
+
+    desc = td_make_array(TYPE_INT24, 10);
+    uart_putstr("  array desc idx=");
+    print_int(desc);
+    uart_putchar(10);
+    td_print(desc);
+
+    /* Test 7: record type descriptor from AST */
+    uart_puts("--- record descriptor ---");
+    arena_init();
+    ast_init();
+    parse_init("DCL 1 POINT, 3 X INT(24), 3 Y INT(24);");
+    rec = parse_dcl();
+    if (!parse_err && rec != NODE_NULL) {
+        desc = td_make_record(rec);
+        uart_putstr("  record desc idx=");
+        print_int(desc);
+        uart_putchar(10);
+        td_print(desc);
+
+        /* Test 8: field lookup */
+        uart_puts("--- field lookup ---");
+        fidx = td_field_lookup(desc, "X");
+        uart_putstr("  lookup X: idx=");
+        print_int(fidx);
+        uart_putstr(" offset=");
+        print_int(td_field_offset(desc, fidx));
+        uart_putstr(" type=");
+        uart_puts(nd_type_name(td_field_type(desc, fidx)));
+
+        fidx = td_field_lookup(desc, "Y");
+        uart_putstr("  lookup Y: idx=");
+        print_int(fidx);
+        uart_putstr(" offset=");
+        print_int(td_field_offset(desc, fidx));
+        uart_putstr(" type=");
+        uart_puts(nd_type_name(td_field_type(desc, fidx)));
+
+        fidx = td_field_lookup(desc, "Z");
+        uart_putstr("  lookup Z (missing): idx=");
+        print_int(fidx);
+        uart_putchar(10);
+
+        /* Case insensitive */
+        fidx = td_field_lookup(desc, "x");
+        uart_putstr("  lookup x (case insens): idx=");
+        print_int(fidx);
+        uart_putchar(10);
+    } else {
+        uart_puts("  PARSE ERROR");
+    }
+
+    /* Test 9: mixed-type record */
+    uart_puts("--- mixed record ---");
+    arena_init();
+    ast_init();
+    parse_init("DCL 1 DEVICE, 3 ID BYTE, 3 NAME(8) CHAR, 3 STATUS WORD;");
+    rec = parse_dcl();
+    if (!parse_err && rec != NODE_NULL) {
+        desc = td_make_record(rec);
+        td_print(desc);
+    }
+
+    /* Test 10: type error detection */
+    uart_puts("--- type errors ---");
+    tc_init();
+    type_compat_assign(TYPE_RECORD, TYPE_INT24);
+    uart_putstr("  record->int err: ");
+    uart_puts(tc_err ? "detected" : "missed");
+
+    tc_init();
+    type_binop_result(TOK_LT, TYPE_RECORD, TYPE_INT24);
+    uart_putstr("  cmp record err: ");
+    uart_puts(tc_err ? "detected" : "missed");
+
+    tc_init();
+    type_unop_result(TOK_MINUS, TYPE_PTR);
+    uart_putstr("  neg PTR err: ");
+    uart_puts(tc_err ? "detected" : "missed");
+
+    /* Test 11: argument compatibility */
+    uart_puts("--- arg compat ---");
+    tc_init();
+    uart_putstr("  int->int arg: ");
+    uart_puts(type_compat_arg(TYPE_INT24, TYPE_INT24) ? "OK" : "FAIL");
+    tc_init();
+    uart_putstr("  byte->int arg: ");
+    uart_puts(type_compat_arg(TYPE_BYTE, TYPE_INT24) ? "OK" : "FAIL");
+    tc_init();
+    uart_putstr("  ptr->int arg: ");
+    uart_puts(type_compat_arg(TYPE_PTR, TYPE_INT24) ? "OK" : "FAIL");
+    tc_init();
+    uart_putstr("  rec->int arg: ");
+    uart_puts(type_compat_arg(TYPE_RECORD, TYPE_INT24) ? "FAIL" : "OK");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -1112,6 +1325,10 @@ int main() {
 
     uart_puts("=== Symbol Table Tests ===");
     test_symtab();
+    uart_puts("");
+
+    uart_puts("=== Type System Tests ===");
+    test_types();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

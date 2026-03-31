@@ -10,8 +10,11 @@ human-readable COR24 assembler source (.s).
 ## Status
 
 Phase 3 in progress — symbol table and type system. Phase 2 (parser/AST)
-complete. Scoped symbol table implemented with global and per-procedure
-scopes, shadowing, case-insensitive lookup, and duplicate detection.
+complete. Scoped symbol table with global and per-procedure scopes,
+shadowing, case-insensitive lookup, and duplicate detection. Type system
+with width tracking, signedness, assignment/expression compatibility
+checking, pointer arithmetic rules, compound type descriptors for arrays
+and records with computed field offsets.
 
 ## Documentation
 
