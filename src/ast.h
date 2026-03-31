@@ -249,6 +249,18 @@ void nd_print(int n, int depth) {
         uart_putstr(" type=");
         uart_putstr(nd_type_name(nd_type[n]));
     }
+    if (nd_kind[n] == NODE_DCL) {
+        if (nd_stor[n] == STOR_STATIC) uart_putstr(" STATIC");
+        if (nd_stor[n] == STOR_EXTERNAL) uart_putstr(" EXTERNAL");
+        if (nd_level[n] > 0) {
+            uart_putstr(" lv=");
+            print_int(nd_level[n]);
+        }
+        if (nd_ival[n] > 0) {
+            uart_putstr(" dim=");
+            print_int(nd_ival[n]);
+        }
+    }
     uart_putchar(10);
 }
 

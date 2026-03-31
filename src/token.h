@@ -33,6 +33,7 @@
 #define TOK_ADDR      25
 #define TOK_BASED     26
 #define TOK_NAKED     27
+#define TOK_INIT      28
 
 #define TOK_IDENT     40
 #define TOK_NUM       41
@@ -78,7 +79,7 @@ struct token {
 };
 
 /* Keyword table -- parallel arrays (avoids tc24r struct member confusion) */
-#define KW_COUNT 27
+#define KW_COUNT 28
 
 char *kw_names[KW_COUNT];
 int   kw_types[KW_COUNT];
@@ -111,6 +112,7 @@ void kw_init(void) {
     kw_names[24] = "ADDR";      kw_types[24] = TOK_ADDR;
     kw_names[25] = "BASED";     kw_types[25] = TOK_BASED;
     kw_names[26] = "NAKED";     kw_types[26] = TOK_NAKED;
+    kw_names[27] = "INIT";      kw_types[27] = TOK_INIT;
 }
 
 /* Convert a character to uppercase */
@@ -175,6 +177,7 @@ char *tok_name(int type) {
     if (type == TOK_ADDR) return "ADDR";
     if (type == TOK_BASED) return "BASED";
     if (type == TOK_NAKED) return "NAKED";
+    if (type == TOK_INIT) return "INIT";
     if (type == TOK_IDENT) return "IDENT";
     if (type == TOK_NUM) return "NUM";
     if (type == TOK_STRING) return "STRING";

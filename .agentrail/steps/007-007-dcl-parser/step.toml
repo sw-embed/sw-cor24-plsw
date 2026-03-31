@@ -1,6 +1,6 @@
 number = 7
 slug = "007-dcl-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement the declaration parser. Parse DCL/DECLARE statements with type attr..."
 role = "production"
 context_files = []

@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "lexer.h"
 #include "ast.h"
+#include "parser.h"
 
 #define LINE_MAX 128
 
@@ -332,6 +333,107 @@ void test_ast(void) {
     uart_putchar(10);
 }
 
+void test_parse_dcl(char *label, char *src) {
+    uart_putstr("--- ");
+    uart_putstr(label);
+    uart_puts(" ---");
+    uart_putstr("  src: ");
+    uart_puts(src);
+
+    arena_init();
+    ast_init();
+    parse_init(src);
+
+    int n = parse_dcl();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+    } else if (n == NODE_NULL) {
+        uart_puts("  (null node)");
+    } else {
+        nd_dump(n, 1);
+    }
+    uart_putchar(10);
+}
+
+void test_parser(void) {
+    /* Test 1: simple scalar */
+    test_parse_dcl("scalar INT(24)",
+        "DCL COUNT INT(24);");
+
+    /* Test 2: BYTE type */
+    test_parse_dcl("scalar BYTE",
+        "DCL FLAGS BYTE;");
+
+    /* Test 3: CHAR type */
+    test_parse_dcl("scalar CHAR",
+        "DCL LETTER CHAR;");
+
+    /* Test 4: PTR type */
+    test_parse_dcl("scalar PTR",
+        "DCL BUFPTR PTR;");
+
+    /* Test 5: WORD type */
+    test_parse_dcl("scalar WORD",
+        "DCL STATUS WORD;");
+
+    /* Test 6: BIT type */
+    test_parse_dcl("scalar BIT",
+        "DCL FLAG BIT;");
+
+    /* Test 7: INT default (no width) */
+    test_parse_dcl("INT no width",
+        "DCL X INT;");
+
+    /* Test 8: INT(8) */
+    test_parse_dcl("INT(8)",
+        "DCL SMALL INT(8);");
+
+    /* Test 9: INT(16) */
+    test_parse_dcl("INT(16)",
+        "DCL MEDIUM INT(16);");
+
+    /* Test 10: array declaration */
+    test_parse_dcl("array CHAR",
+        "DCL BUFFER(80) CHAR;");
+
+    /* Test 11: array with BYTE */
+    test_parse_dcl("array BYTE",
+        "DCL DATA(256) BYTE;");
+
+    /* Test 12: STATIC storage */
+    test_parse_dcl("STATIC",
+        "DCL COUNTER INT(24) STATIC;");
+
+    /* Test 13: EXTERNAL storage */
+    test_parse_dcl("EXTERNAL",
+        "DCL EXTERN_SYM INT(24) EXTERNAL;");
+
+    /* Test 14: INIT with number */
+    test_parse_dcl("INIT num",
+        "DCL START INT(24) STATIC INIT(0);");
+
+    /* Test 15: INIT with string */
+    test_parse_dcl("INIT string",
+        "DCL MSG(18) CHAR STATIC INIT('Hello from PL/SW!');");
+
+    /* Test 16: DECLARE (long form) */
+    test_parse_dcl("DECLARE",
+        "DECLARE TOTAL INT(24);");
+
+    /* Test 17: level-based record */
+    test_parse_dcl("record",
+        "DCL 1 POINT, 3 X INT(24), 3 Y INT(24);");
+
+    /* Test 18: record with mixed types */
+    test_parse_dcl("record mixed",
+        "DCL 1 DEVICE, 3 ID BYTE, 3 NAME(8) CHAR, 3 STATUS WORD;");
+
+    /* Test 19: record with storage class */
+    test_parse_dcl("record STATIC",
+        "DCL 1 CONFIG STATIC, 3 BAUD INT(24), 3 PARITY BYTE;");
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -355,6 +457,10 @@ int main() {
 
     uart_puts("=== AST Tests ===");
     test_ast();
+    uart_puts("");
+
+    uart_puts("=== DCL Parser Tests ===");
+    test_parser();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
