@@ -1,5 +1,5 @@
 name = "plsw-compiler"
 status = "active"
-current_step = 24
+current_step = 25
 created_at = "2026-03-30T12:50:10"
 plan_file = ".agentrail/plan.md"

@@ -495,6 +495,132 @@ void cg_unop(int node) {
     }
 }
 
+/* --- Record field access codegen --- */
+
+/* Compute the address of a record field into r2.
+ * For NODE_FIELD_ACCESS: nd_left = record expression (must be NODE_IDENT),
+ *   nd_name = field name.
+ * Returns the field width (1 or 3) for load/store sizing, or 0 on error. */
+
+int cg_field_addr(int node) {
+    int rec_node;
+    int sym_idx;
+    int desc;
+    int fidx;
+    int foff;
+    int fw;
+    int rec_off;
+
+    rec_node = nd_left[node];
+
+    /* Currently only support simple record identifiers (REC.FIELD) */
+    if (nd_kind[rec_node] != NODE_IDENT) {
+        cg_error("field access requires record variable");
+        emit_comment("ERROR: field access on non-ident");
+        return 0;
+    }
+
+    /* Look up the record symbol */
+    sym_idx = sym_lookup(nd_name[rec_node]);
+    if (sym_idx < 0) {
+        cg_error("undefined record variable");
+        emit_comment("ERROR: undefined record variable");
+        return 0;
+    }
+
+    /* Verify it's a record */
+    if (!(sym_flags[sym_idx] & SYM_F_RECORD)) {
+        cg_error("field access on non-record variable");
+        emit_comment("ERROR: not a record");
+        return 0;
+    }
+
+    /* Get the type descriptor */
+    desc = sym_tdesc[sym_idx];
+    if (desc < 0) {
+        cg_error("record has no type descriptor");
+        emit_comment("ERROR: no type descriptor");
+        return 0;
+    }
+
+    /* Look up the field */
+    fidx = td_field_lookup(desc, nd_name[node]);
+    if (fidx < 0) {
+        cg_error("undefined field in record");
+        emit_comment("ERROR: undefined field");
+        if (nd_name[node]) {
+            emit_str(EMIT_INDENT);
+            emit_str("; field: ");
+            emit_line(nd_name[node]);
+        }
+        return 0;
+    }
+
+    foff = td_field_offset(desc, fidx);
+    fw = td_field_width(desc, fidx);
+    rec_off = sym_offset[sym_idx];
+
+    /* Compute address: record_base + field_offset into r2 */
+    if (sym_stor[sym_idx] == STOR_STATIC || sym_stor[sym_idx] == STOR_EXTERNAL) {
+        /* Static: la r2, static_addr + field_offset */
+        emit_str(EMIT_INDENT);
+        emit_str("la      r2,");
+        emit_int(rec_off + foff);
+        emit_nl();
+    } else {
+        /* Automatic: fp + record_offset + field_offset */
+        int total_off = rec_off + foff;
+        if (total_off >= -128 && total_off <= 127) {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r2,");
+            emit_int(total_off);
+            emit_nl();
+            emit_instr("add     r2,fp");
+        } else {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r2,");
+            emit_int(total_off);
+            emit_nl();
+            emit_instr("add     r2,fp");
+        }
+    }
+
+    return fw;
+}
+
+/* Load a record field value into r0 */
+void cg_field_load(int node) {
+    int fw;
+    fw = cg_field_addr(node);
+    if (fw == 0) return;
+
+    if (fw == 1) {
+        emit_instr("lb      r0,0(r2)");
+    } else {
+        emit_instr("lw      r0,0(r2)");
+    }
+}
+
+/* Store r0 into a record field.
+ * Assumes r0 holds the value to store.
+ * Saves r0 on stack while computing address, then restores and stores. */
+void cg_field_store(int node) {
+    int fw;
+
+    /* Save the value while we compute the address */
+    emit_instr("push    r0");
+    fw = cg_field_addr(node);
+    emit_instr("pop     r0");
+
+    if (fw == 0) return;
+
+    if (fw == 1) {
+        emit_instr("sb      r0,0(r2)");
+    } else {
+        emit_instr("sw      r0,0(r2)");
+    }
+}
+
 /* --- Main expression codegen dispatcher --- */
 
 void cg_expr(int node) {
@@ -515,6 +641,9 @@ void cg_expr(int node) {
     } else if (nd_kind[node] == NODE_CALL) {
         /* Function call in expression context: result in r0 */
         cg_call(node);
+    } else if (nd_kind[node] == NODE_FIELD_ACCESS) {
+        /* Record field access: rec.field */
+        cg_field_load(node);
     } else {
         cg_error("unsupported expression node kind");
         emit_comment("ERROR: unsupported expr kind");
@@ -538,6 +667,8 @@ void cg_assign(int node) {
     /* Store r0 into LHS */
     if (nd_kind[lhs] == NODE_IDENT) {
         cg_store_var(lhs);
+    } else if (nd_kind[lhs] == NODE_FIELD_ACCESS) {
+        cg_field_store(lhs);
     } else {
         cg_error("unsupported assignment target");
         emit_comment("ERROR: unsupported assignment target");

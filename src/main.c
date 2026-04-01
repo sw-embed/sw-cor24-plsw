@@ -3780,6 +3780,146 @@ void test_do_count_codegen(void) {
     uart_putchar(10);
 }
 
+void test_record_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: Simple record field assignment and read */
+    uart_puts("--- record: field assign and read ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST(); DCL 1 REC, 3 X INT(24), 3 Y INT(24), 3 Z BYTE; REC.X = 42; REC.Y = REC.X + 1; REC.Z = 7; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have proc label */
+        if (!str_find(out, "_TEST:")) {
+            uart_puts("  FAIL: missing proc label _TEST");
+            errs = errs + 1;
+        }
+        /* REC.X assignment: compute addr (fp + rec_off + 0), store */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sw r0,0(r2) for field store");
+            errs = errs + 1;
+        }
+        /* REC.Z assignment: byte store since Z is BYTE */
+        if (!str_find(out, "sb      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sb r0,0(r2) for byte field store");
+            errs = errs + 1;
+        }
+        /* Field load (REC.X in expression): lw r0,0(r2) */
+        if (!str_find(out, "lw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing lw r0,0(r2) for field load");
+            errs = errs + 1;
+        }
+        /* Must have add for fp-relative address computation */
+        if (!str_find(out, "add     r2,fp")) {
+            uart_puts("  FAIL: missing add r2,fp for address computation");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: Record with different field types and offsets */
+    uart_puts("--- record: field offset verification ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST2(); DCL 1 PT, 3 A BYTE, 3 B INT(24), 3 C BYTE; PT.A = 1; PT.B = 2; PT.C = 3; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have proc label */
+        if (!str_find(out, "_TEST2:")) {
+            uart_puts("  FAIL: missing proc label _TEST2");
+            errs = errs + 1;
+        }
+        /* PT.A: byte store at record_off + 0 */
+        if (!str_find(out, "sb      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sb for PT.A byte store");
+            errs = errs + 1;
+        }
+        /* PT.B: word store at record_off + 1 */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sw for PT.B word store");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Record field in expression (read back) */
+    uart_puts("--- record: field in expression ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC PRINT_INT(V INT(24)); END; PROC TEST3(); DCL 1 REC, 3 X INT(24), 3 Y INT(24); REC.X = 10; REC.Y = 20; CALL PRINT_INT(REC.X + REC.Y); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have call to PRINT_INT */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing call to _PRINT_INT");
+            errs = errs + 1;
+        }
+        /* Must load field values (lw from computed address) */
+        if (!str_find(out, "lw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing lw r0,0(r2) for field load in expr");
+            errs = errs + 1;
+        }
+        /* Addition of field values */
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add r0,r1 for field sum");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("record codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -3875,6 +4015,10 @@ int main() {
 
     uart_puts("=== DO COUNT Codegen Tests ===");
     test_do_count_codegen();
+    uart_puts("");
+
+    uart_puts("=== Record Codegen Tests ===");
+    test_record_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

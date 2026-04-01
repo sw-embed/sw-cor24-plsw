@@ -23,6 +23,7 @@ int   sym_stor[SYM_TOTAL];    /* storage class (STOR_AUTO, STOR_STATIC, ...) */
 int   sym_offset[SYM_TOTAL];  /* stack offset or static address */
 int   sym_level[SYM_TOTAL];   /* DCL level (1,3,5,...) for records */
 int   sym_flags[SYM_TOTAL];   /* misc flags (e.g. is_param, is_proc) */
+int   sym_tdesc[SYM_TOTAL];  /* type descriptor index (for records/arrays), or -1 */
 
 /* Flag bits */
 #define SYM_F_PARAM  1   /* symbol is a procedure parameter */
@@ -128,6 +129,7 @@ int sym_insert(char *name, int type, int width, int stor) {
     sym_offset[idx] = 0;
     sym_level[idx] = 0;
     sym_flags[idx] = 0;
+    sym_tdesc[idx] = -1;
 
     return idx;
 }

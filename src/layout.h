@@ -19,6 +19,9 @@ int layout_static_next;  /* next available static address */
 
 int layout_frame_size;   /* total frame size for current procedure */
 
+/* --- Last allocated type descriptor (set by layout_dcl_width for records) --- */
+int layout_last_tdesc;
+
 /* --- Layout error state --- */
 
 int layout_err;
@@ -27,6 +30,7 @@ char *layout_errmsg;
 void layout_init(void) {
     layout_static_next = STATIC_BASE;
     layout_frame_size = 0;
+    layout_last_tdesc = -1;
     layout_err = 0;
     layout_errmsg = 0;
 }
@@ -51,6 +55,8 @@ int layout_dcl_width(int node) {
     int fbase;
 
     if (node == NODE_NULL) return 0;
+
+    layout_last_tdesc = -1;
 
     /* Record type: walk children to compute total size */
     if (nd_type[node] == TYPE_RECORD) {
@@ -79,6 +85,7 @@ int layout_dcl_width(int node) {
 
             td_count[desc] = fcount;
             td_size[desc] = offset;
+            layout_last_tdesc = desc;
         }
         return offset;
     }
@@ -158,9 +165,10 @@ void layout_locals(int body_node) {
                     sym_offset[idx] = 0 - layout_frame_size;
                 }
 
-                /* Set flags for compound types */
+                /* Set flags and type descriptor for compound types */
                 if (nd_type[stmt] == TYPE_RECORD) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_RECORD;
+                    sym_tdesc[idx] = layout_last_tdesc;
                 }
                 if (nd_ival[stmt] > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;
@@ -215,6 +223,7 @@ void layout_globals(int prog_node) {
 
                 if (nd_type[child] == TYPE_RECORD) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_RECORD;
+                    sym_tdesc[idx] = layout_last_tdesc;
                 }
                 if (nd_ival[child] > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;

@@ -1,6 +1,6 @@
 number = 25
 slug = "025-record-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement record field access code generation. Dot notation: rec.field comput..."
 role = "production"
 context_files = []
