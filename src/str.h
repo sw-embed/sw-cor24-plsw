@@ -52,6 +52,28 @@ int str_eq(char *a, char *b) {
     return *a == *b;
 }
 
+/* Find substring needle in haystack. Returns pointer to first match, or 0. */
+char *str_find(char *haystack, char *needle) {
+    char *h;
+    char *n;
+    char *start;
+
+    if (!*needle) return haystack;
+
+    start = haystack;
+    while (*start) {
+        h = start;
+        n = needle;
+        while (*h && *n && *h == *n) {
+            h = h + 1;
+            n = n + 1;
+        }
+        if (!*n) return start;
+        start = start + 1;
+    }
+    return 0;
+}
+
 void mem_set(char *dst, int val, int n) {
     while (n > 0) {
         *dst = val;

@@ -2468,6 +2468,321 @@ void test_static_data(void) {
     uart_putchar(10);
 }
 
+void test_proc_codegen(void) {
+    int errs;
+    int prog;
+    int child;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: Empty procedure -- prologue/epilogue only */
+    uart_puts("--- proc: empty ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC FOO; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Verify key parts present */
+        if (!str_find(out, "_FOO:")) {
+            uart_puts("  FAIL: missing _FOO label");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "push")) {
+            uart_puts("  FAIL: missing push in prologue");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jmp")) {
+            uart_puts("  FAIL: missing jmp in epilogue");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: Procedure with RETURN expression */
+    uart_puts("--- proc: return value ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC GETVAL RETURNS(INT(24)); RETURN(42); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_GETVAL:")) {
+            uart_puts("  FAIL: missing _GETVAL label");
+            errs = errs + 1;
+        }
+        /* RETURN(42) should load 42 into r0 */
+        if (!str_find(out, "42")) {
+            uart_puts("  FAIL: missing literal 42");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Procedure with local variable and assignment */
+    uart_puts("--- proc: local var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC WORK; DCL X INT(24); X = 10; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Should have stack allocation (sub sp) */
+        if (!str_find(out, "sub")) {
+            uart_puts("  FAIL: missing stack allocation");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 4: Procedure with parameter */
+    uart_puts("--- proc: with param ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC DOUBLE(N INT(24)) RETURNS(INT(24)); RETURN(N + N); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_DOUBLE:")) {
+            uart_puts("  FAIL: missing _DOUBLE label");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 5: NAKED procedure -- no prologue/epilogue */
+    uart_puts("--- proc: naked ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC IRQ OPTIONS(NAKED); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_IRQ:")) {
+            uart_puts("  FAIL: missing _IRQ label");
+            errs = errs + 1;
+        }
+        /* NAKED should NOT have push fp */
+        if (str_find(out, "push")) {
+            uart_puts("  FAIL: naked should not have prologue");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 6: Multiple procedures in one program */
+    uart_puts("--- proc: multiple ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC A; END; PROC B; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_A:")) {
+            uart_puts("  FAIL: missing _A label");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_B:")) {
+            uart_puts("  FAIL: missing _B label");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 7: Procedure with multiple locals */
+    uart_puts("--- proc: multi locals ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC SWAP; DCL A INT(24); DCL B INT(24); DCL T INT(24); T = A; A = B; B = T; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_SWAP:")) {
+            uart_puts("  FAIL: missing _SWAP label");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 8: FREESTANDING procedure (same codegen as normal) */
+    uart_puts("--- proc: freestanding ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN OPTIONS(FREESTANDING); DCL X INT(24); X = 99; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing _MAIN label");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 9: Procedure with byte local */
+    uart_puts("--- proc: byte local ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC FLAGS; DCL F BYTE; F = 1; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Byte store should use sb */
+        if (!str_find(out, "sb")) {
+            uart_puts("  FAIL: missing sb for byte store");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 10: Globals + Proc -- static data + code */
+    uart_puts("--- proc: globals+proc ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL G INT(24) INIT(7); PROC SET; G = 42; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_G:")) {
+            uart_puts("  FAIL: missing _G label");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_SET:")) {
+            uart_puts("  FAIL: missing _SET label");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("proc codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -2539,6 +2854,10 @@ int main() {
 
     uart_puts("=== Static Data Tests ===");
     test_static_data();
+    uart_puts("");
+
+    uart_puts("=== Procedure Codegen Tests ===");
+    test_proc_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

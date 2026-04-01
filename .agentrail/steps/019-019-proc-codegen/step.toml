@@ -1,6 +1,6 @@
 number = 19
 slug = "019-proc-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement procedure prologue/epilogue code generation. Prologue: push fp, pus..."
 role = "production"
 context_files = []

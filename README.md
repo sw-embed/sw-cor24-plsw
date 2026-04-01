@@ -9,21 +9,25 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 4 in progress — code generation. Static data emission validated
-with 10-test suite covering zero-fill words/bytes, INIT values for
-words and bytes, multiple declarations, zero-fill arrays, string
-literal registration with labeled .byte sequences, multiple string
-tables, explicit INIT(0), and runtime store/load verification via
-codegen. Assignment codegen validated with 10-test suite covering
-automatic/static variables, byte-width stores, complex expressions,
-multiple sequential assignments, large stack offsets, and negation.
-Expression codegen supports literal loading (lc/la), variable
-load/store (fp-relative and static), binary arithmetic (add, sub, mul),
-software division via __plsw_div, all comparison operators, unary
-negate, and register allocation with spill. Assembly emitter framework
-provides output buffer, section management, label generation,
-instruction emission, and COR24 prologue/epilogue. Phase 3 complete
-with scoped symbol table, type system, and storage layout computation.
+Phase 4 in progress — code generation. Procedure codegen validated with
+10-test suite covering empty procedures, RETURN with value in r0,
+local variables with stack allocation (sub sp), parameter access at
+fp+9, NAKED procedures (no prologue/epilogue), multiple procedures in
+one program, multi-local frame layout, FREESTANDING option, byte-width
+locals with sb, and combined globals+proc (.data + .text sections).
+Static data emission validated with 10-test suite covering zero-fill
+words/bytes, INIT values, multiple declarations, arrays, string
+literals, and runtime store/load verification. Assignment codegen
+validated with 10-test suite covering automatic/static variables,
+byte-width stores, complex expressions, multiple sequential assignments,
+large stack offsets, and negation. Expression codegen supports literal
+loading (lc/la), variable load/store (fp-relative and static), binary
+arithmetic (add, sub, mul), software division via __plsw_div, all
+comparison operators, unary negate, and register allocation with spill.
+Assembly emitter framework provides output buffer, section management,
+label generation, instruction emission, and COR24 prologue/epilogue.
+Phase 3 complete with scoped symbol table, type system, and storage
+layout computation.
 
 ## Documentation
 

@@ -712,4 +712,151 @@ void cg_load_string(int label_num) {
     emit_nl();
 }
 
+/* --- Statement codegen --- */
+/* Forward declaration for cg_block */
+void cg_block(int block_node);
+
+/* Emit code for a single statement node */
+void cg_stmt(int node) {
+    if (node == NODE_NULL) return;
+
+    if (nd_kind[node] == NODE_ASSIGN) {
+        cg_assign(node);
+    } else if (nd_kind[node] == NODE_RETURN) {
+        /* Evaluate return expression into r0 (if present) */
+        if (nd_left[node] != NODE_NULL) {
+            cg_expr(nd_left[node]);
+        }
+        /* Epilogue emitted by caller at procedure end.
+         * For early returns, emit epilogue inline. */
+        emit_epilogue();
+    } else if (nd_kind[node] == NODE_CALL) {
+        /* Bare CALL statement (result discarded).
+         * Full call codegen comes in step 020; for now emit placeholder. */
+        emit_comment("CALL (stub)");
+        if (nd_name[node]) {
+            emit_str(EMIT_INDENT);
+            emit_str("; call ");
+            emit_line(nd_name[node]);
+        }
+    } else if (nd_kind[node] == NODE_BLOCK) {
+        cg_block(node);
+    } else if (nd_kind[node] == NODE_DCL) {
+        /* Local DCL: no code emission needed (handled by layout) */
+    } else {
+        cg_error("unsupported statement kind");
+        emit_comment("ERROR: unsupported statement");
+        emit_str(EMIT_INDENT);
+        emit_str("; kind=");
+        emit_int(nd_kind[node]);
+        emit_nl();
+    }
+}
+
+/* Emit code for a block of statements */
+void cg_block(int block_node) {
+    int stmt;
+    if (block_node == NODE_NULL) return;
+
+    stmt = nd_left[block_node];
+    while (stmt != NODE_NULL) {
+        cg_stmt(stmt);
+        stmt = nd_next[stmt];
+    }
+}
+
+/* --- Procedure codegen --- */
+
+/* Emit code for a complete procedure.
+ * proc_node is a NODE_PROC with:
+ *   nd_name  = procedure name
+ *   nd_left  = first parameter (linked via nd_next)
+ *   nd_right = body (BLOCK node)
+ *   nd_ival  = option flags (OPT_FREESTANDING, OPT_NAKED, OPT_LEAF)
+ *   nd_stor  = return type
+ *
+ * Layout must be performed first via layout_proc(). */
+
+void cg_proc(int proc_node) {
+    int opts;
+    int frame_sz;
+    int has_body;
+    int body;
+
+    if (proc_node == NODE_NULL) return;
+    if (nd_kind[proc_node] != NODE_PROC) {
+        cg_error("expected PROC node");
+        return;
+    }
+
+    opts = nd_ival[proc_node];
+    body = nd_right[proc_node];
+
+    /* Ensure we're in .text section */
+    emit_text_section();
+
+    /* Emit .globl directive and label */
+    if (nd_name[proc_node]) {
+        emit_global(nd_name[proc_node]);
+        emit_named_label(nd_name[proc_node]);
+    }
+
+    /* NAKED procedures: no prologue/epilogue, body is raw */
+    if (opts & 2) {
+        /* OPT_NAKED */
+        emit_comment("NAKED procedure -- no prologue/epilogue");
+        cg_block(body);
+        return;
+    }
+
+    /* Standard prologue: push fp, push r2, push r1, mov fp,sp */
+    emit_prologue();
+
+    /* Allocate stack space for locals (sub sp, frame_size) */
+    frame_sz = layout_frame_size;
+    if (frame_sz > 0) {
+        if (frame_sz >= -128 && frame_sz <= 127) {
+            emit_str(EMIT_INDENT);
+            emit_str("lc      r0,");
+            emit_int(frame_sz);
+            emit_nl();
+        } else {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r0,");
+            emit_int(frame_sz);
+            emit_nl();
+        }
+        emit_instr("sub     sp,r0");
+    }
+
+    /* Emit body statements */
+    cg_block(body);
+
+    /* Standard epilogue: mov sp,fp, pop r1, pop r2, pop fp, jmp (r1) */
+    emit_epilogue();
+}
+
+/* Emit code for all procedures in a program AST.
+ * Walks top-level children and codegen's each PROC node.
+ * Handles layout_proc() and scope management for each. */
+
+void cg_program_procs(int prog_node) {
+    int child;
+
+    if (prog_node == NODE_NULL) return;
+
+    child = nd_left[prog_node];
+    while (child != NODE_NULL) {
+        if (nd_kind[child] == NODE_PROC) {
+            /* Layout procedure (enters scope, assigns offsets) */
+            layout_proc(child);
+            /* Emit code */
+            cg_proc(child);
+            /* Exit procedure scope */
+            sym_exit_scope();
+        }
+        child = nd_next[child];
+    }
+}
+
 #endif /* CODEGEN_H */
