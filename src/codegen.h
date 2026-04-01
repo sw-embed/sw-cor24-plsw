@@ -725,6 +725,185 @@ void cg_array_store(int node) {
     }
 }
 
+/* --- ADDR (address-of) codegen --- */
+
+/* Compute the address of a variable into r0.
+ * For NODE_ADDR: nd_left = operand (NODE_IDENT, NODE_FIELD_ACCESS, or NODE_ARRAY_ACCESS).
+ * Stack variables: fp + offset. Static: absolute address. */
+
+void cg_addr(int node) {
+    int operand;
+    int idx;
+    int off;
+
+    operand = nd_left[node];
+    if (operand == NODE_NULL) {
+        cg_error("ADDR with no operand");
+        emit_comment("ERROR: ADDR with no operand");
+        emit_instr("lc      r0,0");
+        return;
+    }
+
+    if (nd_kind[operand] == NODE_IDENT) {
+        idx = sym_lookup(nd_name[operand]);
+        if (idx < 0) {
+            cg_error("undefined variable in ADDR");
+            emit_comment("ERROR: undefined variable in ADDR");
+            emit_instr("lc      r0,0");
+            return;
+        }
+        off = sym_offset[idx];
+        if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r0,");
+            emit_int(off);
+            emit_nl();
+        } else {
+            /* Automatic: address = fp + offset */
+            if (off >= -128 && off <= 127) {
+                emit_str(EMIT_INDENT);
+                emit_str("lc      r0,");
+                emit_int(off);
+                emit_nl();
+            } else {
+                emit_str(EMIT_INDENT);
+                emit_str("la      r0,");
+                emit_int(off);
+                emit_nl();
+            }
+            emit_instr("add     r0,fp");
+        }
+    } else if (nd_kind[operand] == NODE_FIELD_ACCESS) {
+        /* ADDR(rec.field) -- compute field address into r2, move to r0 */
+        cg_field_addr(operand);
+        emit_instr("mov     r0,r2");
+    } else if (nd_kind[operand] == NODE_ARRAY_ACCESS) {
+        /* ADDR(arr(i)) -- compute element address into r2, move to r0 */
+        cg_array_addr(operand);
+        emit_instr("mov     r0,r2");
+    } else {
+        cg_error("ADDR requires a variable, field, or array element");
+        emit_comment("ERROR: unsupported ADDR operand");
+        emit_instr("lc      r0,0");
+    }
+}
+
+/* --- Pointer dereference codegen (ptr->field) --- */
+
+/* Compute the address of a dereferenced field into r2.
+ * For NODE_DEREF: nd_left = pointer expression, nd_name = field name.
+ * Evaluates pointer into r0, looks up field offset in the pointed-to
+ * record's type descriptor, adds offset, result address in r2.
+ * Returns field width for load/store sizing, or 0 on error. */
+
+int cg_deref_addr(int node) {
+    int ptr_node;
+    int sym_idx;
+    int desc;
+    int fidx;
+    int foff;
+    int fw;
+
+    ptr_node = nd_left[node];
+
+    /* Evaluate pointer expression into r0 */
+    cg_expr(ptr_node);
+
+    /* Look up the pointer symbol to find the pointed-to record type */
+    if (nd_kind[ptr_node] != NODE_IDENT) {
+        cg_error("dereference requires pointer variable");
+        emit_comment("ERROR: deref on non-ident");
+        return 0;
+    }
+
+    sym_idx = sym_lookup(nd_name[ptr_node]);
+    if (sym_idx < 0) {
+        cg_error("undefined pointer variable");
+        emit_comment("ERROR: undefined pointer variable");
+        return 0;
+    }
+
+    if (sym_type[sym_idx] != TYPE_PTR) {
+        cg_error("dereference requires PTR type");
+        emit_comment("ERROR: not a PTR");
+        return 0;
+    }
+
+    /* Get the type descriptor for the pointed-to record */
+    desc = sym_tdesc[sym_idx];
+    if (desc < 0) {
+        cg_error("pointer has no type descriptor");
+        emit_comment("ERROR: no type descriptor for pointer");
+        return 0;
+    }
+
+    /* Look up the field */
+    fidx = td_field_lookup(desc, nd_name[node]);
+    if (fidx < 0) {
+        cg_error("undefined field in pointer dereference");
+        emit_comment("ERROR: undefined field in deref");
+        if (nd_name[node]) {
+            emit_str(EMIT_INDENT);
+            emit_str("; field: ");
+            emit_line(nd_name[node]);
+        }
+        return 0;
+    }
+
+    foff = td_field_offset(desc, fidx);
+    fw = td_field_width(desc, fidx);
+
+    /* r0 = pointer value (base address). Add field offset. */
+    emit_instr("mov     r2,r0");
+    if (foff > 0) {
+        if (foff >= -128 && foff <= 127) {
+            emit_str(EMIT_INDENT);
+            emit_str("lc      r0,");
+            emit_int(foff);
+            emit_nl();
+        } else {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r0,");
+            emit_int(foff);
+            emit_nl();
+        }
+        emit_instr("add     r2,r0");
+    }
+
+    return fw;
+}
+
+/* Load a value through pointer dereference into r0 */
+void cg_deref_load(int node) {
+    int fw;
+    fw = cg_deref_addr(node);
+    if (fw == 0) return;
+
+    if (fw == 1) {
+        emit_instr("lb      r0,0(r2)");
+    } else {
+        emit_instr("lw      r0,0(r2)");
+    }
+}
+
+/* Store r0 into a dereferenced field.
+ * Saves r0 on stack while computing address, then restores and stores. */
+void cg_deref_store(int node) {
+    int fw;
+
+    emit_instr("push    r0");
+    fw = cg_deref_addr(node);
+    emit_instr("pop     r0");
+
+    if (fw == 0) return;
+
+    if (fw == 1) {
+        emit_instr("sb      r0,0(r2)");
+    } else {
+        emit_instr("sw      r0,0(r2)");
+    }
+}
+
 /* --- Main expression codegen dispatcher --- */
 
 void cg_expr(int node) {
@@ -760,6 +939,12 @@ void cg_expr(int node) {
     } else if (nd_kind[node] == NODE_FIELD_ACCESS) {
         /* Record field access: rec.field */
         cg_field_load(node);
+    } else if (nd_kind[node] == NODE_ADDR) {
+        /* ADDR(var) -- address-of */
+        cg_addr(node);
+    } else if (nd_kind[node] == NODE_DEREF) {
+        /* ptr->field -- pointer dereference */
+        cg_deref_load(node);
     } else {
         cg_error("unsupported expression node kind");
         emit_comment("ERROR: unsupported expr kind");
@@ -787,6 +972,8 @@ void cg_assign(int node) {
         cg_field_store(lhs);
     } else if (nd_kind[lhs] == NODE_ARRAY_ACCESS) {
         cg_array_store(lhs);
+    } else if (nd_kind[lhs] == NODE_DEREF) {
+        cg_deref_store(lhs);
     } else {
         cg_error("unsupported assignment target");
         emit_comment("ERROR: unsupported assignment target");

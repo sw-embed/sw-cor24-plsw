@@ -56,10 +56,9 @@ int layout_dcl_width(int node) {
 
     if (node == NODE_NULL) return 0;
 
-    layout_last_tdesc = -1;
-
     /* Record type: walk children to compute total size */
     if (nd_type[node] == TYPE_RECORD) {
+        layout_last_tdesc = -1;
         offset = 0;
         fcount = 0;
 
@@ -172,6 +171,10 @@ void layout_locals(int body_node) {
                 }
                 if (nd_ival[stmt] > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;
+                }
+                /* PTR: associate with most recent record type descriptor */
+                if (nd_type[stmt] == TYPE_PTR && layout_last_tdesc >= 0) {
+                    sym_tdesc[idx] = layout_last_tdesc;
                 }
             }
         }

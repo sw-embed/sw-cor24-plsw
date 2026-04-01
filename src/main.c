@@ -4052,6 +4052,165 @@ void test_array_codegen(void) {
     uart_putchar(10);
 }
 
+/* ========== Pointer Codegen Tests ========== */
+
+void test_pointer_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: ADDR of a local variable */
+    uart_puts("--- pointer: ADDR of local var ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST(); DCL X INT(24); DCL P PTR; X = 42; P = ADDR(X); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_TEST:")) {
+            uart_puts("  FAIL: missing proc label _TEST");
+            errs = errs + 1;
+        }
+        /* ADDR computes fp + offset: add r0,fp */
+        if (!str_find(out, "add     r0,fp")) {
+            uart_puts("  FAIL: missing add r0,fp for ADDR computation");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: ADDR of a record, then ptr->field access */
+    uart_puts("--- pointer: ADDR(record) and ptr->field ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST2(); DCL 1 REC, 3 X INT(24), 3 Y INT(24); DCL P PTR; REC.X = 10; REC.Y = 20; P = ADDR(REC); P->X = 99; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_TEST2:")) {
+            uart_puts("  FAIL: missing proc label _TEST2");
+            errs = errs + 1;
+        }
+        /* ptr->field store: sw r0,0(r2) */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sw r0,0(r2) for ptr->field store");
+            errs = errs + 1;
+        }
+        /* Pointer load: lw for loading P */
+        if (!str_find(out, "add     r0,fp")) {
+            uart_puts("  FAIL: missing add r0,fp for ADDR");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Read via ptr->field */
+    uart_puts("--- pointer: read via ptr->field ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC PRINT_INT(V INT(24)); END; PROC TEST3(); DCL 1 REC, 3 A INT(24), 3 B INT(24); DCL P PTR; REC.A = 100; REC.B = 200; P = ADDR(REC); CALL PRINT_INT(P->A + P->B); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must call PRINT_INT */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing call to _PRINT_INT");
+            errs = errs + 1;
+        }
+        /* ptr->field load uses lw r0,0(r2) */
+        if (!str_find(out, "lw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing lw r0,0(r2) for ptr->field load");
+            errs = errs + 1;
+        }
+        /* Addition of dereferenced values */
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add r0,r1 for ptr field sum");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 4: Pointer arithmetic */
+    uart_puts("--- pointer: pointer arithmetic ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST4(); DCL X INT(24); DCL P PTR; P = ADDR(X); P = P + 3; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Pointer arithmetic: add instruction */
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add r0,r1 for pointer arithmetic");
+            errs = errs + 1;
+        }
+        /* ADDR: add r0,fp */
+        if (!str_find(out, "add     r0,fp")) {
+            uart_puts("  FAIL: missing add r0,fp for ADDR(X)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("pointer codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -4155,6 +4314,10 @@ int main() {
 
     uart_puts("=== Array Codegen Tests ===");
     test_array_codegen();
+    uart_puts("");
+
+    uart_puts("=== Pointer Codegen Tests ===");
+    test_pointer_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

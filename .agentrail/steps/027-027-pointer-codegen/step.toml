@@ -1,6 +1,6 @@
 number = 27
 slug = "027-pointer-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement pointer and address code generation. ADDR(var) -- compute address o..."
 role = "production"
 context_files = []
