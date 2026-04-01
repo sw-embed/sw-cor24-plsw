@@ -3334,6 +3334,150 @@ void test_recursion_codegen(void) {
     uart_putchar(10);
 }
 
+void test_if_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: Simple IF/THEN (no else) */
+    uart_puts("--- if: simple if/then ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC CHECK(X INT(24)); IF X > 0 THEN X = X + 1; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Condition evaluation: compare must exist */
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch (ceq r0,z)");
+            errs = errs + 1;
+        }
+        /* Branch to skip then-body when false */
+        if (!str_find(out, "bc      ")) {
+            uart_puts("  FAIL: missing bc (conditional branch)");
+            errs = errs + 1;
+        }
+        /* End label must exist */
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing end label (L0)");
+            errs = errs + 1;
+        }
+        /* No jmp to label (no else means no jump-over-else) */
+        if (str_find(out, "jmp     L")) {
+            uart_puts("  FAIL: unexpected jmp in if/then (no else)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: IF/THEN/ELSE */
+    uart_puts("--- if: if/then/else ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC ABS(X INT(24)) RETURNS(INT(24)); IF X < 0 THEN RETURN(0 - X); ELSE RETURN(X); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Condition branch */
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch (ceq r0,z)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "bc      ")) {
+            uart_puts("  FAIL: missing bc (conditional branch to else)");
+            errs = errs + 1;
+        }
+        /* Must have jmp to skip else block after then */
+        if (!str_find(out, "jmp     L")) {
+            uart_puts("  FAIL: missing jmp (skip else after then)");
+            errs = errs + 1;
+        }
+        /* Must have at least 2 labels (else and end) */
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing else label (L0)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "L1:")) {
+            uart_puts("  FAIL: missing end label (L1)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: IF/THEN/ELSE with DO blocks */
+    uart_puts("--- if: block if/then/else ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC CLAMP(X INT(24), LO INT(24), HI INT(24)) RETURNS(INT(24)); IF X < LO THEN DO; X = LO; RETURN(X); END; ELSE DO; IF X > HI THEN X = HI; RETURN(X); END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Nested IF inside else must produce additional labels */
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing label L0");
+            errs = errs + 1;
+        }
+        /* At least 3 labels for outer if/else + inner if */
+        if (!str_find(out, "L2:")) {
+            uart_puts("  FAIL: missing label L2 (nested if needs labels)");
+            errs = errs + 1;
+        }
+        /* Multiple ceq for outer and inner conditions */
+        /* Just ensure codegen completes without error */
+        if (!str_find(out, "_CLAMP:")) {
+            uart_puts("  FAIL: missing proc label _CLAMP");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("if codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -3417,6 +3561,10 @@ int main() {
 
     uart_puts("=== Recursion Codegen Tests ===");
     test_recursion_codegen();
+    uart_puts("");
+
+    uart_puts("=== IF Codegen Tests ===");
+    test_if_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
