@@ -1,6 +1,6 @@
 number = 26
 slug = "026-array-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement array access code generation. Index expression: arr(i) computes bas..."
 role = "production"
 context_files = []

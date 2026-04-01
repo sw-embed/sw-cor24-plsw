@@ -9,13 +9,13 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 6 in progress — control flow code generation. DO I = start TO end
-counted loops lowered to while-equivalent (init, compare via cls, body,
-increment, jump back). IF/THEN/ELSE and DO WHILE codegen complete.
-Phases 0-5 complete: lexer, parser, AST, symbol table, type system,
+Phase 7 complete — records and arrays. Record field access (dot notation
+with computed offsets, nested records) and array element access (base +
+index * element_size for INT/CHAR arrays, store/load, loop fill/readback).
+Phases 0-6 complete: lexer, parser, AST, symbol table, type system,
 storage layout, emitter framework, expression/assignment codegen, static
-data, procedure prologue/epilogue, call codegen with R-to-L args, and
-recursion support.
+data, procedure prologue/epilogue, call codegen with R-to-L args,
+recursion support, IF/THEN/ELSE, DO WHILE, DO count loops.
 
 ## Documentation
 

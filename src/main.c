@@ -3920,6 +3920,138 @@ void test_record_codegen(void) {
     uart_putchar(10);
 }
 
+/* ========== Array Codegen Tests ========== */
+
+void test_array_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: INT array store and load */
+    uart_puts("--- array: INT array store/load ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST(); DCL ARR(5) INT(24); ARR(0) = 42; ARR(2) = ARR(0) + 1; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have proc label */
+        if (!str_find(out, "_TEST:")) {
+            uart_puts("  FAIL: missing proc label _TEST");
+            errs = errs + 1;
+        }
+        /* Array store: sw r0,0(r2) */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sw r0,0(r2) for array store");
+            errs = errs + 1;
+        }
+        /* Array load: lw r0,0(r2) */
+        if (!str_find(out, "lw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing lw r0,0(r2) for array load");
+            errs = errs + 1;
+        }
+        /* Index * 3 for INT: mov r1,r0 + add r0,r1 sequence */
+        if (!str_find(out, "mov     r1,r0")) {
+            uart_puts("  FAIL: missing mov r1,r0 for index*3 multiply");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: CHAR array (1-byte elements) */
+    uart_puts("--- array: CHAR array byte access ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC TEST2(); DCL BUF(10) CHAR; BUF(0) = 65; BUF(1) = BUF(0); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Byte store: sb r0,0(r2) */
+        if (!str_find(out, "sb      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sb r0,0(r2) for CHAR array store");
+            errs = errs + 1;
+        }
+        /* Byte load: lb r0,0(r2) */
+        if (!str_find(out, "lb      r0,0(r2)")) {
+            uart_puts("  FAIL: missing lb r0,0(r2) for CHAR array load");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Array in loop -- fill and read back */
+    uart_puts("--- array: fill in DO loop ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC PRINT_INT(V INT(24)); END; PROC TEST3(); DCL ARR(5) INT(24); DCL I INT(24); DO I = 0 TO 4; ARR(I) = I + 1; END; CALL PRINT_INT(ARR(2)); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have DO count loop structure (loop label + branch) */
+        if (!str_find(out, "_TEST3:")) {
+            uart_puts("  FAIL: missing proc label _TEST3");
+            errs = errs + 1;
+        }
+        /* Array store inside loop */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing sw for array store in loop");
+            errs = errs + 1;
+        }
+        /* Call to PRINT_INT with array element */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing call to _PRINT_INT");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("array codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -4019,6 +4151,10 @@ int main() {
 
     uart_puts("=== Record Codegen Tests ===");
     test_record_codegen();
+    uart_puts("");
+
+    uart_puts("=== Array Codegen Tests ===");
+    test_array_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

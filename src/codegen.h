@@ -621,6 +621,110 @@ void cg_field_store(int node) {
     }
 }
 
+/* --- Array element access codegen --- */
+
+/* Compute the address of an array element into r2.
+ * For NODE_ARRAY_ACCESS: nd_name = array name, nd_left = index expression.
+ * Returns the element width (1 or 3) for load/store sizing, or 0 on error. */
+
+int cg_array_addr(int node) {
+    int sym_idx;
+    int elem_w;
+    int arr_off;
+
+    sym_idx = sym_lookup(nd_name[node]);
+    if (sym_idx < 0) {
+        cg_error("undefined array variable");
+        emit_comment("ERROR: undefined array variable");
+        return 0;
+    }
+
+    if (!(sym_flags[sym_idx] & SYM_F_ARRAY)) {
+        cg_error("subscript on non-array variable");
+        emit_comment("ERROR: not an array");
+        return 0;
+    }
+
+    /* Element width from the base type */
+    elem_w = type_width(sym_type[sym_idx]);
+    if (elem_w == 0) elem_w = 3;
+
+    arr_off = sym_offset[sym_idx];
+
+    /* Evaluate index expression into r0 */
+    cg_expr(nd_left[node]);
+
+    /* Compute element offset: r0 = index * elem_w */
+    if (elem_w == 3) {
+        /* Multiply index by 3: r0 = r0 + r0 + r0 */
+        emit_instr("mov     r1,r0");
+        emit_instr("add     r0,r1");
+        emit_instr("add     r0,r1");
+    }
+    /* elem_w == 1: no multiply needed, offset = index */
+    /* elem_w == 2 would need shl by 1, but not common */
+
+    /* r0 = element byte offset. Compute base + offset into r2. */
+    emit_instr("mov     r2,r0");
+
+    if (sym_stor[sym_idx] == STOR_STATIC || sym_stor[sym_idx] == STOR_EXTERNAL) {
+        /* Static: r2 = r2 + static_address */
+        emit_str(EMIT_INDENT);
+        emit_str("la      r0,");
+        emit_int(arr_off);
+        emit_nl();
+        emit_instr("add     r2,r0");
+    } else {
+        /* Automatic: r2 = r2 + fp + stack_offset */
+        if (arr_off >= -128 && arr_off <= 127) {
+            emit_str(EMIT_INDENT);
+            emit_str("lc      r0,");
+            emit_int(arr_off);
+            emit_nl();
+        } else {
+            emit_str(EMIT_INDENT);
+            emit_str("la      r0,");
+            emit_int(arr_off);
+            emit_nl();
+        }
+        emit_instr("add     r2,r0");
+        emit_instr("add     r2,fp");
+    }
+
+    return elem_w;
+}
+
+/* Load an array element value into r0 */
+void cg_array_load(int node) {
+    int ew;
+    ew = cg_array_addr(node);
+    if (ew == 0) return;
+
+    if (ew == 1) {
+        emit_instr("lb      r0,0(r2)");
+    } else {
+        emit_instr("lw      r0,0(r2)");
+    }
+}
+
+/* Store r0 into an array element.
+ * Saves r0 on stack while computing address, then restores and stores. */
+void cg_array_store(int node) {
+    int ew;
+
+    emit_instr("push    r0");
+    ew = cg_array_addr(node);
+    emit_instr("pop     r0");
+
+    if (ew == 0) return;
+
+    if (ew == 1) {
+        emit_instr("sb      r0,0(r2)");
+    } else {
+        emit_instr("sw      r0,0(r2)");
+    }
+}
+
 /* --- Main expression codegen dispatcher --- */
 
 void cg_expr(int node) {
@@ -638,9 +742,21 @@ void cg_expr(int node) {
         cg_binop(node);
     } else if (nd_kind[node] == NODE_UNOP) {
         cg_unop(node);
+    } else if (nd_kind[node] == NODE_ARRAY_ACCESS) {
+        /* Array element access: arr(i) */
+        cg_array_load(node);
     } else if (nd_kind[node] == NODE_CALL) {
-        /* Function call in expression context: result in r0 */
-        cg_call(node);
+        /* Check if this is actually an array access (parsed as CALL) */
+        if (nd_name[node]) {
+            int _si = sym_lookup(nd_name[node]);
+            if (_si >= 0 && (sym_flags[_si] & SYM_F_ARRAY)) {
+                cg_array_load(node);
+            } else {
+                cg_call(node);
+            }
+        } else {
+            cg_call(node);
+        }
     } else if (nd_kind[node] == NODE_FIELD_ACCESS) {
         /* Record field access: rec.field */
         cg_field_load(node);
@@ -669,6 +785,8 @@ void cg_assign(int node) {
         cg_store_var(lhs);
     } else if (nd_kind[lhs] == NODE_FIELD_ACCESS) {
         cg_field_store(lhs);
+    } else if (nd_kind[lhs] == NODE_ARRAY_ACCESS) {
+        cg_array_store(lhs);
     } else {
         cg_error("unsupported assignment target");
         emit_comment("ERROR: unsupported assignment target");
