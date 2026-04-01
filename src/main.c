@@ -3144,6 +3144,196 @@ void test_call_codegen(void) {
     uart_putchar(10);
 }
 
+/* ===== Recursion Codegen Tests ===== */
+
+void test_recursion_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: Recursive factorial -- frame management and self-call.
+     * FACT(N) calls FACT(N-1), so each invocation must get its own
+     * frame with saved fp, r1 (return addr), r2. */
+    uart_puts("--- recursion: factorial ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC FACT(N INT(24)) RETURNS(INT(24)); IF N <= 1 THEN RETURN(1); RETURN(N * FACT(N - 1)); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have prologue (saves frame for each call) */
+        if (!str_find(out, "push     fp")) {
+            uart_puts("  FAIL: missing push fp (prologue)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "push     r1")) {
+            uart_puts("  FAIL: missing push r1 (saves return addr)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "mov     fp,sp")) {
+            uart_puts("  FAIL: missing mov fp,sp (frame setup)");
+            errs = errs + 1;
+        }
+
+        /* Must have self-call to FACT */
+        if (!str_find(out, "_FACT")) {
+            uart_puts("  FAIL: missing self-call to FACT");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jal     r1,(r2)")) {
+            uart_puts("  FAIL: missing jal (call instruction)");
+            errs = errs + 1;
+        }
+
+        /* Must have epilogue (restores frame on return) */
+        if (!str_find(out, "mov     sp,fp")) {
+            uart_puts("  FAIL: missing mov sp,fp (epilogue)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "pop     r1")) {
+            uart_puts("  FAIL: missing pop r1 (restore return addr)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "pop     fp")) {
+            uart_puts("  FAIL: missing pop fp (restore caller frame)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jmp     (r1)")) {
+            uart_puts("  FAIL: missing jmp (r1) (return)");
+            errs = errs + 1;
+        }
+
+        /* IF condition: N <= 1 comparison */
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch");
+            errs = errs + 1;
+        }
+
+        /* Argument push for recursive call (N-1) */
+        if (!str_find(out, "sub     sp,r2")) {
+            uart_puts("  FAIL: missing arg space allocation");
+            errs = errs + 1;
+        }
+        /* Cleanup after call */
+        if (!str_find(out, "add     sp,r2")) {
+            uart_puts("  FAIL: missing arg cleanup");
+            errs = errs + 1;
+        }
+
+        /* Multiply N * FACT(N-1): must push/pop to save N across call */
+        if (!str_find(out, "mul     r0,r1")) {
+            uart_puts("  FAIL: missing multiply for N * FACT(N-1)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: Nested calls -- PROC calls another with result of a third.
+     * ADD(MUL(2, 3), MUL(4, 5)) -- each nested call must preserve caller state. */
+    uart_puts("--- recursion: nested calls ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; DCL R INT(24); R = ADD(MUL(2, 3), MUL(4, 5)); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have calls to both MUL and ADD */
+        if (!str_find(out, "_MUL")) {
+            uart_puts("  FAIL: missing call to MUL");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_ADD")) {
+            uart_puts("  FAIL: missing call to ADD");
+            errs = errs + 1;
+        }
+
+        /* First MUL result stored at arg slot 0, second at slot 3 */
+        if (!str_find(out, "sw      r0,0(sp)")) {
+            uart_puts("  FAIL: missing store of first nested result");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "sw      r0,3(sp)")) {
+            uart_puts("  FAIL: missing store of second nested result");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Sequential recursive calls -- verify multiple self-references */
+    uart_puts("--- recursion: sequential self-calls ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC FIB(N INT(24)) RETURNS(INT(24)); IF N <= 1 THEN RETURN(N); RETURN(FIB(N - 1) + FIB(N - 2)); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have self-call to FIB */
+        if (!str_find(out, "_FIB")) {
+            uart_puts("  FAIL: missing self-call to FIB");
+            errs = errs + 1;
+        }
+
+        /* Two calls mean two jal instructions */
+        /* FIB(N-1) + FIB(N-2): first result pushed, second evaluated,
+         * then pop and add */
+        if (!str_find(out, "push     r0")) {
+            uart_puts("  FAIL: missing push r0 for saving FIB(N-1) result");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add for FIB(N-1) + FIB(N-2)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("recursion codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -3223,6 +3413,10 @@ int main() {
 
     uart_puts("=== Call Codegen Tests ===");
     test_call_codegen();
+    uart_puts("");
+
+    uart_puts("=== Recursion Codegen Tests ===");
+    test_recursion_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

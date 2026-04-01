@@ -1,7 +1,8 @@
 number = 20
 slug = "020-call-codegen"
-status = "in-progress"
+status = "completed"
 description = "Implement procedure call code generation. Evaluate arguments left-to-right bu..."
 role = "production"
 context_files = []
 created_at = "2026-03-30T13:15:43"
+completed_at = "2026-03-31T17:40:53"

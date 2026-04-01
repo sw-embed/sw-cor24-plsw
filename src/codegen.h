@@ -800,6 +800,68 @@ void cg_call(int node) {
     }
 }
 
+/* --- Control flow codegen --- */
+
+/* Forward declaration for mutual recursion */
+void cg_stmt(int node);
+void cg_block(int block_node);
+
+/* IF/THEN/ELSE codegen.
+ * AST: nd_left = condition, nd_right = then body, nd_ival = else body (or NODE_NULL) */
+void cg_if(int node) {
+    int lbl_else;
+    int lbl_end;
+    int else_body;
+
+    else_body = nd_ival[node];
+
+    /* Evaluate condition into r0 */
+    cg_expr(nd_left[node]);
+
+    if (else_body != NODE_NULL) {
+        /* IF/THEN/ELSE */
+        lbl_else = emit_new_label();
+        lbl_end = emit_new_label();
+
+        /* Branch to else if r0 == 0 (condition false) */
+        emit_instr("ceq     r0,z");
+        emit_str(EMIT_INDENT);
+        emit_str("bc      ");
+        emit_label_ref(lbl_else);
+        emit_nl();
+
+        /* Then body */
+        cg_stmt(nd_right[node]);
+        emit_str(EMIT_INDENT);
+        emit_str("jmp     ");
+        emit_label_ref(lbl_end);
+        emit_nl();
+
+        /* Else label and body */
+        emit_label(lbl_else);
+        cg_stmt(else_body);
+
+        /* End label */
+        emit_label(lbl_end);
+    } else {
+        /* IF/THEN (no else) */
+        lbl_end = emit_new_label();
+
+        /* Branch to end if r0 == 0 (condition false) */
+        emit_instr("ceq     r0,z");
+        emit_str(EMIT_INDENT);
+        emit_str("bc      ");
+        emit_label_ref(lbl_end);
+        emit_nl();
+
+        /* Then body */
+        cg_stmt(nd_right[node]);
+
+        /* End label */
+        emit_label(lbl_end);
+    }
+}
+
 /* --- Statement codegen --- */
 
 /* Emit code for a single statement node */
@@ -821,6 +883,9 @@ void cg_stmt(int node) {
         cg_call(node);
     } else if (nd_kind[node] == NODE_BLOCK) {
         cg_block(node);
+    } else if (nd_kind[node] == NODE_IF) {
+        /* IF/THEN/ELSE: evaluate condition, branch on false */
+        cg_if(node);
     } else if (nd_kind[node] == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
     } else {
