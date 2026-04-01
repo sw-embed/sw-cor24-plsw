@@ -1,6 +1,6 @@
 number = 28
 slug = "028-inline-asm"
-status = "pending"
+status = "in-progress"
 description = "Implement inline assembly support. Parse ASM DO; ... END; blocks -- each stri..."
 role = "production"
 context_files = []
