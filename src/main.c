@@ -4344,6 +4344,180 @@ void test_asm_codegen() {
     uart_putchar(10);
 }
 
+void test_include(void) {
+    int errs;
+    int prog;
+    char *out;
+    int idx;
+
+    errs = 0;
+
+    /* Test 1: basic %INCLUDE inserts declarations */
+    uart_puts("--- include: basic ---");
+    inc_init();
+    inc_register("DEFS", "DCL COUNT INT(24); DCL FLAG BYTE;");
+
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("%INCLUDE DEFS; PROC MAIN(); COUNT = 42; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing proc label _MAIN");
+            errs = errs + 1;
+        }
+        /* Verify no undefined variable error for COUNT */
+        if (str_find(out, "undefined variable")) {
+            uart_puts("  FAIL: COUNT not resolved from include");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: %INCLUDE with .msw extension lookup */
+    uart_puts("--- include: .msw extension ---");
+    inc_init();
+    inc_register("TYPES.msw", "DCL BUFSIZE INT(24);");
+
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("%INCLUDE TYPES; PROC TEST(); BUFSIZE = 100; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_TEST:")) {
+            uart_puts("  FAIL: missing proc label _TEST");
+            errs = errs + 1;
+        }
+        if (str_find(out, "undefined variable")) {
+            uart_puts("  FAIL: BUFSIZE not resolved from .msw include");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: nested includes */
+    uart_puts("--- include: nested ---");
+    inc_init();
+    inc_register("INNER", "DCL DEEP INT(24);");
+    inc_register("OUTER", "%INCLUDE INNER; DCL SHALLOW BYTE;");
+
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("%INCLUDE OUTER; PROC NEST(); DEEP = 1; SHALLOW = 2; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_NEST:")) {
+            uart_puts("  FAIL: missing proc label _NEST");
+            errs = errs + 1;
+        }
+        if (str_find(out, "undefined variable")) {
+            uart_puts("  FAIL: nested include vars not resolved");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 4: %INCLUDE with procedure definitions */
+    uart_puts("--- include: proc def ---");
+    inc_init();
+    inc_register("HELPER", "PROC ADD(A, B) RETURNS(INT(24)); DCL A INT(24); DCL B INT(24); RETURN(A + B); END;");
+
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("%INCLUDE HELPER; PROC MAIN(); CALL ADD(10, 20); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_ADD:")) {
+            uart_puts("  FAIL: missing proc label _ADD from include");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing proc label _MAIN");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 5: % not followed by INCLUDE still works as TOK_PERCENT */
+    uart_puts("--- include: percent not include ---");
+    inc_init();
+    arena_init();
+    ast_init();
+
+    lex_init("%FOO", 4);
+    lex_scan();
+    if (cur_type != TOK_PERCENT) {
+        uart_puts("  FAIL: expected TOK_PERCENT for %FOO");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: %FOO -> TOK_PERCENT");
+    }
+
+    /* Summary */
+    uart_putstr("include processing errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -4455,6 +4629,10 @@ int main() {
 
     uart_puts("=== Inline ASM Codegen Tests ===");
     test_asm_codegen();
+    uart_puts("");
+
+    uart_puts("=== Include Processing Tests ===");
+    test_include();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

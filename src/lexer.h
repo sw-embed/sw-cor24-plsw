@@ -11,6 +11,74 @@ char *lex_src;    /* source buffer pointer */
 int   lex_pos;    /* current position in source */
 int   lex_len;    /* length of source */
 
+/* ---- %INCLUDE processing ---- */
+
+#define INC_MAX_DEPTH  4    /* max nesting depth */
+#define INC_MAX_FILES  16   /* max registered include files */
+
+/* Registered include files (name -> content) */
+char *inc_names[INC_MAX_FILES];
+char *inc_contents[INC_MAX_FILES];
+int   inc_count;
+
+/* Lexer state stack for nested includes */
+char *inc_src_stack[INC_MAX_DEPTH];
+int   inc_pos_stack[INC_MAX_DEPTH];
+int   inc_len_stack[INC_MAX_DEPTH];
+int   inc_depth;
+
+void inc_init(void) {
+    inc_count = 0;
+    inc_depth = 0;
+}
+
+/* Register an include file by name and content */
+void inc_register(char *name, char *content) {
+    if (inc_count < INC_MAX_FILES) {
+        inc_names[inc_count] = name;
+        inc_contents[inc_count] = content;
+        inc_count = inc_count + 1;
+    }
+}
+
+/* Look up include file content by name */
+char *inc_lookup(char *name) {
+    int i = 0;
+    while (i < inc_count) {
+        if (str_eq_nocase(name, inc_names[i])) {
+            return inc_contents[i];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+/* Push current lexer state, switch to include content */
+int inc_push(char *content) {
+    if (inc_depth >= INC_MAX_DEPTH) {
+        return 0;
+    }
+    inc_src_stack[inc_depth] = lex_src;
+    inc_pos_stack[inc_depth] = lex_pos;
+    inc_len_stack[inc_depth] = lex_len;
+    inc_depth = inc_depth + 1;
+
+    lex_src = content;
+    lex_pos = 0;
+    lex_len = str_len(content);
+    return 1;
+}
+
+/* Pop back to parent lexer state. Returns 1 if popped, 0 if top level. */
+int inc_pop(void) {
+    if (inc_depth <= 0) return 0;
+    inc_depth = inc_depth - 1;
+    lex_src = inc_src_stack[inc_depth];
+    lex_pos = inc_pos_stack[inc_depth];
+    lex_len = inc_len_stack[inc_depth];
+    return 1;
+}
+
 /* Current token (globals -- no struct on stack) */
 int  cur_type;
 int  cur_ival;
@@ -21,6 +89,7 @@ void lex_init(char *src, int len) {
     lex_src = src;
     lex_pos = 0;
     lex_len = len;
+    inc_depth = 0;
     kw_init();
 }
 
@@ -97,6 +166,84 @@ void lex_set(int type, char *txt) {
     str_copy(cur_text, txt);
 }
 
+/* Try to process a %INCLUDE directive at the current position.
+   Returns 1 if handled, 0 if not a %INCLUDE. */
+int lex_try_include(void) {
+    /* Save position in case this isn't %INCLUDE */
+    int saved = lex_pos;
+
+    /* We're at '%' -- advance past it */
+    lex_advance();
+
+    /* Read directive name */
+    char dname[16];
+    int di = 0;
+    while (lex_pos < lex_len && is_alpha(lex_peek()) && di < 15) {
+        dname[di] = lex_advance();
+        di = di + 1;
+    }
+    dname[di] = 0;
+
+    if (!str_eq_nocase(dname, "INCLUDE")) {
+        /* Not %INCLUDE -- restore position */
+        lex_pos = saved;
+        return 0;
+    }
+
+    /* Skip whitespace after INCLUDE */
+    while (lex_pos < lex_len && is_space(lex_peek())) {
+        lex_advance();
+    }
+
+    /* Read the include name (until ; or whitespace) */
+    char iname[TOK_TEXT_MAX];
+    int ni = 0;
+    while (lex_pos < lex_len && lex_peek() != 59 && !is_space(lex_peek())
+           && ni < TOK_TEXT_MAX - 1) {
+        iname[ni] = lex_advance();
+        ni = ni + 1;
+    }
+    iname[ni] = 0;
+
+    /* Skip whitespace and consume trailing semicolon */
+    while (lex_pos < lex_len && is_space(lex_peek())) {
+        lex_advance();
+    }
+    if (lex_pos < lex_len && lex_peek() == 59) {
+        lex_advance();
+    }
+
+    /* Look up the include file */
+    char *content = inc_lookup(iname);
+    if (!content) {
+        /* Try with .msw extension */
+        char fname[TOK_TEXT_MAX];
+        str_copy(fname, iname);
+        int flen = str_len(fname);
+        if (flen + 4 < TOK_TEXT_MAX) {
+            fname[flen] = 46;     /* . */
+            fname[flen+1] = 109;  /* m */
+            fname[flen+2] = 115;  /* s */
+            fname[flen+3] = 119;  /* w */
+            fname[flen+4] = 0;
+            content = inc_lookup(fname);
+        }
+    }
+
+    if (!content) {
+        /* Include not found -- not an error for now, just skip */
+        return 1;
+    }
+
+    /* Push current state and switch to include content */
+    if (!inc_push(content)) {
+        /* Too deeply nested */
+        return 1;
+    }
+
+    return 1;
+}
+
 /* Scan the next token. Result stored in cur_type/cur_ival/cur_text. */
 int lex_scan(void) {
     lex_skip();
@@ -104,13 +251,26 @@ int lex_scan(void) {
     cur_ival = 0;
     cur_text[0] = 0;
 
+    /* Handle EOF: pop include stack if inside an include */
     if (lex_pos >= lex_len) {
+        if (inc_pop()) {
+            /* Resumed parent -- continue scanning */
+            return lex_scan();
+        }
         cur_type = TOK_EOF;
         str_copy(cur_text, "EOF");
         return TOK_EOF;
     }
 
     int c = lex_peek();
+
+    /* Check for %INCLUDE directive */
+    if (c == 37) { /* % */
+        if (lex_try_include()) {
+            /* Directive consumed -- scan next real token */
+            return lex_scan();
+        }
+    }
 
     /* Identifier or keyword */
     if (is_alpha(c)) {

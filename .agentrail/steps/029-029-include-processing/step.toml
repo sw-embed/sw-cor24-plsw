@@ -1,6 +1,6 @@
 number = 29
 slug = "029-include-processing"
-status = "pending"
+status = "in-progress"
 description = "Implement %INCLUDE directive processing. When lexer encounters %INCLUDE NAME;..."
 role = "production"
 context_files = []
