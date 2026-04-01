@@ -1,6 +1,6 @@
 number = 23
 slug = "023-do-while-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement DO WHILE loop code generation. Emit loop header label. Evaluate con..."
 role = "production"
 context_files = []

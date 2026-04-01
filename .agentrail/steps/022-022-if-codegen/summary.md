@@ -1,0 +1,1 @@
+Added test_if_codegen() with 3 tests verifying the existing cg_if() implementation: (1) simple IF/THEN with condition eval, conditional branch, end label, no jmp; (2) IF/THEN/ELSE with branch-to-else, jmp-over-else, two labels; (3) nested IF inside ELSE with DO blocks (CLAMP procedure). All tests pass on COR24 emulator.

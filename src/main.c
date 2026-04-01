@@ -3478,6 +3478,149 @@ void test_if_codegen(void) {
     uart_putchar(10);
 }
 
+void test_do_while_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: Simple DO WHILE loop */
+    uart_puts("--- do_while: simple loop ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC COUNTDOWN(N INT(24)); DO WHILE (N > 0); N = N - 1; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Loop header label must exist */
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing loop header label (L0)");
+            errs = errs + 1;
+        }
+        /* Condition evaluation: compare for branch */
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition test (ceq r0,z)");
+            errs = errs + 1;
+        }
+        /* Conditional branch to end */
+        if (!str_find(out, "bc      ")) {
+            uart_puts("  FAIL: missing bc (branch to end)");
+            errs = errs + 1;
+        }
+        /* Unconditional branch back to top */
+        if (!str_find(out, "jmp     L0")) {
+            uart_puts("  FAIL: missing jmp back to header (jmp L0)");
+            errs = errs + 1;
+        }
+        /* End label */
+        if (!str_find(out, "L1:")) {
+            uart_puts("  FAIL: missing loop end label (L1)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: DO WHILE with procedure call (counted loop printing) */
+    uart_puts("--- do_while: loop with call ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC PRINT_INT(V INT(24)); END; PROC LOOP10(); DCL I INT(24); I = 1; DO WHILE (I <= 10); CALL PRINT_INT(I); I = I + 1; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Must have LOOP10 proc label */
+        if (!str_find(out, "_LOOP10:")) {
+            uart_puts("  FAIL: missing proc label _LOOP10");
+            errs = errs + 1;
+        }
+        /* Must have call to PRINT_INT */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing call to _PRINT_INT");
+            errs = errs + 1;
+        }
+        /* Loop structure: header, condition, body, jump back */
+        if (!str_find(out, "jmp     L")) {
+            uart_puts("  FAIL: missing jump back to loop header");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: Nested DO WHILE loops */
+    uart_puts("--- do_while: nested loops ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC NESTED(N INT(24)); DCL I INT(24); DCL J INT(24); I = 0; DO WHILE (I < N); J = 0; DO WHILE (J < N); J = J + 1; END; I = I + 1; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        /* Two loop headers (L0 and L2) and two end labels (L1 and L3) */
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing outer loop header (L0)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "L2:")) {
+            uart_puts("  FAIL: missing inner loop header (L2)");
+            errs = errs + 1;
+        }
+        /* Jump back for both loops */
+        if (!str_find(out, "jmp     L0")) {
+            uart_puts("  FAIL: missing outer loop jmp back");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jmp     L2")) {
+            uart_puts("  FAIL: missing inner loop jmp back");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("do_while codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -3565,6 +3708,10 @@ int main() {
 
     uart_puts("=== IF Codegen Tests ===");
     test_if_codegen();
+    uart_puts("");
+
+    uart_puts("=== DO WHILE Codegen Tests ===");
+    test_do_while_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");

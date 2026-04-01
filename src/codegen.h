@@ -862,6 +862,41 @@ void cg_if(int node) {
     }
 }
 
+/* DO WHILE loop codegen.
+ * AST: nd_left = condition, nd_right = body (BLOCK) */
+void cg_do_while(int node) {
+    int lbl_top;
+    int lbl_end;
+
+    lbl_top = emit_new_label();
+    lbl_end = emit_new_label();
+
+    /* Loop header label */
+    emit_label(lbl_top);
+
+    /* Evaluate condition into r0 */
+    cg_expr(nd_left[node]);
+
+    /* Branch to end if r0 == 0 (condition false) */
+    emit_instr("ceq     r0,z");
+    emit_str(EMIT_INDENT);
+    emit_str("bc      ");
+    emit_label_ref(lbl_end);
+    emit_nl();
+
+    /* Loop body */
+    cg_stmt(nd_right[node]);
+
+    /* Branch back to header */
+    emit_str(EMIT_INDENT);
+    emit_str("jmp     ");
+    emit_label_ref(lbl_top);
+    emit_nl();
+
+    /* End label */
+    emit_label(lbl_end);
+}
+
 /* --- Statement codegen --- */
 
 /* Emit code for a single statement node */
@@ -886,6 +921,9 @@ void cg_stmt(int node) {
     } else if (nd_kind[node] == NODE_IF) {
         /* IF/THEN/ELSE: evaluate condition, branch on false */
         cg_if(node);
+    } else if (nd_kind[node] == NODE_DO_WHILE) {
+        /* DO WHILE: loop with condition at top */
+        cg_do_while(node);
     } else if (nd_kind[node] == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
     } else {
