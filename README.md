@@ -9,7 +9,13 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 4 in progress — code generation. Procedure codegen validated with
+Phase 5 in progress — procedures and calling convention. Call codegen
+validated with 10-test suite covering no-arg calls (la+jal), single and
+multi-arg calls with R-to-L stack layout (sub sp, sw at sp+i*3, cleanup
+via add sp), calls in expression context (return value in r0 used in
+assignments and arithmetic), nested calls (inner call result as outer
+arg), variable and expression arguments, sequential calls, and combined
+global data with procedure calls. Procedure codegen validated with
 10-test suite covering empty procedures, RETURN with value in r0,
 local variables with stack allocation (sub sp), parameter access at
 fp+9, NAKED procedures (no prologue/epilogue), multiple procedures in

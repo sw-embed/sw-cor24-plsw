@@ -50,6 +50,7 @@ void cg_error(char *msg) {
 /* --- Forward declarations --- */
 
 void cg_expr(int node);
+void cg_call(int node);
 
 /* --- Helper: check if expression is "simple" (no push/pop needed) --- */
 /* A simple expr is a literal or variable -- can load directly into r1 */
@@ -511,6 +512,9 @@ void cg_expr(int node) {
         cg_binop(node);
     } else if (nd_kind[node] == NODE_UNOP) {
         cg_unop(node);
+    } else if (nd_kind[node] == NODE_CALL) {
+        /* Function call in expression context: result in r0 */
+        cg_call(node);
     } else {
         cg_error("unsupported expression node kind");
         emit_comment("ERROR: unsupported expr kind");
@@ -712,9 +716,91 @@ void cg_load_string(int label_num) {
     emit_nl();
 }
 
-/* --- Statement codegen --- */
+/* --- Call codegen --- */
 /* Forward declaration for cg_block */
 void cg_block(int block_node);
+
+/* Count arguments in a linked list (via nd_next) */
+int cg_count_args(int first_arg) {
+    int count;
+    int arg;
+    count = 0;
+    arg = first_arg;
+    while (arg != NODE_NULL) {
+        count = count + 1;
+        arg = nd_next[arg];
+    }
+    return count;
+}
+
+/* Emit code for a procedure call.
+ * CALL node: nd_name = procedure name, nd_left = first arg (linked via nd_next).
+ * COR24 calling convention:
+ *   - Evaluate arguments left-to-right
+ *   - Push arguments right-to-left onto stack
+ *   - Call via jal r1,(r2)
+ *   - Clean up stack after return (add sp, arg_count*3)
+ *   - Return value in r0 */
+
+void cg_call(int node) {
+    int nargs;
+    int arg;
+    int i;
+    int cleanup;
+
+    if (node == NODE_NULL) return;
+
+    nargs = cg_count_args(nd_left[node]);
+
+    if (nargs == 0) {
+        /* No arguments: just call */
+        emit_str(EMIT_INDENT);
+        emit_str("la      r2,_");
+        emit_line(nd_name[node]);
+        emit_instr("jal     r1,(r2)");
+    } else {
+        /* Evaluate args L-to-R, store in R-to-L stack order.
+         * Pre-allocate space, then store each at the correct offset
+         * so first arg ends up at lowest address (closest to sp).
+         * Callee sees fp+9 = first arg, fp+12 = second, etc. */
+        cleanup = nargs * 3;
+        emit_str(EMIT_INDENT);
+        emit_str("lc      r2,");
+        emit_int(cleanup);
+        emit_nl();
+        emit_instr("sub     sp,r2");
+
+        /* Evaluate each arg L-to-R and store at sp + i*3.
+         * arg1 at sp+0 -> callee fp+9 (first param)
+         * arg2 at sp+3 -> callee fp+12 (second param) */
+        arg = nd_left[node];
+        i = 0;
+        while (arg != NODE_NULL) {
+            cg_expr(arg);
+            emit_str(EMIT_INDENT);
+            emit_str("sw      r0,");
+            emit_int(i * 3);
+            emit_line("(sp)");
+            i = i + 1;
+            arg = nd_next[arg];
+        }
+
+        /* Call the procedure */
+        emit_str(EMIT_INDENT);
+        emit_str("la      r2,_");
+        emit_line(nd_name[node]);
+        emit_instr("jal     r1,(r2)");
+
+        /* Clean up args from stack */
+        emit_str(EMIT_INDENT);
+        emit_str("lc      r2,");
+        emit_int(cleanup);
+        emit_nl();
+        emit_instr("add     sp,r2");
+    }
+}
+
+/* --- Statement codegen --- */
 
 /* Emit code for a single statement node */
 void cg_stmt(int node) {
@@ -731,14 +817,8 @@ void cg_stmt(int node) {
          * For early returns, emit epilogue inline. */
         emit_epilogue();
     } else if (nd_kind[node] == NODE_CALL) {
-        /* Bare CALL statement (result discarded).
-         * Full call codegen comes in step 020; for now emit placeholder. */
-        emit_comment("CALL (stub)");
-        if (nd_name[node]) {
-            emit_str(EMIT_INDENT);
-            emit_str("; call ");
-            emit_line(nd_name[node]);
-        }
+        /* Bare CALL statement (result in r0 discarded) */
+        cg_call(node);
     } else if (nd_kind[node] == NODE_BLOCK) {
         cg_block(node);
     } else if (nd_kind[node] == NODE_DCL) {

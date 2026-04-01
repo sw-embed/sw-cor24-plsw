@@ -1,6 +1,6 @@
 number = 20
 slug = "020-call-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement procedure call code generation. Evaluate arguments left-to-right bu..."
 role = "production"
 context_files = []

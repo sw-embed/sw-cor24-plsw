@@ -2783,6 +2783,367 @@ void test_proc_codegen(void) {
     uart_putchar(10);
 }
 
+void test_call_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: CALL with no arguments */
+    uart_puts("--- call: no args ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL FOO; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "la      r2,_FOO")) {
+            uart_puts("  FAIL: missing la r2,_FOO");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jal     r1,(r2)")) {
+            uart_puts("  FAIL: missing jal");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: CALL with one argument */
+    uart_puts("--- call: one arg ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL PRINT(42); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "sub     sp,r2")) {
+            uart_puts("  FAIL: missing stack alloc");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "sw      r0,0(sp)")) {
+            uart_puts("  FAIL: missing arg store");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "la      r2,_PRINT")) {
+            uart_puts("  FAIL: missing call target");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "add     sp,r2")) {
+            uart_puts("  FAIL: missing stack cleanup");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: CALL with multiple arguments */
+    uart_puts("--- call: multi args ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL ADD3(1, 2, 3); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* 3 args = 9 bytes stack space */
+        if (!str_find(out, "lc      r2,9")) {
+            uart_puts("  FAIL: missing 9-byte stack alloc");
+            errs = errs + 1;
+        }
+        /* Args stored at sp+0, sp+3, sp+6 */
+        if (!str_find(out, "sw      r0,0(sp)")) {
+            uart_puts("  FAIL: missing arg1 store at 0(sp)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "sw      r0,3(sp)")) {
+            uart_puts("  FAIL: missing arg2 store at 3(sp)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "sw      r0,6(sp)")) {
+            uart_puts("  FAIL: missing arg3 store at 6(sp)");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "la      r2,_ADD3")) {
+            uart_puts("  FAIL: missing call target");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 4: Call as expression (return value used in assignment) */
+    uart_puts("--- call: expr context ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; DCL X INT(24); X = GETVAL(10); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Should call GETVAL then store r0 into X */
+        if (!str_find(out, "la      r2,_GETVAL")) {
+            uart_puts("  FAIL: missing call to GETVAL");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jal     r1,(r2)")) {
+            uart_puts("  FAIL: missing jal");
+            errs = errs + 1;
+        }
+        /* After call, r0 should be stored to X's stack location */
+        if (!str_find(out, "sw      r0,")) {
+            uart_puts("  FAIL: missing store of return value");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 5: Multiple calls in sequence */
+    uart_puts("--- call: sequential ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL A; CALL B(1); CALL C(2, 3); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, "_A")) {
+            uart_puts("  FAIL: missing call A");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_B")) {
+            uart_puts("  FAIL: missing call B");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_C")) {
+            uart_puts("  FAIL: missing call C");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 6: Call with variable argument */
+    uart_puts("--- call: var arg ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; DCL Y INT(24); CALL SEND(Y); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Should load Y from stack then store as arg */
+        if (!str_find(out, "lw      r0,")) {
+            uart_puts("  FAIL: missing load of Y");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "la      r2,_SEND")) {
+            uart_puts("  FAIL: missing call target");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 7: Call with expression argument */
+    uart_puts("--- call: expr arg ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL PUT(1 + 2); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Should evaluate 1+2 then push result */
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add for expr arg");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "la      r2,_PUT")) {
+            uart_puts("  FAIL: missing call target");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 8: Nested call -- call result used as argument */
+    uart_puts("--- call: nested ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; CALL PRINT(DOUBLE(5)); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Should call DOUBLE first, then PRINT */
+        if (!str_find(out, "_DOUBLE")) {
+            uart_puts("  FAIL: missing inner call DOUBLE");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_PRINT")) {
+            uart_puts("  FAIL: missing outer call PRINT");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 9: Call with global data and procedures combined */
+    uart_puts("--- call: with globals ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL COUNT INT(24); PROC MAIN; CALL INIT(COUNT); END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        if (!str_find(out, ".data")) {
+            uart_puts("  FAIL: missing .data section");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "_INIT")) {
+            uart_puts("  FAIL: missing call to INIT");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 10: Call in expression with arithmetic */
+    uart_puts("--- call: in expr ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MAIN; DCL R INT(24); R = CALC(1) + 10; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+        /* Call CALC, then add 10, then store in R */
+        if (!str_find(out, "_CALC")) {
+            uart_puts("  FAIL: missing call to CALC");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add for + 10");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("call codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -2858,6 +3219,10 @@ int main() {
 
     uart_puts("=== Procedure Codegen Tests ===");
     test_proc_codegen();
+    uart_puts("");
+
+    uart_puts("=== Call Codegen Tests ===");
+    test_call_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
