@@ -897,6 +897,56 @@ void cg_do_while(int node) {
     emit_label(lbl_end);
 }
 
+/* DO I = start TO end; ... END; codegen.
+ * Lowers to: I = start; WHILE (I <= end) { body; I = I + 1; }
+ * AST: nd_name = loop var, nd_left = start, nd_ival = end expr, nd_right = body */
+void cg_do_count(int node) {
+    int lbl_top;
+    int lbl_end;
+
+    lbl_top = emit_new_label();
+    lbl_end = emit_new_label();
+
+    /* I = start: evaluate start expr into r0, store to loop var */
+    cg_expr(nd_left[node]);
+    cg_store_var(node);  /* nd_name[node] = loop var name */
+
+    /* Loop header label */
+    emit_label(lbl_top);
+
+    /* Compare: load I into r0, save, eval end into r0, then compare */
+    cg_load_var(node);       /* r0 = I */
+    emit_instr("push    r0");
+    cg_expr(nd_ival[node]);  /* r0 = end */
+    emit_instr("mov     r1,r0");  /* r1 = end */
+    emit_instr("pop     r0");     /* r0 = I */
+
+    /* Branch to end if I > end (i.e., end < I) */
+    emit_instr("cls     r1,r0");  /* carry if end < I */
+    emit_str(EMIT_INDENT);
+    emit_str("bc      ");
+    emit_label_ref(lbl_end);
+    emit_nl();
+
+    /* Loop body */
+    cg_stmt(nd_right[node]);
+
+    /* Increment: I = I + 1 */
+    cg_load_var(node);
+    emit_instr("lc      r1,1");
+    emit_instr("add     r0,r1");
+    cg_store_var(node);
+
+    /* Branch back to header */
+    emit_str(EMIT_INDENT);
+    emit_str("jmp     ");
+    emit_label_ref(lbl_top);
+    emit_nl();
+
+    /* End label */
+    emit_label(lbl_end);
+}
+
 /* --- Statement codegen --- */
 
 /* Emit code for a single statement node */
@@ -924,6 +974,9 @@ void cg_stmt(int node) {
     } else if (nd_kind[node] == NODE_DO_WHILE) {
         /* DO WHILE: loop with condition at top */
         cg_do_while(node);
+    } else if (nd_kind[node] == NODE_DO_COUNT) {
+        /* DO I = start TO end: counted loop */
+        cg_do_count(node);
     } else if (nd_kind[node] == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
     } else {

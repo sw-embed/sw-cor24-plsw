@@ -9,31 +9,13 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 5 in progress — procedures and calling convention. Call codegen
-validated with 10-test suite covering no-arg calls (la+jal), single and
-multi-arg calls with R-to-L stack layout (sub sp, sw at sp+i*3, cleanup
-via add sp), calls in expression context (return value in r0 used in
-assignments and arithmetic), nested calls (inner call result as outer
-arg), variable and expression arguments, sequential calls, and combined
-global data with procedure calls. Procedure codegen validated with
-10-test suite covering empty procedures, RETURN with value in r0,
-local variables with stack allocation (sub sp), parameter access at
-fp+9, NAKED procedures (no prologue/epilogue), multiple procedures in
-one program, multi-local frame layout, FREESTANDING option, byte-width
-locals with sb, and combined globals+proc (.data + .text sections).
-Static data emission validated with 10-test suite covering zero-fill
-words/bytes, INIT values, multiple declarations, arrays, string
-literals, and runtime store/load verification. Assignment codegen
-validated with 10-test suite covering automatic/static variables,
-byte-width stores, complex expressions, multiple sequential assignments,
-large stack offsets, and negation. Expression codegen supports literal
-loading (lc/la), variable load/store (fp-relative and static), binary
-arithmetic (add, sub, mul), software division via __plsw_div, all
-comparison operators, unary negate, and register allocation with spill.
-Assembly emitter framework provides output buffer, section management,
-label generation, instruction emission, and COR24 prologue/epilogue.
-Phase 3 complete with scoped symbol table, type system, and storage
-layout computation.
+Phase 6 in progress — control flow code generation. DO I = start TO end
+counted loops lowered to while-equivalent (init, compare via cls, body,
+increment, jump back). IF/THEN/ELSE and DO WHILE codegen complete.
+Phases 0-5 complete: lexer, parser, AST, symbol table, type system,
+storage layout, emitter framework, expression/assignment codegen, static
+data, procedure prologue/epilogue, call codegen with R-to-L args, and
+recursion support.
 
 ## Documentation
 

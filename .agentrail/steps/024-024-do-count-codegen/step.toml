@@ -1,6 +1,6 @@
 number = 24
 slug = "024-do-count-codegen"
-status = "pending"
+status = "in-progress"
 description = "Implement DO I = start TO end code generation. Lower to equivalent while loop..."
 role = "production"
 context_files = []
