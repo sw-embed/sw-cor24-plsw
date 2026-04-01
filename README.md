@@ -9,13 +9,14 @@ human-readable COR24 assembler source (.s).
 
 ## Status
 
-Phase 7 complete — records and arrays. Record field access (dot notation
-with computed offsets, nested records) and array element access (base +
-index * element_size for INT/CHAR arrays, store/load, loop fill/readback).
-Phases 0-6 complete: lexer, parser, AST, symbol table, type system,
+Phase 9 in progress — inline assembly. ASM DO; ... END; blocks emit
+string literals verbatim as assembly instructions. PROC OPTIONS(NAKED)
+skips prologue/epilogue for raw assembly procedures (interrupt handlers).
+Phases 0-8 complete: lexer, parser, AST, symbol table, type system,
 storage layout, emitter framework, expression/assignment codegen, static
 data, procedure prologue/epilogue, call codegen with R-to-L args,
-recursion support, IF/THEN/ELSE, DO WHILE, DO count loops.
+recursion support, IF/THEN/ELSE, DO WHILE, DO count loops, records,
+arrays, pointers and addresses.
 
 ## Documentation
 

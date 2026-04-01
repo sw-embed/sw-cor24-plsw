@@ -690,6 +690,42 @@ int parse_stmt(void) {
         return nd_return(expr);
     }
 
+    /* ASM DO; 'instr'; ... END; */
+    if (cur_type == TOK_ASM) {
+        parse_advance();
+        parse_expect(TOK_DO);
+        parse_expect(TOK_SEMI);
+
+        n = nd_alloc(NODE_ASM_BLOCK);
+        if (n == NODE_NULL) {
+            parse_error("node pool full");
+            return NODE_NULL;
+        }
+
+        /* Collect string literals as children */
+        while (!parse_err && cur_type != TOK_END && cur_type != TOK_EOF) {
+            if (cur_type == TOK_STRING) {
+                /* Each asm line stored as LITERAL node with nd_name */
+                lhs = nd_alloc(NODE_LITERAL);
+                if (lhs != NODE_NULL) {
+                    nlen = str_len(cur_text);
+                    name = arena_alloc(nlen + 1);
+                    if (name) str_copy(name, cur_text);
+                    nd_name[lhs] = name;
+                }
+                nd_append(n, lhs);
+                parse_advance();
+                parse_expect(TOK_SEMI);
+            } else {
+                parse_error("expected string literal in ASM block");
+                return NODE_NULL;
+            }
+        }
+        parse_expect(TOK_END);
+        parse_expect(TOK_SEMI);
+        return n;
+    }
+
     /* DCL / DECLARE */
     if (cur_type == TOK_DCL || cur_type == TOK_DECLARE) {
         return parse_dcl();

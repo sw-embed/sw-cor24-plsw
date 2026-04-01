@@ -1383,6 +1383,24 @@ void cg_do_count(int node) {
     emit_label(lbl_end);
 }
 
+/* --- Inline assembly codegen --- */
+
+/* Emit code for an ASM_BLOCK node.
+ * Each child is a LITERAL node with nd_name holding the asm string.
+ * Strings are emitted verbatim as instructions. */
+void cg_asm_block(int node) {
+    int child;
+    emit_comment("ASM DO block");
+    child = nd_left[node];
+    while (child != NODE_NULL) {
+        if (nd_name[child]) {
+            emit_str(EMIT_INDENT);
+            emit_line(nd_name[child]);
+        }
+        child = nd_next[child];
+    }
+}
+
 /* --- Statement codegen --- */
 
 /* Emit code for a single statement node */
@@ -1415,6 +1433,8 @@ void cg_stmt(int node) {
         cg_do_count(node);
     } else if (nd_kind[node] == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
+    } else if (nd_kind[node] == NODE_ASM_BLOCK) {
+        cg_asm_block(node);
     } else {
         cg_error("unsupported statement kind");
         emit_comment("ERROR: unsupported statement");

@@ -4211,6 +4211,139 @@ void test_pointer_codegen(void) {
     uart_putchar(10);
 }
 
+/* ---- Inline ASM Codegen Tests ---- */
+void test_asm_codegen() {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: ASM block that writes to LED MMIO address */
+    uart_puts("--- asm: LED MMIO write ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC LED_ON(); ASM DO; 'la      r0,0xFF0000'; 'lc      r1,1'; 'sw      r1,0(r0)'; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_LED_ON:")) {
+            uart_puts("  FAIL: missing proc label _LED_ON");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "la      r0,0xFF0000")) {
+            uart_puts("  FAIL: missing la r0,0xFF0000");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "lc      r1,1")) {
+            uart_puts("  FAIL: missing lc r1,1");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "sw      r1,0(r0)")) {
+            uart_puts("  FAIL: missing sw r1,0(r0)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: NAKED procedure with ASM body (interrupt handler stub) */
+    uart_puts("--- asm: NAKED interrupt handler ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC ISR OPTIONS(NAKED); ASM DO; 'push    r0'; 'push    r1'; 'pop     r1'; 'pop     r0'; 'jmp     (iv)'; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_ISR:")) {
+            uart_puts("  FAIL: missing proc label _ISR");
+            errs = errs + 1;
+        }
+        /* NAKED: should NOT have prologue push fp */
+        if (str_find(out, "push     fp")) {
+            uart_puts("  FAIL: NAKED proc should not have prologue");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "push    r0")) {
+            uart_puts("  FAIL: missing push r0 in ISR");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "jmp     (iv)")) {
+            uart_puts("  FAIL: missing jmp (iv) in ISR");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: ASM block inside a regular procedure */
+    uart_puts("--- asm: ASM block in regular proc ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC MIXED(); DCL X INT(24); X = 42; ASM DO; 'nop'; 'nop'; END; X = 99; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_MIXED:")) {
+            uart_puts("  FAIL: missing proc label _MIXED");
+            errs = errs + 1;
+        }
+        /* Should have prologue (not NAKED) */
+        if (!str_find(out, "push     fp")) {
+            uart_puts("  FAIL: regular proc should have prologue");
+            errs = errs + 1;
+        }
+        /* Should have nop from ASM block */
+        if (!str_find(out, "nop")) {
+            uart_puts("  FAIL: missing nop from ASM block");
+            errs = errs + 1;
+        }
+    }
+
+    /* Summary */
+    uart_putstr("inline asm codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 int main() {
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
@@ -4318,6 +4451,10 @@ int main() {
 
     uart_puts("=== Pointer Codegen Tests ===");
     test_pointer_codegen();
+    uart_puts("");
+
+    uart_puts("=== Inline ASM Codegen Tests ===");
+    test_asm_codegen();
     uart_puts("");
 
     uart_puts("=== REPL (tokenizer) ===");
