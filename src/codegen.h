@@ -107,10 +107,10 @@ void cg_load_var(int node) {
     w = sym_width[idx];
 
     if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
-        /* Static/external: load address, then dereference */
+        /* Static/external: load address via label, then dereference */
         emit_str(EMIT_INDENT);
-        emit_str("la      r2,");
-        emit_int(off);
+        emit_str("la      r2,_");
+        emit_str(sym_name[idx]);
         emit_nl();
         if (w == 1) {
             emit_instr("lb      r0,0(r2)");
@@ -167,8 +167,8 @@ void cg_store_var(int node) {
 
     if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
         emit_str(EMIT_INDENT);
-        emit_str("la      r2,");
-        emit_int(off);
+        emit_str("la      r2,_");
+        emit_str(sym_name[idx]);
         emit_nl();
         if (w == 1) {
             emit_instr("sb      r0,0(r2)");
@@ -241,8 +241,8 @@ void cg_load_simple_into(int node, char *reg) {
 
         if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
             emit_str(EMIT_INDENT);
-            emit_str("la      r2,");
-            emit_int(off);
+            emit_str("la      r2,_");
+            emit_str(sym_name[idx]);
             emit_nl();
             if (w == 1) {
                 emit_str(EMIT_INDENT);
@@ -562,10 +562,14 @@ int cg_field_addr(int node) {
 
     /* Compute address: record_base + field_offset into r2 */
     if (sym_stor[sym_idx] == STOR_STATIC || sym_stor[sym_idx] == STOR_EXTERNAL) {
-        /* Static: la r2, static_addr + field_offset */
+        /* Static: la r2, _VARNAME + field_offset */
         emit_str(EMIT_INDENT);
-        emit_str("la      r2,");
-        emit_int(rec_off + foff);
+        emit_str("la      r2,_");
+        emit_str(sym_name[sym_idx]);
+        if (foff > 0) {
+            emit_char(43); /* '+' */
+            emit_int(foff);
+        }
         emit_nl();
     } else {
         /* Automatic: fp + record_offset + field_offset */
@@ -668,10 +672,10 @@ int cg_array_addr(int node) {
     emit_instr("mov     r2,r0");
 
     if (sym_stor[sym_idx] == STOR_STATIC || sym_stor[sym_idx] == STOR_EXTERNAL) {
-        /* Static: r2 = r2 + static_address */
+        /* Static: r2 = r2 + label address */
         emit_str(EMIT_INDENT);
-        emit_str("la      r0,");
-        emit_int(arr_off);
+        emit_str("la      r0,_");
+        emit_str(sym_name[sym_idx]);
         emit_nl();
         emit_instr("add     r2,r0");
     } else {
@@ -755,8 +759,8 @@ void cg_addr(int node) {
         off = sym_offset[idx];
         if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
             emit_str(EMIT_INDENT);
-            emit_str("la      r0,");
-            emit_int(off);
+            emit_str("la      r0,_");
+            emit_str(sym_name[idx]);
             emit_nl();
         } else {
             /* Automatic: address = fp + offset */
@@ -1172,17 +1176,22 @@ int cg_count_args(int first_arg) {
 /* Emit code for a procedure call.
  * CALL node: nd_name = procedure name, nd_left = first arg (linked via nd_next).
  * COR24 calling convention:
- *   - Evaluate arguments left-to-right
- *   - Push arguments right-to-left onto stack
+ *   - Push arguments right-to-left onto stack (last arg pushed first)
  *   - Call via jal r1,(r2)
  *   - Clean up stack after return (add sp, arg_count*3)
- *   - Return value in r0 */
+ *   - Return value in r0
+ *
+ * COR24 constraint: sp-relative sw is not supported,
+ * so we use push for each arg in reverse order. */
+
+#define CG_MAX_ARGS 8
 
 void cg_call(int node) {
     int nargs;
     int arg;
     int i;
     int cleanup;
+    int arg_nodes[CG_MAX_ARGS];
 
     if (node == NODE_NULL) return;
 
@@ -1195,30 +1204,21 @@ void cg_call(int node) {
         emit_line(nd_name[node]);
         emit_instr("jal     r1,(r2)");
     } else {
-        /* Evaluate args L-to-R, store in R-to-L stack order.
-         * Pre-allocate space, then store each at the correct offset
-         * so first arg ends up at lowest address (closest to sp).
-         * Callee sees fp+9 = first arg, fp+12 = second, etc. */
-        cleanup = nargs * 3;
-        emit_str(EMIT_INDENT);
-        emit_str("lc      r2,");
-        emit_int(cleanup);
-        emit_nl();
-        emit_instr("sub     sp,r2");
-
-        /* Evaluate each arg L-to-R and store at sp + i*3.
-         * arg1 at sp+0 -> callee fp+9 (first param)
-         * arg2 at sp+3 -> callee fp+12 (second param) */
+        /* Collect arg nodes into array for reverse-order push */
         arg = nd_left[node];
         i = 0;
-        while (arg != NODE_NULL) {
-            cg_expr(arg);
-            emit_str(EMIT_INDENT);
-            emit_str("sw      r0,");
-            emit_int(i * 3);
-            emit_line("(sp)");
+        while (arg != NODE_NULL && i < CG_MAX_ARGS) {
+            arg_nodes[i] = arg;
             i = i + 1;
             arg = nd_next[arg];
+        }
+
+        /* Push args R-to-L: evaluate last arg first, push it */
+        i = nargs - 1;
+        while (i >= 0) {
+            cg_expr(arg_nodes[i]);
+            emit_instr("push    r0");
+            i = i - 1;
         }
 
         /* Call the procedure */
@@ -1228,11 +1228,11 @@ void cg_call(int node) {
         emit_instr("jal     r1,(r2)");
 
         /* Clean up args from stack */
+        cleanup = nargs * 3;
         emit_str(EMIT_INDENT);
-        emit_str("lc      r2,");
+        emit_str("add     sp,");
         emit_int(cleanup);
         emit_nl();
-        emit_instr("add     sp,r2");
     }
 }
 
@@ -1504,21 +1504,13 @@ void cg_proc(int proc_node) {
     /* Standard prologue: push fp, push r2, push r1, mov fp,sp */
     emit_prologue();
 
-    /* Allocate stack space for locals (sub sp, frame_size) */
+    /* Allocate stack space for locals */
     frame_sz = layout_frame_size;
     if (frame_sz > 0) {
-        if (frame_sz >= -128 && frame_sz <= 127) {
-            emit_str(EMIT_INDENT);
-            emit_str("lc      r0,");
-            emit_int(frame_sz);
-            emit_nl();
-        } else {
-            emit_str(EMIT_INDENT);
-            emit_str("la      r0,");
-            emit_int(frame_sz);
-            emit_nl();
-        }
-        emit_instr("sub     sp,r0");
+        emit_str(EMIT_INDENT);
+        emit_str("add     sp,-");
+        emit_int(frame_sz);
+        emit_nl();
     }
 
     /* Emit body statements */

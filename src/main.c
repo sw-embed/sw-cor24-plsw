@@ -2566,8 +2566,8 @@ void test_proc_codegen(void) {
         cg_program_procs(prog);
         out = emit_output();
         uart_putstr(out);
-        /* Should have stack allocation (sub sp) */
-        if (!str_find(out, "sub")) {
+        /* Should have stack allocation (add sp,-N) */
+        if (!str_find(out, "add     sp,-")) {
             uart_puts("  FAIL: missing stack allocation");
             errs = errs + 1;
         }
@@ -2843,19 +2843,15 @@ void test_call_codegen(void) {
         cg_program_procs(prog);
         out = emit_output();
         uart_putstr(out);
-        if (!str_find(out, "sub     sp,r2")) {
-            uart_puts("  FAIL: missing stack alloc");
-            errs = errs + 1;
-        }
-        if (!str_find(out, "sw      r0,0(sp)")) {
-            uart_puts("  FAIL: missing arg store");
+        if (!str_find(out, "push    r0")) {
+            uart_puts("  FAIL: missing push r0 for arg");
             errs = errs + 1;
         }
         if (!str_find(out, "la      r2,_PRINT")) {
             uart_puts("  FAIL: missing call target");
             errs = errs + 1;
         }
-        if (!str_find(out, "add     sp,r2")) {
+        if (!str_find(out, "add     sp,3")) {
             uart_puts("  FAIL: missing stack cleanup");
             errs = errs + 1;
         }
@@ -2882,26 +2878,17 @@ void test_call_codegen(void) {
         cg_program_procs(prog);
         out = emit_output();
         uart_putstr(out);
-        /* 3 args = 9 bytes stack space */
-        if (!str_find(out, "lc      r2,9")) {
-            uart_puts("  FAIL: missing 9-byte stack alloc");
-            errs = errs + 1;
-        }
-        /* Args stored at sp+0, sp+3, sp+6 */
-        if (!str_find(out, "sw      r0,0(sp)")) {
-            uart_puts("  FAIL: missing arg1 store at 0(sp)");
-            errs = errs + 1;
-        }
-        if (!str_find(out, "sw      r0,3(sp)")) {
-            uart_puts("  FAIL: missing arg2 store at 3(sp)");
-            errs = errs + 1;
-        }
-        if (!str_find(out, "sw      r0,6(sp)")) {
-            uart_puts("  FAIL: missing arg3 store at 6(sp)");
+        /* 3 args pushed R-to-L, then cleaned up with add sp,9 */
+        if (!str_find(out, "push    r0")) {
+            uart_puts("  FAIL: missing push for args");
             errs = errs + 1;
         }
         if (!str_find(out, "la      r2,_ADD3")) {
             uart_puts("  FAIL: missing call target");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "add     sp,9")) {
+            uart_puts("  FAIL: missing 9-byte stack cleanup");
             errs = errs + 1;
         }
     }
@@ -3227,12 +3214,12 @@ void test_recursion_codegen(void) {
         }
 
         /* Argument push for recursive call (N-1) */
-        if (!str_find(out, "sub     sp,r2")) {
-            uart_puts("  FAIL: missing arg space allocation");
+        if (!str_find(out, "push    r0")) {
+            uart_puts("  FAIL: missing push for arg");
             errs = errs + 1;
         }
         /* Cleanup after call */
-        if (!str_find(out, "add     sp,r2")) {
+        if (!str_find(out, "add     sp,3")) {
             uart_puts("  FAIL: missing arg cleanup");
             errs = errs + 1;
         }
@@ -3277,13 +3264,13 @@ void test_recursion_codegen(void) {
             errs = errs + 1;
         }
 
-        /* First MUL result stored at arg slot 0, second at slot 3 */
-        if (!str_find(out, "sw      r0,0(sp)")) {
-            uart_puts("  FAIL: missing store of first nested result");
+        /* Nested call results pushed onto stack for ADD */
+        if (!str_find(out, "push    r0")) {
+            uart_puts("  FAIL: missing push of nested result");
             errs = errs + 1;
         }
-        if (!str_find(out, "sw      r0,3(sp)")) {
-            uart_puts("  FAIL: missing store of second nested result");
+        if (!str_find(out, "add     sp,6")) {
+            uart_puts("  FAIL: missing 6-byte cleanup for ADD(2 args)");
             errs = errs + 1;
         }
     }
@@ -5310,6 +5297,221 @@ void test_conditional(void) {
     uart_putchar(10);
 }
 
+/* --- Hello World end-to-end compilation --- */
+
+/* COR24 runtime preamble: _start entry point */
+void emit_runtime_start(void) {
+    emit_line("        .text");
+    emit_nl();
+    emit_line("        .globl  _start");
+    emit_line("_start:");
+    emit_line("        la      r0,_MAIN");
+    emit_line("        jal     r1,(r0)");
+    emit_line("_halt:");
+    emit_line("        bra     _halt");
+    emit_nl();
+}
+
+/* COR24 UART_PUTCHAR runtime: write byte to UART */
+void emit_runtime_uart_putchar(void) {
+    emit_line("        .globl  _UART_PUTCHAR");
+    emit_line("_UART_PUTCHAR:");
+    emit_line("        push    fp");
+    emit_line("        push    r2");
+    emit_line("        push    r1");
+    emit_line("        mov     fp,sp");
+    emit_line("        la      r2,16711936");
+    emit_line("        lw      r0,9(fp)");
+    emit_line("        sb      r0,0(r2)");
+    emit_line("        mov     sp,fp");
+    emit_line("        pop     r1");
+    emit_line("        pop     r2");
+    emit_line("        pop     fp");
+    emit_line("        jmp     (r1)");
+    emit_nl();
+}
+
+/* COR24 UART_PUTS runtime: print null-terminated string + newline */
+void emit_runtime_uart_puts(void) {
+    emit_line("        .globl  _UART_PUTS");
+    emit_line("_UART_PUTS:");
+    emit_line("        push    fp");
+    emit_line("        push    r2");
+    emit_line("        push    r1");
+    emit_line("        mov     fp,sp");
+    emit_line("        lw      r2,9(fp)");
+    emit_line("_uart_puts_loop:");
+    emit_line("        lbu     r0,0(r2)");
+    emit_line("        ceq     r0,z");
+    emit_line("        brt     _uart_puts_done");
+    /* call UART_PUTCHAR(r0) -- save r2, push arg, call, clean, restore */
+    emit_line("        push    r2");
+    emit_line("        push    r0");
+    emit_line("        la      r0,_UART_PUTCHAR");
+    emit_line("        jal     r1,(r0)");
+    emit_line("        add     sp,3");
+    emit_line("        pop     r2");
+    emit_line("        lc      r0,1");
+    emit_line("        add     r2,r0");
+    emit_line("        bra     _uart_puts_loop");
+    emit_line("_uart_puts_done:");
+    /* print newline */
+    emit_line("        lc      r0,10");
+    emit_line("        push    r0");
+    emit_line("        la      r0,_UART_PUTCHAR");
+    emit_line("        jal     r1,(r0)");
+    emit_line("        add     sp,3");
+    emit_line("        mov     sp,fp");
+    emit_line("        pop     r1");
+    emit_line("        pop     r2");
+    emit_line("        pop     fp");
+    emit_line("        jmp     (r1)");
+    emit_nl();
+}
+
+/* Compile a PL/SW source string to a complete .s program.
+ * Returns the assembly output string, or 0 on error. */
+char *compile_program(char *source) {
+    int prog;
+
+    /* Initialize all subsystems */
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    /* Parse */
+    parse_init(source);
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("COMPILE ERROR: ");
+        uart_puts(parse_errmsg);
+        return 0;
+    }
+
+    /* Layout globals */
+    layout_globals(prog);
+    if (layout_err) {
+        uart_putstr("LAYOUT ERROR: ");
+        uart_puts(layout_errmsg);
+        return 0;
+    }
+
+    /* Emit runtime preamble */
+    emit_runtime_start();
+    emit_runtime_uart_putchar();
+    emit_runtime_uart_puts();
+
+    /* Emit user procedures */
+    cg_program_procs(prog);
+    if (cg_err) {
+        uart_putstr("CODEGEN ERROR: ");
+        uart_puts(cg_errmsg);
+        return 0;
+    }
+
+    /* Emit static data */
+    cg_emit_static_data(prog);
+
+    /* Emit string literal table */
+    cg_emit_string_table();
+
+    return emit_output();
+}
+
+void test_hello_world(void) {
+    int errs;
+    char *src;
+    char *out;
+
+    errs = 0;
+
+    /* The hello world PL/SW source */
+    src = "DCL MSG(20) CHAR INIT('Hello from PL/SW!');"
+          "MAIN: PROC;"
+          "  CALL UART_PUTS(ADDR(MSG));"
+          "END;";
+
+    uart_puts("--- compiling hello.plsw ---");
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        /* Print the generated assembly */
+        uart_puts("--- generated assembly ---");
+        uart_putstr(out);
+        uart_puts("--- end assembly ---");
+
+        /* Verify key elements are present */
+        if (!str_find(out, "_start:")) {
+            uart_puts("  FAIL: missing _start");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has _start");
+        }
+
+        if (!str_find(out, "_UART_PUTCHAR:")) {
+            uart_puts("  FAIL: missing _UART_PUTCHAR");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has _UART_PUTCHAR");
+        }
+
+        if (!str_find(out, "_UART_PUTS:")) {
+            uart_puts("  FAIL: missing _UART_PUTS");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has _UART_PUTS");
+        }
+
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing _MAIN");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has _MAIN");
+        }
+
+        if (!str_find(out, "_MSG:")) {
+            uart_puts("  FAIL: missing _MSG");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has _MSG");
+        }
+
+        if (!str_find(out, "la      r0,_MSG")) {
+            uart_puts("  FAIL: missing ADDR(MSG) -> la r0,_MSG");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has ADDR(MSG) label ref");
+        }
+
+        if (!str_find(out, "la      r2,_UART_PUTS")) {
+            uart_puts("  FAIL: missing CALL UART_PUTS");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL UART_PUTS");
+        }
+
+        /* Check for Hello string bytes (H=72, e=101) */
+        if (!str_find(out, ".byte   72")) {
+            uart_puts("  FAIL: missing 'H' byte in MSG");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has 'H' byte (72)");
+        }
+    }
+
+    /* Summary */
+    uart_putstr("hello world compile errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5343,12 +5545,13 @@ int run_suite(int n) {
     else if (n == 28) { uart_puts("=== Macro Definition Tests ==="); test_macro_def(); }
     else if (n == 29) { uart_puts("=== Macro Expansion Tests ==="); test_macro_expand(); }
     else if (n == 30) { uart_puts("=== Conditional Compilation Tests ==="); test_conditional(); }
+    else if (n == 31) { uart_puts("=== Hello World Compile ==="); test_hello_world(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 31
+#define SUITE_COUNT 32
 
 int main() {
     char line[LINE_MAX];
@@ -5357,7 +5560,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-30), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-31), 'a' for all, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 
