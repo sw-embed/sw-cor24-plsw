@@ -8,6 +8,7 @@
 #include "layout.h"
 #include "emit.h"
 #include "codegen.h"
+#include "macro.h"
 
 #define LINE_MAX 128
 
@@ -4518,135 +4519,354 @@ void test_include(void) {
     uart_putchar(10);
 }
 
+void test_macro_def(void) {
+    int errs;
+    int mi;
+    int idx;
+    int lc_idx;
+    int count;
+    char *src;
+
+    errs = 0;
+
+    /* Test 1: Parse GETMAIN macro with REQUIRED/OPTIONAL clauses and GEN block */
+    uart_puts("--- macrodef: GETMAIN ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   OPTIONAL SUBPOOL(expr);"
+        "   OPTIONAL ADDRESS(lvalue);"
+        "   OPTIONAL RC(lvalue);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    if (mac_parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else if (mi < 0) {
+        uart_puts("  FAIL: mac_parse_def returned -1");
+        errs = errs + 1;
+    } else {
+        /* Verify macro name */
+        if (!str_eq_nocase(mac_name(mi), "GETMAIN")) {
+            uart_puts("  FAIL: name != GETMAIN");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: name = GETMAIN");
+        }
+
+        /* Verify clause count */
+        if (mac_cl_count[mi] != 4) {
+            uart_putstr("  FAIL: clause count = ");
+            print_int(mac_cl_count[mi]);
+            uart_puts(" (expected 4)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: 4 clauses");
+        }
+
+        /* Verify first clause: REQUIRED LENGTH(expr) */
+        idx = mac_cl_idx(mi, 0);
+        if (mac_cl_req[idx] != MCLAUSE_REQUIRED ||
+            !str_eq_nocase(mac_cl_name(mi, 0), "LENGTH") ||
+            mac_cl_types[idx] != MCLAUSE_EXPR) {
+            uart_puts("  FAIL: clause 0 wrong");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: REQUIRED LENGTH(expr)");
+        }
+
+        /* Verify third clause: OPTIONAL ADDRESS(lvalue) */
+        idx = mac_cl_idx(mi, 2);
+        if (mac_cl_req[idx] != MCLAUSE_OPTIONAL ||
+            !str_eq_nocase(mac_cl_name(mi, 2), "ADDRESS") ||
+            mac_cl_types[idx] != MCLAUSE_LVALUE) {
+            uart_puts("  FAIL: clause 2 wrong");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: OPTIONAL ADDRESS(lvalue)");
+        }
+
+        /* Verify GEN block */
+        if (mac_gen_count[mi] != 1) {
+            uart_putstr("  FAIL: gen count = ");
+            print_int(mac_gen_count[mi]);
+            uart_puts(" (expected 1)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: 1 GEN block");
+        }
+
+        lc_idx = mac_gen_lc_idx(mi, 0);
+        if (mac_gen_lcount[lc_idx] != 2) {
+            uart_putstr("  FAIL: gen line count = ");
+            print_int(mac_gen_lcount[lc_idx]);
+            uart_puts(" (expected 2)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: 2 GEN lines");
+        }
+
+        /* Verify GEN line content */
+        if (!str_eq(mac_gen_line(mi, 0, 0), "mvi r0,{LENGTH}")) {
+            uart_putstr("  FAIL: gen line 0 = '");
+            uart_putstr(mac_gen_line(mi, 0, 0));
+            uart_puts("'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: gen line 0 = 'mvi r0,{LENGTH}'");
+        }
+
+        if (!str_eq(mac_gen_line(mi, 0, 1), "svc 10")) {
+            uart_putstr("  FAIL: gen line 1 = '");
+            uart_putstr(mac_gen_line(mi, 0, 1));
+            uart_puts("'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: gen line 1 = 'svc 10'");
+        }
+
+        mac_dump();
+    }
+
+    /* Test 2: Lookup by name */
+    uart_puts("--- macrodef: lookup ---");
+    if (mac_lookup("GETMAIN") != 0) {
+        uart_puts("  FAIL: GETMAIN not found at index 0");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: GETMAIN found at index 0");
+    }
+    if (mac_lookup("NONEXIST") != -1) {
+        uart_puts("  FAIL: NONEXIST should return -1");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: NONEXIST returns -1");
+    }
+
+    /* Test 3: Parse multiple macros from .msw file */
+    uart_puts("--- macrodef: multi ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "END;"
+        "MACRODEF FREEMAIN;"
+        "   REQUIRED ADDRESS(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{ADDRESS}';"
+        "      'svc 11';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    count = mac_parse_file();
+
+    if (mac_parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else if (count != 2) {
+        uart_putstr("  FAIL: parsed ");
+        print_int(count);
+        uart_puts(" macros (expected 2)");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: parsed 2 macros");
+    }
+
+    if (mac_lookup("GETMAIN") != 0) {
+        uart_puts("  FAIL: GETMAIN not at index 0");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: GETMAIN at index 0");
+    }
+    if (mac_lookup("FREEMAIN") != 1) {
+        uart_puts("  FAIL: FREEMAIN not at index 1");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: FREEMAIN at index 1");
+    }
+
+    mac_dump();
+
+    /* Test 4: Macro with body (IF/THEN statements after GEN) */
+    uart_puts("--- macrodef: body ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   OPTIONAL ADDRESS(lvalue);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "   IF ADDRESS THEN DO;"
+        "      ADDRESS = 0;"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    if (mac_parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        if (mac_body(mi)[0] == 0) {
+            uart_puts("  FAIL: body is empty");
+            errs = errs + 1;
+        } else {
+            uart_putstr("  OK: body = '");
+            uart_putstr(mac_body(mi));
+            uart_puts("'");
+        }
+        if (!str_find(mac_body(mi), "IF")) {
+            uart_puts("  FAIL: body missing IF");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: body contains IF");
+        }
+    }
+
+    /* Test 5: label clause type */
+    uart_puts("--- macrodef: label clause ---");
+    mac_init();
+
+    src = "MACRODEF BRANCH;"
+        "   REQUIRED TARGET(label);"
+        "   OPTIONAL COND(expr);"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    if (mac_parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        idx = mac_cl_idx(mi, 0);
+        if (mac_cl_types[idx] != MCLAUSE_LABEL) {
+            uart_puts("  FAIL: TARGET type != label");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: TARGET(label)");
+        }
+        idx = mac_cl_idx(mi, 1);
+        if (mac_cl_types[idx] != MCLAUSE_EXPR) {
+            uart_puts("  FAIL: COND type != expr");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: COND(expr)");
+        }
+    }
+
+    /* Summary */
+    uart_putstr("macrodef parsing errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
+/* Run a test suite by number. Returns 1 if valid suite. */
+int run_suite(int n) {
+    if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
+    else if (n == 1) { uart_puts("=== Arena Tests ==="); test_arena(); }
+    else if (n == 2) { uart_puts("=== Token Tests ==="); test_tokens(); }
+    else if (n == 3) { uart_puts("=== Lexer Tests ==="); test_lexer(); }
+    else if (n == 4) { uart_puts("=== AST Tests ==="); test_ast(); }
+    else if (n == 5) { uart_puts("=== DCL Parser Tests ==="); test_parser(); }
+    else if (n == 6) { uart_puts("=== Expression Parser Tests ==="); test_expr_parser(); }
+    else if (n == 7) { uart_puts("=== Statement Parser Tests ==="); test_stmt_parser(); }
+    else if (n == 8) { uart_puts("=== Procedure Parser Tests ==="); test_proc_parser(); }
+    else if (n == 9) { uart_puts("=== Top-Level Parser Tests ==="); test_toplevel_parser(); }
+    else if (n == 10) { uart_puts("=== Symbol Table Tests ==="); test_symtab(); }
+    else if (n == 11) { uart_puts("=== Type System Tests ==="); test_types(); }
+    else if (n == 12) { uart_puts("=== Storage Layout Tests ==="); test_layout(); }
+    else if (n == 13) { uart_puts("=== Emitter Framework Tests ==="); test_emit(); }
+    else if (n == 14) { uart_puts("=== Expression Codegen Tests ==="); test_codegen(); }
+    else if (n == 15) { uart_puts("=== Assignment Codegen Tests ==="); test_assign_codegen(); }
+    else if (n == 16) { uart_puts("=== Static Data Tests ==="); test_static_data(); }
+    else if (n == 17) { uart_puts("=== Procedure Codegen Tests ==="); test_proc_codegen(); }
+    else if (n == 18) { uart_puts("=== Call Codegen Tests ==="); test_call_codegen(); }
+    else if (n == 19) { uart_puts("=== Recursion Codegen Tests ==="); test_recursion_codegen(); }
+    else if (n == 20) { uart_puts("=== IF Codegen Tests ==="); test_if_codegen(); }
+    else if (n == 21) { uart_puts("=== DO WHILE Codegen Tests ==="); test_do_while_codegen(); }
+    else if (n == 22) { uart_puts("=== DO COUNT Codegen Tests ==="); test_do_count_codegen(); }
+    else if (n == 23) { uart_puts("=== Record Codegen Tests ==="); test_record_codegen(); }
+    else if (n == 24) { uart_puts("=== Array Codegen Tests ==="); test_array_codegen(); }
+    else if (n == 25) { uart_puts("=== Pointer Codegen Tests ==="); test_pointer_codegen(); }
+    else if (n == 26) { uart_puts("=== Inline ASM Codegen Tests ==="); test_asm_codegen(); }
+    else if (n == 27) { uart_puts("=== Include Processing Tests ==="); test_include(); }
+    else if (n == 28) { uart_puts("=== Macro Definition Tests ==="); test_macro_def(); }
+    else { return 0; }
+    uart_puts("");
+    return 1;
+}
+
+#define SUITE_COUNT 29
+
 int main() {
+    char line[LINE_MAX];
+    int suite;
+    int len;
+
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_puts("");
+    uart_putstr("Enter suite # (0-28), 'a' for all, or 'r' for REPL: ");
 
-    uart_puts("=== String Tests ===");
-    test_strings();
-    uart_puts("");
+    len = uart_getline(line, LINE_MAX);
 
-    uart_puts("=== Arena Tests ===");
-    test_arena();
-    uart_puts("");
-
-    uart_puts("=== Token Tests ===");
-    test_tokens();
-    uart_puts("");
-
-    uart_puts("=== Lexer Tests ===");
-    test_lexer();
-    uart_puts("");
-
-    uart_puts("=== AST Tests ===");
-    test_ast();
-    uart_puts("");
-
-    uart_puts("=== DCL Parser Tests ===");
-    test_parser();
-    uart_puts("");
-
-    uart_puts("=== Expression Parser Tests ===");
-    test_expr_parser();
-    uart_puts("");
-
-    uart_puts("=== Statement Parser Tests ===");
-    test_stmt_parser();
-    uart_puts("");
-
-    uart_puts("=== Procedure Parser Tests ===");
-    test_proc_parser();
-    uart_puts("");
-
-    uart_puts("=== Top-Level Parser Tests ===");
-    test_toplevel_parser();
-    uart_puts("");
-
-    uart_puts("=== Symbol Table Tests ===");
-    test_symtab();
-    uart_puts("");
-
-    uart_puts("=== Type System Tests ===");
-    test_types();
-    uart_puts("");
-
-    uart_puts("=== Storage Layout Tests ===");
-    test_layout();
-    uart_puts("");
-
-    uart_puts("=== Emitter Framework Tests ===");
-    test_emit();
-    uart_puts("");
-
-    uart_puts("=== Expression Codegen Tests ===");
-    test_codegen();
-    uart_puts("");
-
-    uart_puts("=== Assignment Codegen Tests ===");
-    test_assign_codegen();
-    uart_puts("");
-
-    uart_puts("=== Static Data Tests ===");
-    test_static_data();
-    uart_puts("");
-
-    uart_puts("=== Procedure Codegen Tests ===");
-    test_proc_codegen();
-    uart_puts("");
-
-    uart_puts("=== Call Codegen Tests ===");
-    test_call_codegen();
-    uart_puts("");
-
-    uart_puts("=== Recursion Codegen Tests ===");
-    test_recursion_codegen();
-    uart_puts("");
-
-    uart_puts("=== IF Codegen Tests ===");
-    test_if_codegen();
-    uart_puts("");
-
-    uart_puts("=== DO WHILE Codegen Tests ===");
-    test_do_while_codegen();
-    uart_puts("");
-
-    uart_puts("=== DO COUNT Codegen Tests ===");
-    test_do_count_codegen();
-    uart_puts("");
-
-    uart_puts("=== Record Codegen Tests ===");
-    test_record_codegen();
-    uart_puts("");
-
-    uart_puts("=== Array Codegen Tests ===");
-    test_array_codegen();
-    uart_puts("");
-
-    uart_puts("=== Pointer Codegen Tests ===");
-    test_pointer_codegen();
-    uart_puts("");
-
-    uart_puts("=== Inline ASM Codegen Tests ===");
-    test_asm_codegen();
-    uart_puts("");
-
-    uart_puts("=== Include Processing Tests ===");
-    test_include();
-    uart_puts("");
-
-    uart_puts("=== REPL (tokenizer) ===");
-    char line[LINE_MAX];
-
-    while (1) {
-        uart_putstr("> ");
-        int len = uart_getline(line, LINE_MAX);
-        if (len == 0) continue;
-        lex_init(line, str_len(line));
+    if (len > 0 && (line[0] == 65 || line[0] == 97)) {
+        /* 'A' or 'a' -- run all suites */
+        suite = 0;
+        while (suite < SUITE_COUNT) {
+            run_suite(suite);
+            suite = suite + 1;
+        }
+    } else if (len > 0 && (line[0] == 82 || line[0] == 114)) {
+        /* 'R' or 'r' -- REPL */
+        uart_puts("=== REPL (tokenizer) ===");
         while (1) {
-            lex_scan();
-            tok_print();
-            if (cur_type == TOK_EOF) break;
+            uart_putstr("> ");
+            len = uart_getline(line, LINE_MAX);
+            if (len == 0) continue;
+            lex_init(line, str_len(line));
+            while (1) {
+                lex_scan();
+                tok_print();
+                if (cur_type == TOK_EOF) break;
+            }
+        }
+    } else if (len > 0) {
+        /* Parse number */
+        suite = 0;
+        int i = 0;
+        while (i < len && line[i] >= 48 && line[i] <= 57) {
+            suite = suite * 10 + (line[i] - 48);
+            i = i + 1;
+        }
+        if (!run_suite(suite)) {
+            uart_putstr("Unknown suite: ");
+            print_int(suite);
+            uart_putchar(10);
         }
     }
 

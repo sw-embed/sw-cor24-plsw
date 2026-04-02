@@ -1,6 +1,6 @@
 number = 30
 slug = "030-macro-def-parse"
-status = "pending"
+status = "in-progress"
 description = "Implement MACRODEF parsing. Parse MACRODEF name; ... END; in .msw files. Pars..."
 role = "production"
 context_files = []
