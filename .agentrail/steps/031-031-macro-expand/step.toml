@@ -1,6 +1,6 @@
 number = 31
 slug = "031-macro-expand"
-status = "pending"
+status = "in-progress"
 description = "Implement macro expansion. When lexer encounters ?NAME(KEYWORD(value), ...) i..."
 role = "production"
 context_files = []

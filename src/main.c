@@ -4785,6 +4785,329 @@ void test_macro_def(void) {
     uart_putchar(10);
 }
 
+void test_macro_expand(void) {
+    int errs;
+    int mi;
+    char *result;
+    char *src;
+
+    errs = 0;
+
+    /* Test 1: Basic GETMAIN expansion with LENGTH and ADDRESS */
+    uart_puts("--- expand: GETMAIN(LENGTH(256), ADDRESS(BUF)) ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   OPTIONAL SUBPOOL(expr);"
+        "   OPTIONAL ADDRESS(lvalue);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+    if (mi < 0 || mac_parse_err) {
+        uart_puts("  FAIL: could not parse GETMAIN def");
+        errs = errs + 1;
+    } else {
+        /* Now invoke: ?GETMAIN(LENGTH(256), ADDRESS(BUF)) */
+        src = "?GETMAIN(LENGTH(256), ADDRESS(BUF))";
+        lex_init(src, str_len(src));
+        lex_scan(); /* gets TOK_QUESTION */
+
+        result = mac_invoke();
+        if (!result) {
+            uart_putstr("  FAIL: mac_invoke returned null: ");
+            uart_puts(mac_expand_errmsg);
+            errs = errs + 1;
+        } else {
+            uart_putstr("  expansion: '");
+            uart_putstr(result);
+            uart_puts("'");
+
+            /* Should contain ASM DO with 'mvi r0,256' */
+            if (!str_find(result, "mvi r0,256")) {
+                uart_puts("  FAIL: missing 'mvi r0,256'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: contains 'mvi r0,256'");
+            }
+
+            /* Should contain 'svc 10' */
+            if (!str_find(result, "svc 10")) {
+                uart_puts("  FAIL: missing 'svc 10'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: contains 'svc 10'");
+            }
+
+            /* Should contain ASM DO wrapper */
+            if (!str_find(result, "ASM DO")) {
+                uart_puts("  FAIL: missing ASM DO wrapper");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: contains ASM DO wrapper");
+            }
+        }
+    }
+
+    /* Test 2: Missing required keyword */
+    uart_puts("--- expand: missing required ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    src = "?GETMAIN()";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (result) {
+        uart_puts("  FAIL: should have failed for missing REQUIRED");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: rejected missing required keyword");
+    }
+
+    /* Test 3: Unknown macro */
+    uart_puts("--- expand: unknown macro ---");
+    src = "?UNKNOWN(FOO(1))";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (result) {
+        uart_puts("  FAIL: should have failed for unknown macro");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: rejected unknown macro");
+    }
+
+    /* Test 4: Macro with body substitution */
+    uart_puts("--- expand: body substitution ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   OPTIONAL ADDRESS(lvalue);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "   IF ADDRESS THEN DO;"
+        "      ADDRESS = 0;"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    src = "?GETMAIN(LENGTH(128), ADDRESS(BUF))";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (!result) {
+        uart_putstr("  FAIL: mac_invoke returned null: ");
+        uart_puts(mac_expand_errmsg);
+        errs = errs + 1;
+    } else {
+        uart_putstr("  expansion: '");
+        uart_putstr(result);
+        uart_puts("'");
+
+        /* GEN should have 128 substituted */
+        if (!str_find(result, "mvi r0,128")) {
+            uart_puts("  FAIL: missing 'mvi r0,128'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: GEN has 'mvi r0,128'");
+        }
+
+        /* Body should have BUF substituted for ADDRESS */
+        if (!str_find(result, "BUF")) {
+            uart_puts("  FAIL: missing BUF in body");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: body contains BUF");
+        }
+
+        /* Body should have IF */
+        if (!str_find(result, "IF")) {
+            uart_puts("  FAIL: missing IF in body");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: body contains IF");
+        }
+    }
+
+    /* Test 5: Multiple GEN blocks */
+    uart_puts("--- expand: multiple GEN ---");
+    mac_init();
+
+    src = "MACRODEF SVC;"
+        "   REQUIRED CODE(expr);"
+        "   REQUIRED TARGET(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{CODE}';"
+        "   END;"
+        "   GEN DO;"
+        "      'la r1,{TARGET}';"
+        "      'svc 0';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    src = "?SVC(CODE(42), TARGET(4096))";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (!result) {
+        uart_putstr("  FAIL: mac_invoke returned null: ");
+        uart_puts(mac_expand_errmsg);
+        errs = errs + 1;
+    } else {
+        uart_putstr("  expansion: '");
+        uart_putstr(result);
+        uart_puts("'");
+
+        if (!str_find(result, "mvi r0,42")) {
+            uart_puts("  FAIL: missing 'mvi r0,42'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: contains 'mvi r0,42'");
+        }
+
+        if (!str_find(result, "la r1,4096")) {
+            uart_puts("  FAIL: missing 'la r1,4096'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: contains 'la r1,4096'");
+        }
+    }
+
+    /* Test 6: Optional clause not provided */
+    uart_puts("--- expand: optional not provided ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   OPTIONAL SUBPOOL(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "      'svc 10';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    src = "?GETMAIN(LENGTH(512))";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (!result) {
+        uart_putstr("  FAIL: mac_invoke returned null: ");
+        uart_puts(mac_expand_errmsg);
+        errs = errs + 1;
+    } else {
+        uart_putstr("  expansion: '");
+        uart_putstr(result);
+        uart_puts("'");
+
+        if (!str_find(result, "mvi r0,512")) {
+            uart_puts("  FAIL: missing 'mvi r0,512'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: contains 'mvi r0,512'");
+        }
+    }
+
+    /* Test 7: Feed expansion back through lexer */
+    uart_puts("--- expand: re-lex expansion ---");
+    mac_init();
+
+    src = "MACRODEF GETMAIN;"
+        "   REQUIRED LENGTH(expr);"
+        "   GEN DO;"
+        "      'mvi r0,{LENGTH}';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    src = "?GETMAIN(LENGTH(256))";
+    lex_init(src, str_len(src));
+    lex_scan();
+
+    result = mac_invoke();
+    if (!result) {
+        uart_putstr("  FAIL: mac_invoke returned null: ");
+        uart_puts(mac_expand_errmsg);
+        errs = errs + 1;
+    } else {
+        /* Re-lex the expansion and check tokens */
+        lex_init(result, str_len(result));
+        lex_scan();
+        if (cur_type != TOK_ASM) {
+            uart_putstr("  FAIL: first token not ASM, got ");
+            uart_puts(tok_name(cur_type));
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: first token is ASM");
+        }
+        lex_scan();
+        if (cur_type != TOK_DO) {
+            uart_putstr("  FAIL: second token not DO, got ");
+            uart_puts(tok_name(cur_type));
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: second token is DO");
+        }
+        lex_scan(); /* ';' */
+        lex_scan(); /* string literal */
+        if (cur_type != TOK_STRING) {
+            uart_putstr("  FAIL: expected STRING, got ");
+            uart_puts(tok_name(cur_type));
+            errs = errs + 1;
+        } else if (!str_find(cur_text, "mvi r0,256")) {
+            uart_putstr("  FAIL: string = '");
+            uart_putstr(cur_text);
+            uart_puts("'");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: string = 'mvi r0,256'");
+        }
+    }
+
+    /* Summary */
+    uart_putstr("macro expansion errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -4816,12 +5139,13 @@ int run_suite(int n) {
     else if (n == 26) { uart_puts("=== Inline ASM Codegen Tests ==="); test_asm_codegen(); }
     else if (n == 27) { uart_puts("=== Include Processing Tests ==="); test_include(); }
     else if (n == 28) { uart_puts("=== Macro Definition Tests ==="); test_macro_def(); }
+    else if (n == 29) { uart_puts("=== Macro Expansion Tests ==="); test_macro_expand(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 29
+#define SUITE_COUNT 30
 
 int main() {
     char line[LINE_MAX];
@@ -4830,7 +5154,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-28), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-29), 'a' for all, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 

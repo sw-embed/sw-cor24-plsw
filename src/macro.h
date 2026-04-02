@@ -373,4 +373,308 @@ void mac_dump(void) {
     }
 }
 
+/* ---- Macro Expansion ---- */
+
+#define MAC_ARG_MAX     8
+#define MAC_ARG_VAL_MAX 64
+#define MAC_EXPAND_MAX  512
+
+/* Argument values during expansion (parallel to clauses) */
+char  mac_arg_buf[MAC_ARG_MAX * MAC_ARG_VAL_MAX];
+int   mac_arg_set[MAC_ARG_MAX];
+
+/* Expansion output buffer */
+char  mac_expand_buf[MAC_EXPAND_MAX];
+int   mac_expand_len;
+int   mac_expand_err;
+char  mac_expand_errmsg[128];
+
+char *mac_arg_val(int ai) {
+    return mac_arg_buf + ai * MAC_ARG_VAL_MAX;
+}
+
+void mac_exp_error(char *msg) {
+    mac_expand_err = 1;
+    str_ncopy(mac_expand_errmsg, msg, 128);
+}
+
+/* Append string to expansion buffer */
+void mac_exp_append(char *s) {
+    int slen = str_len(s);
+    if (mac_expand_len + slen < MAC_EXPAND_MAX - 1) {
+        str_copy(mac_expand_buf + mac_expand_len, s);
+        mac_expand_len = mac_expand_len + slen;
+    }
+}
+
+/* Append a single char to expansion buffer */
+void mac_exp_appendc(int c) {
+    if (mac_expand_len < MAC_EXPAND_MAX - 2) {
+        mac_expand_buf[mac_expand_len] = c;
+        mac_expand_len = mac_expand_len + 1;
+        mac_expand_buf[mac_expand_len] = 0;
+    }
+}
+
+/* Substitute {CLAUSE_NAME} in a GEN line template with argument values.
+ * Result appended to expansion buffer as inline ASM. */
+void mac_gen_substitute(int mi, char *tmpl) {
+    int i = 0;
+    int tlen = str_len(tmpl);
+
+    /* Start with ASM emit: indent + instruction */
+    mac_exp_append("ASM DO; '");
+
+    while (i < tlen) {
+        if (tmpl[i] == 123) { /* '{' */
+            /* Extract placeholder name */
+            char pname[MACRO_NAME_MAX];
+            int pi = 0;
+            i = i + 1;
+            while (i < tlen && tmpl[i] != 125 && pi < MACRO_NAME_MAX - 1) {
+                pname[pi] = tmpl[i];
+                pi = pi + 1;
+                i = i + 1;
+            }
+            pname[pi] = 0;
+            if (i < tlen && tmpl[i] == 125) { /* '}' */
+                i = i + 1;
+            }
+
+            /* Find matching clause */
+            int ci = 0;
+            int found = 0;
+            while (ci < mac_cl_count[mi]) {
+                if (str_eq_nocase(pname, mac_cl_name(mi, ci))) {
+                    if (mac_arg_set[ci]) {
+                        mac_exp_append(mac_arg_val(ci));
+                    }
+                    found = 1;
+                    break;
+                }
+                ci = ci + 1;
+            }
+            if (!found) {
+                /* Not a clause -- emit as-is */
+                mac_exp_appendc(123);
+                mac_exp_append(pname);
+                mac_exp_appendc(125);
+            }
+        } else {
+            mac_exp_appendc(tmpl[i]);
+            i = i + 1;
+        }
+    }
+
+    mac_exp_append("'; END;");
+}
+
+/* Substitute clause references in body text.
+ * In the body, bare clause names are replaced with argument values. */
+void mac_body_substitute(int mi) {
+    char *body = mac_body(mi);
+    int blen = str_len(body);
+    int i = 0;
+
+    while (i < blen) {
+        /* Try to match an identifier */
+        if (is_alpha(body[i])) {
+            char word[MACRO_NAME_MAX];
+            int wi = 0;
+            while (i < blen && is_alnum(body[i]) && wi < MACRO_NAME_MAX - 1) {
+                word[wi] = body[i];
+                wi = wi + 1;
+                i = i + 1;
+            }
+            word[wi] = 0;
+
+            /* Check if this is a clause name */
+            int ci = 0;
+            int found = 0;
+            while (ci < mac_cl_count[mi]) {
+                if (str_eq_nocase(word, mac_cl_name(mi, ci))) {
+                    if (mac_arg_set[ci]) {
+                        mac_exp_append(mac_arg_val(ci));
+                    } else {
+                        mac_exp_appendc(48); /* '0' for unset optional */
+                    }
+                    found = 1;
+                    break;
+                }
+                ci = ci + 1;
+            }
+            if (!found) {
+                mac_exp_append(word);
+            }
+        } else {
+            mac_exp_appendc(body[i]);
+            i = i + 1;
+        }
+    }
+}
+
+/* Parse macro invocation arguments: ?NAME(KEYWORD(value), ...).
+ * Assumes cur_type == TOK_QUESTION and the next token is the macro name.
+ * Returns macro index or -1 on error. */
+int mac_parse_invoke(void) {
+    mac_expand_err = 0;
+    mac_expand_errmsg[0] = 0;
+
+    /* cur_type should be TOK_QUESTION already consumed;
+     * next token is the macro name (IDENT) */
+    lex_scan(); /* get macro name */
+
+    if (cur_type != TOK_IDENT) {
+        mac_exp_error("expected macro name after ?");
+        return -1;
+    }
+
+    int mi = mac_lookup(cur_text);
+    if (mi < 0) {
+        mac_exp_error("unknown macro");
+        return -1;
+    }
+
+    /* Clear argument values */
+    int ai = 0;
+    while (ai < MAC_ARG_MAX) {
+        mac_arg_set[ai] = 0;
+        mac_arg_val(ai)[0] = 0;
+        ai = ai + 1;
+    }
+
+    lex_scan(); /* expect '(' */
+    if (cur_type != TOK_LPAREN) {
+        mac_exp_error("expected ( after macro name");
+        return -1;
+    }
+
+    lex_scan(); /* first keyword or ')' */
+
+    /* Parse keyword arguments: KEYWORD(value), ... */
+    while (cur_type != TOK_RPAREN && cur_type != TOK_EOF && !mac_expand_err) {
+        if (cur_type != TOK_IDENT) {
+            mac_exp_error("expected keyword in macro invocation");
+            return -1;
+        }
+
+        /* Find matching clause */
+        char kw[MACRO_NAME_MAX];
+        str_ncopy(kw, cur_text, MACRO_NAME_MAX);
+        int ci = 0;
+        int found = -1;
+        while (ci < mac_cl_count[mi]) {
+            if (str_eq_nocase(kw, mac_cl_name(mi, ci))) {
+                found = ci;
+                break;
+            }
+            ci = ci + 1;
+        }
+
+        if (found < 0) {
+            mac_exp_error("unknown keyword in macro invocation");
+            return -1;
+        }
+
+        lex_scan(); /* expect '(' */
+        if (cur_type != TOK_LPAREN) {
+            mac_exp_error("expected ( after keyword");
+            return -1;
+        }
+
+        /* Collect value tokens until matching ')' */
+        lex_scan();
+        char *val = mac_arg_val(found);
+        int vpos = 0;
+        int depth = 0;
+
+        while (cur_type != TOK_EOF && !mac_expand_err) {
+            if (cur_type == TOK_LPAREN) {
+                depth = depth + 1;
+            }
+            if (cur_type == TOK_RPAREN) {
+                if (depth == 0) break;
+                depth = depth - 1;
+            }
+
+            /* Append token text to value */
+            int tlen = str_len(cur_text);
+            if (vpos > 0 && vpos < MAC_ARG_VAL_MAX - 2) {
+                val[vpos] = 32; /* space between tokens */
+                vpos = vpos + 1;
+            }
+            if (vpos + tlen < MAC_ARG_VAL_MAX - 1) {
+                str_copy(val + vpos, cur_text);
+                vpos = vpos + tlen;
+            }
+            lex_scan();
+        }
+        val[vpos] = 0;
+        mac_arg_set[found] = 1;
+
+        lex_scan(); /* skip ')' of the keyword arg */
+
+        if (cur_type == TOK_COMMA) {
+            lex_scan(); /* skip comma, get next keyword */
+        }
+    }
+
+    if (cur_type == TOK_RPAREN) {
+        lex_scan(); /* skip closing ')' of invocation */
+    }
+
+    /* Check required clauses */
+    ci = 0;
+    while (ci < mac_cl_count[mi]) {
+        int idx = mac_cl_idx(mi, ci);
+        if (mac_cl_req[idx] == MCLAUSE_REQUIRED && !mac_arg_set[ci]) {
+            mac_exp_error("missing required keyword");
+            return -1;
+        }
+        ci = ci + 1;
+    }
+
+    return mi;
+}
+
+/* Expand macro mi into mac_expand_buf. Call after mac_parse_invoke(). */
+void mac_expand(int mi) {
+    mac_expand_len = 0;
+    mac_expand_buf[0] = 0;
+
+    /* Emit GEN blocks first (each becomes ASM DO; ...; END;) */
+    int gi = 0;
+    while (gi < mac_gen_count[mi]) {
+        int lc_idx = mac_gen_lc_idx(mi, gi);
+        int lcount = mac_gen_lcount[lc_idx];
+        int li = 0;
+        while (li < lcount) {
+            if (mac_expand_len > 0) {
+                mac_exp_appendc(32); /* space separator */
+            }
+            mac_gen_substitute(mi, mac_gen_line(mi, gi, li));
+            li = li + 1;
+        }
+        gi = gi + 1;
+    }
+
+    /* Expand body text (with clause name substitution) */
+    if (mac_body(mi)[0]) {
+        if (mac_expand_len > 0) {
+            mac_exp_appendc(32);
+        }
+        mac_body_substitute(mi);
+    }
+}
+
+/* Full macro invocation: parse ?NAME(...) and expand.
+ * Returns pointer to expansion buffer, or 0 on error. */
+char *mac_invoke(void) {
+    int mi = mac_parse_invoke();
+    if (mi < 0) return 0;
+
+    mac_expand(mi);
+    return mac_expand_buf;
+}
+
 #endif
