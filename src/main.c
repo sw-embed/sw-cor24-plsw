@@ -5108,6 +5108,208 @@ void test_macro_expand(void) {
     uart_putchar(10);
 }
 
+void test_conditional(void) {
+    int errs = 0;
+    char *src;
+
+    /* Test 1: %DEFINE and DEFINED() condition */
+    uart_puts("Test 1: %DEFINE and %IF DEFINED");
+    arena_init();
+    src = "%DEFINE TARGET_COR24;"
+          "%IF DEFINED(TARGET_COR24);"
+          "DCL A INT(24);"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan();
+    if (cur_type != TOK_DCL) {
+        uart_putstr("  FAIL: expected DCL, got ");
+        uart_puts(tok_name(cur_type));
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: true branch emits DCL");
+    }
+
+    /* Test 2: false branch is skipped */
+    uart_puts("Test 2: false %IF branch skipped");
+    arena_init();
+    src = "%IF DEFINED(NONEXISTENT);"
+          "DCL HIDDEN INT(24);"
+          "%ENDIF;"
+          "DCL VISIBLE BYTE;";
+    lex_init(src, str_len(src));
+    lex_scan();
+    if (cur_type != TOK_DCL) {
+        uart_putstr("  FAIL: expected DCL, got ");
+        uart_puts(tok_name(cur_type));
+        errs = errs + 1;
+    } else {
+        lex_scan(); /* VISIBLE */
+        if (!str_eq_nocase(cur_text, "VISIBLE")) {
+            uart_putstr("  FAIL: expected VISIBLE, got ");
+            uart_puts(cur_text);
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: false branch skipped, got VISIBLE");
+        }
+    }
+
+    /* Test 3: %IF/%ELSE */
+    uart_puts("Test 3: %IF/%ELSE");
+    arena_init();
+    src = "%DEFINE MODE DEBUG;"
+          "%IF MODE = RELEASE;"
+          "DCL WRONG INT(24);"
+          "%ELSE;"
+          "DCL RIGHT INT(24);"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* RIGHT */
+    if (!str_eq_nocase(cur_text, "RIGHT")) {
+        uart_putstr("  FAIL: expected RIGHT, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: %ELSE branch taken, got RIGHT");
+    }
+
+    /* Test 4: %IF with value equality -- true case */
+    uart_puts("Test 4: %IF value equality (true)");
+    arena_init();
+    src = "%DEFINE TARGET COR24;"
+          "%IF TARGET = COR24;"
+          "DCL MATCH INT(24);"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* MATCH */
+    if (!str_eq_nocase(cur_text, "MATCH")) {
+        uart_putstr("  FAIL: expected MATCH, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: value equality true, got MATCH");
+    }
+
+    /* Test 5: nested %IF */
+    uart_puts("Test 5: nested %IF");
+    arena_init();
+    src = "%DEFINE OUTER_FLAG;"
+          "%IF DEFINED(OUTER_FLAG);"
+            "%DEFINE INNER_FLAG;"
+            "%IF DEFINED(INNER_FLAG);"
+              "DCL DEEP INT(24);"
+            "%ENDIF;"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* DEEP */
+    if (!str_eq_nocase(cur_text, "DEEP")) {
+        uart_putstr("  FAIL: expected DEEP, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: nested %IF, got DEEP");
+    }
+
+    /* Test 6: nested %IF with false outer */
+    uart_puts("Test 6: nested %IF with false outer");
+    arena_init();
+    src = "%IF DEFINED(NOPE);"
+            "%IF DEFINED(ALSO_NOPE);"
+              "DCL HIDDEN INT(24);"
+            "%ENDIF;"
+          "%ENDIF;"
+          "DCL FOUND BYTE;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* FOUND */
+    if (!str_eq_nocase(cur_text, "FOUND")) {
+        uart_putstr("  FAIL: expected FOUND, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: false outer skips all, got FOUND");
+    }
+
+    /* Test 7: %DEFINE with value, bare name condition */
+    uart_puts("Test 7: bare name condition (shorthand for DEFINED)");
+    arena_init();
+    src = "%DEFINE FEATURE;"
+          "%IF FEATURE;"
+          "DCL OK INT(24);"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* OK */
+    if (!str_eq_nocase(cur_text, "OK")) {
+        uart_putstr("  FAIL: expected OK, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: bare name condition works");
+    }
+
+    /* Test 8: %IF with %INCLUDE interaction */
+    uart_puts("Test 8: %IF with %INCLUDE");
+    arena_init();
+    inc_init();
+    inc_register("CORE", "DCL CORE_VAR INT(24);");
+    src = "%DEFINE USE_CORE;"
+          "%IF DEFINED(USE_CORE);"
+          "%INCLUDE CORE;"
+          "%ENDIF;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* CORE_VAR */
+    if (!str_eq_nocase(cur_text, "CORE_VAR")) {
+        uart_putstr("  FAIL: expected CORE_VAR, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: conditional include works");
+    }
+
+    /* Test 9: %ELSE when %IF was true -- else skipped */
+    uart_puts("Test 9: %ELSE skipped when %IF true");
+    arena_init();
+    src = "%DEFINE FLAG;"
+          "%IF DEFINED(FLAG);"
+          "DCL YES INT(24);"
+          "%ELSE;"
+          "DCL NO INT(24);"
+          "%ENDIF;"
+          "DCL AFTER BYTE;";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* YES */
+    if (!str_eq_nocase(cur_text, "YES")) {
+        uart_putstr("  FAIL: expected YES, got ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        lex_scan(); /* INT */
+        lex_scan(); /* ( */
+        lex_scan(); /* 24 */
+        lex_scan(); /* ) */
+        lex_scan(); /* ; */
+        lex_scan(); /* DCL (AFTER) */
+        lex_scan(); /* AFTER */
+        if (!str_eq_nocase(cur_text, "AFTER")) {
+            uart_putstr("  FAIL: expected AFTER, got ");
+            uart_puts(cur_text);
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: %ELSE skipped, got AFTER");
+        }
+    }
+
+    /* Summary */
+    uart_putstr("conditional compilation errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5140,12 +5342,13 @@ int run_suite(int n) {
     else if (n == 27) { uart_puts("=== Include Processing Tests ==="); test_include(); }
     else if (n == 28) { uart_puts("=== Macro Definition Tests ==="); test_macro_def(); }
     else if (n == 29) { uart_puts("=== Macro Expansion Tests ==="); test_macro_expand(); }
+    else if (n == 30) { uart_puts("=== Conditional Compilation Tests ==="); test_conditional(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 30
+#define SUITE_COUNT 31
 
 int main() {
     char line[LINE_MAX];
@@ -5154,7 +5357,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-29), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-30), 'a' for all, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 

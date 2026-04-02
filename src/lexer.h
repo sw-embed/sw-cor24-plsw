@@ -79,6 +79,73 @@ int inc_pop(void) {
     return 1;
 }
 
+/* ---- %DEFINE / %IF / %ELSE / %ENDIF conditional compilation ---- */
+
+#define DEF_MAX  32   /* max compile-time defines */
+#define COND_MAX  8   /* max %IF nesting depth */
+
+/* Define table: name -> value (value may be empty string) */
+char *def_names[DEF_MAX];
+char *def_values[DEF_MAX];
+int   def_count;
+
+/* Conditional compilation stack */
+int cond_active[COND_MAX];   /* 1 = emitting tokens, 0 = skipping */
+int cond_seen_true[COND_MAX]; /* 1 = some branch was true (for else) */
+int cond_depth;              /* current nesting depth */
+
+void def_init(void) {
+    def_count = 0;
+    cond_depth = 0;
+}
+
+/* Add or update a define */
+void def_set(char *name, char *value) {
+    int i = 0;
+    while (i < def_count) {
+        if (str_eq_nocase(name, def_names[i])) {
+            def_values[i] = value;
+            return;
+        }
+        i = i + 1;
+    }
+    if (def_count < DEF_MAX) {
+        def_names[def_count] = name;
+        def_values[def_count] = value;
+        def_count = def_count + 1;
+    }
+}
+
+/* Check if a name is defined. Returns 1 if defined. */
+int def_defined(char *name) {
+    int i = 0;
+    while (i < def_count) {
+        if (str_eq_nocase(name, def_names[i])) {
+            return 1;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+/* Get value of a define. Returns 0 if not defined. */
+char *def_get(char *name) {
+    int i = 0;
+    while (i < def_count) {
+        if (str_eq_nocase(name, def_names[i])) {
+            return def_values[i];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+/* Are we currently emitting tokens? (all enclosing %IFs are true) */
+int cond_emitting(void) {
+    if (cond_depth == 0) return 1;
+    return cond_active[cond_depth - 1];
+}
+
 /* Current token (globals -- no struct on stack) */
 int  cur_type;
 int  cur_ival;
@@ -90,6 +157,7 @@ void lex_init(char *src, int len) {
     lex_pos = 0;
     lex_len = len;
     inc_depth = 0;
+    def_init();
     kw_init();
 }
 
@@ -166,38 +234,52 @@ void lex_set(int type, char *txt) {
     str_copy(cur_text, txt);
 }
 
-/* Try to process a %INCLUDE directive at the current position.
-   Returns 1 if handled, 0 if not a %INCLUDE. */
-int lex_try_include(void) {
-    /* Save position in case this isn't %INCLUDE */
-    int saved = lex_pos;
-
-    /* We're at '%' -- advance past it */
-    lex_advance();
-
-    /* Read directive name */
-    char dname[16];
+/* Read a directive name after '%'. Fills dname, returns length. */
+int lex_read_directive(char *dname, int maxlen) {
     int di = 0;
-    while (lex_pos < lex_len && is_alpha(lex_peek()) && di < 15) {
+    while (lex_pos < lex_len && is_alpha(lex_peek()) && di < maxlen - 1) {
         dname[di] = lex_advance();
         di = di + 1;
     }
     dname[di] = 0;
+    return di;
+}
 
-    if (!str_eq_nocase(dname, "INCLUDE")) {
-        /* Not %INCLUDE -- restore position */
-        lex_pos = saved;
-        return 0;
+/* Read a word (identifier) after whitespace. Returns length. */
+int lex_read_word(char *buf, int maxlen) {
+    while (lex_pos < lex_len && is_space(lex_peek())) {
+        lex_advance();
     }
+    int i = 0;
+    while (lex_pos < lex_len && is_alnum(lex_peek()) && i < maxlen - 1) {
+        buf[i] = lex_advance();
+        i = i + 1;
+    }
+    buf[i] = 0;
+    return i;
+}
 
-    /* Skip whitespace after INCLUDE */
+/* Skip to trailing semicolon and consume it */
+void lex_skip_to_semi(void) {
+    while (lex_pos < lex_len && is_space(lex_peek())) {
+        lex_advance();
+    }
+    if (lex_pos < lex_len && lex_peek() == 59) {
+        lex_advance();
+    }
+}
+
+/* Process %INCLUDE directive (after directive name parsed) */
+int lex_do_include(void) {
+    char iname[TOK_TEXT_MAX];
+    int ni = 0;
+
+    /* Skip whitespace */
     while (lex_pos < lex_len && is_space(lex_peek())) {
         lex_advance();
     }
 
     /* Read the include name (until ; or whitespace) */
-    char iname[TOK_TEXT_MAX];
-    int ni = 0;
     while (lex_pos < lex_len && lex_peek() != 59 && !is_space(lex_peek())
            && ni < TOK_TEXT_MAX - 1) {
         iname[ni] = lex_advance();
@@ -205,13 +287,7 @@ int lex_try_include(void) {
     }
     iname[ni] = 0;
 
-    /* Skip whitespace and consume trailing semicolon */
-    while (lex_pos < lex_len && is_space(lex_peek())) {
-        lex_advance();
-    }
-    if (lex_pos < lex_len && lex_peek() == 59) {
-        lex_advance();
-    }
+    lex_skip_to_semi();
 
     /* Look up the include file */
     char *content = inc_lookup(iname);
@@ -230,18 +306,157 @@ int lex_try_include(void) {
         }
     }
 
-    if (!content) {
-        /* Include not found -- not an error for now, just skip */
-        return 1;
-    }
+    if (!content) return 1;
 
-    /* Push current state and switch to include content */
-    if (!inc_push(content)) {
-        /* Too deeply nested */
-        return 1;
-    }
+    if (!inc_push(content)) return 1;
 
     return 1;
+}
+
+/* Process %DEFINE directive: %DEFINE NAME; or %DEFINE NAME value; */
+int lex_do_define(void) {
+    char name[TOK_TEXT_MAX];
+    lex_read_word(name, TOK_TEXT_MAX);
+
+    /* Skip whitespace -- check for value or semicolon */
+    while (lex_pos < lex_len && is_space(lex_peek())) {
+        lex_advance();
+    }
+
+    /* Static storage for define name and value */
+    char *stored_name = arena_alloc(str_len(name) + 1);
+    str_copy(stored_name, name);
+
+    if (lex_pos < lex_len && lex_peek() != 59) {
+        /* Read value (until semicolon) */
+        char val[TOK_TEXT_MAX];
+        int vi = 0;
+        while (lex_pos < lex_len && lex_peek() != 59 && vi < TOK_TEXT_MAX - 1) {
+            val[vi] = lex_advance();
+            vi = vi + 1;
+        }
+        val[vi] = 0;
+        /* Trim trailing whitespace */
+        while (vi > 0 && is_space(val[vi - 1])) {
+            vi = vi - 1;
+            val[vi] = 0;
+        }
+        char *stored_val = arena_alloc(str_len(val) + 1);
+        str_copy(stored_val, val);
+        def_set(stored_name, stored_val);
+    } else {
+        char *stored_val = arena_alloc(1);
+        stored_val[0] = 0;
+        def_set(stored_name, stored_val);
+    }
+
+    lex_skip_to_semi();
+    return 1;
+}
+
+/* Evaluate a %IF condition. Supports:
+   - DEFINED(NAME) -- true if NAME is defined
+   - NAME = VALUE  -- true if NAME's value equals VALUE
+   - NAME          -- true if NAME is defined (shorthand) */
+int lex_eval_condition(void) {
+    char word[TOK_TEXT_MAX];
+    lex_read_word(word, TOK_TEXT_MAX);
+
+    if (str_eq_nocase(word, "DEFINED")) {
+        /* DEFINED(NAME) */
+        while (lex_pos < lex_len && is_space(lex_peek())) lex_advance();
+        if (lex_pos < lex_len && lex_peek() == 40) lex_advance(); /* ( */
+        char name[TOK_TEXT_MAX];
+        lex_read_word(name, TOK_TEXT_MAX);
+        while (lex_pos < lex_len && is_space(lex_peek())) lex_advance();
+        if (lex_pos < lex_len && lex_peek() == 41) lex_advance(); /* ) */
+        return def_defined(name);
+    }
+
+    /* Check for NAME = VALUE */
+    while (lex_pos < lex_len && is_space(lex_peek())) lex_advance();
+    if (lex_pos < lex_len && lex_peek() == 61) { /* = */
+        lex_advance();
+        char val[TOK_TEXT_MAX];
+        lex_read_word(val, TOK_TEXT_MAX);
+        char *dv = def_get(word);
+        if (!dv) return 0;
+        return str_eq_nocase(dv, val);
+    }
+
+    /* Bare name -- true if defined */
+    return def_defined(word);
+}
+
+/* Try to process a % directive at the current position.
+   Returns 1 if handled, 0 if not a known directive. */
+int lex_try_directive(void) {
+    int saved = lex_pos;
+
+    /* We're at '%' -- advance past it */
+    lex_advance();
+
+    /* Read directive name */
+    char dname[16];
+    lex_read_directive(dname, 16);
+
+    if (str_eq_nocase(dname, "INCLUDE")) {
+        if (!cond_emitting()) {
+            lex_skip_to_semi();
+            return 1;
+        }
+        return lex_do_include();
+    }
+
+    if (str_eq_nocase(dname, "DEFINE")) {
+        if (!cond_emitting()) {
+            lex_skip_to_semi();
+            return 1;
+        }
+        return lex_do_define();
+    }
+
+    if (str_eq_nocase(dname, "IF")) {
+        int result = lex_eval_condition();
+        lex_skip_to_semi();
+        if (cond_depth < COND_MAX) {
+            /* If parent is skipping, child always skips */
+            int parent_active = cond_emitting();
+            cond_active[cond_depth] = parent_active && result;
+            cond_seen_true[cond_depth] = result;
+            cond_depth = cond_depth + 1;
+        }
+        return 1;
+    }
+
+    if (str_eq_nocase(dname, "ELSE")) {
+        lex_skip_to_semi();
+        if (cond_depth > 0) {
+            int idx = cond_depth - 1;
+            /* Check if parent is active */
+            int parent_active = 1;
+            if (idx > 0) parent_active = cond_active[idx - 1];
+            if (parent_active && !cond_seen_true[idx]) {
+                cond_active[idx] = 1;
+                cond_seen_true[idx] = 1;
+            } else {
+                cond_active[idx] = 0;
+            }
+        }
+        return 1;
+    }
+
+    if (str_eq_nocase(dname, "ENDIF")) {
+        lex_skip_to_semi();
+        if (cond_depth > 0) {
+            cond_depth = cond_depth - 1;
+        }
+        return 1;
+    }
+
+    /* Not a recognized directive -- restore position */
+    lex_pos = saved;
+    return 0;
 }
 
 /* Scan the next token. Result stored in cur_type/cur_ival/cur_text. */
@@ -264,12 +479,29 @@ int lex_scan(void) {
 
     int c = lex_peek();
 
-    /* Check for %INCLUDE directive */
+    /* Check for % directives (%INCLUDE, %DEFINE, %IF, %ELSE, %ENDIF) */
     if (c == 37) { /* % */
-        if (lex_try_include()) {
+        if (lex_try_directive()) {
             /* Directive consumed -- scan next real token */
             return lex_scan();
         }
+    }
+
+    /* If inside a false %IF branch, skip tokens until next % directive */
+    if (!cond_emitting()) {
+        /* Skip the current token intelligently */
+        if (c == 39) { /* string literal -- skip to closing quote */
+            lex_advance();
+            while (lex_pos < lex_len && lex_peek() != 39) lex_advance();
+            if (lex_pos < lex_len) lex_advance();
+        } else if (is_alpha(c)) {
+            while (lex_pos < lex_len && is_alnum(lex_peek())) lex_advance();
+        } else if (is_digit(c)) {
+            while (lex_pos < lex_len && is_digit(lex_peek())) lex_advance();
+        } else {
+            lex_advance();
+        }
+        return lex_scan();
     }
 
     /* Identifier or keyword */

@@ -1,6 +1,6 @@
 number = 32
 slug = "032-conditional-compile"
-status = "pending"
+status = "in-progress"
 description = "Implement conditional compilation directives. %IF / %THEN / %ELSE / %ENDIF ba..."
 role = "production"
 context_files = []
