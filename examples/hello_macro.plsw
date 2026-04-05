@@ -1,0 +1,7 @@
+/* hello_macro.plsw -- Hello World using macros */
+
+DCL MSG(20) CHAR INIT('Hello from PL/SW!');
+
+MAIN: PROC;
+    CALL UART_PUTS(ADDR(MSG));
+END;

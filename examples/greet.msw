@@ -1,0 +1,12 @@
+/* greet.msw -- greeting macros for PL/SW */
+
+MACRODEF GREET;
+  REQUIRED MSG(lvalue);
+  GEN DO;
+    "la      r0,{MSG}";
+    "push    r0";
+    "la      r2,_UART_PUTS";
+    "jal     r1,(r2)";
+    "add     sp,3";
+  END;
+END;

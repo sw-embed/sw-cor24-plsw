@@ -5770,6 +5770,31 @@ int run_suite(int n) {
 
 #define SUITE_COUNT 34
 
+/* Source buffer for compile mode -- 4KB */
+#define SRC_BUF_SIZE 4096
+char src_buf[SRC_BUF_SIZE];
+
+/* Read source from UART until EOF (0x04) or end-of-transmission (0x03).
+ * Returns length of source read, or -1 on overflow. */
+int read_source(char *buf, int maxlen) {
+    int pos = 0;
+    int limit = maxlen - 1;
+
+    while (pos < limit) {
+        int ch = uart_getchar();
+        if (ch == 4 || ch == 3) {
+            /* EOT or ETX -- end of source */
+            break;
+        }
+        buf[pos] = ch;
+        pos = pos + 1;
+    }
+    buf[pos] = 0;
+
+    if (pos >= limit) return -1;
+    return pos;
+}
+
 int main() {
     char line[LINE_MAX];
     int suite;
@@ -5777,7 +5802,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-33), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-33), 'a' for all, 'c' to compile, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 
@@ -5788,6 +5813,32 @@ int main() {
             run_suite(suite);
             suite = suite + 1;
         }
+    } else if (len > 0 && (line[0] == 67 || line[0] == 99)) {
+        /* 'C' or 'c' -- compile mode */
+        char *out;
+
+        uart_puts("=== Compile mode ===");
+        uart_puts("Send PL/SW source, terminate with EOT (0x04).");
+
+        len = read_source(src_buf, SRC_BUF_SIZE);
+        if (len < 0) {
+            uart_puts("ERROR: source too large (max 4KB)");
+            return 1;
+        }
+        if (len == 0) {
+            uart_puts("ERROR: empty source");
+            return 1;
+        }
+
+        uart_puts("--- compiling ---");
+        out = compile_program(src_buf);
+        if (!out) {
+            uart_puts("--- compilation failed ---");
+            return 1;
+        }
+        uart_puts("--- generated assembly ---");
+        uart_putstr(out);
+        uart_puts("--- end assembly ---");
     } else if (len > 0 && (line[0] == 82 || line[0] == 114)) {
         /* 'R' or 'r' -- REPL */
         uart_puts("=== REPL (tokenizer) ===");
