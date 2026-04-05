@@ -1,13 +1,12 @@
 #!/bin/bash
-# pipeline.sh -- End-to-end PL/SW compilation and execution pipeline
+# pipeline-dump.sh -- Compile .plsw and run with memory dump
 #
-# Usage: ./scripts/pipeline.sh [macro.msw ...] program.plsw
+# Usage: ./scripts/pipeline-dump.sh [macro.msw ...] program.plsw
 #
-# When .msw files are provided, uses the FILE:/SOURCE: protocol so the
-# compiler's %INCLUDE mechanism resolves them by name. Without .msw files,
-# uses legacy mode (raw source + EOT).
-#
-# Requires: cor24-run, the compiler assembly at build/plsw.s
+# Outputs:
+#   build/out.s        -- generated assembly
+#   build/run-dump.txt -- full emulator dump (registers, SRAM, stack, I/O)
+#   stdout             -- UART output from program
 
 set -euo pipefail
 
@@ -18,7 +17,6 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
-# Verify compiler exists
 if [ ! -f "$COMPILER_ASM" ]; then
     echo "Error: compiler not built. Run 'just build' first." >&2
     exit 1
@@ -40,18 +38,16 @@ if [ -z "$MAIN" ]; then
     exit 1
 fi
 
-# Build UART input string with \n escapes for cor24-run -u
-# Uses FILE:/SOURCE: protocol when .msw files present, legacy otherwise.
+# Build UART input
 build_input() {
     printf 'c\\n'
     if [ ${#MACROS[@]} -gt 0 ]; then
-        # FILE: protocol -- each .msw becomes a named include
         for m in "${MACROS[@]}"; do
             printf 'FILE:%s\\n' "$(basename "$m")"
             while IFS= read -r line; do
                 printf '%s\\n' "$line"
             done < "$m"
-            printf '\\x1E'  # record separator = end of file content
+            printf '\\x1E'
         done
         printf 'SOURCE:\\n'
     fi
@@ -63,10 +59,9 @@ build_input() {
 
 INPUT=$(build_input)
 
-# Compile: run source through the PL/SW compiler on the emulator
+# Compile
+echo "=== Compiling $(basename "$MAIN") ===" >&2
 COMPILER_OUT=$(cor24-run --run "$COMPILER_ASM" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
-
-# Extract the UART output block (multiline: from "UART output:" to "Executed")
 UART_OUT=$(echo "$COMPILER_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
 
 if echo "$UART_OUT" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
@@ -75,38 +70,37 @@ if echo "$UART_OUT" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
     exit 1
 fi
 
-# Extract assembly between markers
+# Extract assembly
 START_MARKER="--- generated assembly ---"
 END_MARKER="--- end assembly ---"
 ASM=$(echo "$UART_OUT" | sed -n "/$START_MARKER/,/$END_MARKER/{/$START_MARKER/d;/$END_MARKER/d;p;}")
 
 if [ -z "$ASM" ]; then
-    echo "Error: no assembly output found in compiler output" >&2
-    echo "Compiler output (last 20 lines):" >&2
-    echo "$UART_OUT" | tail -20 >&2
+    echo "Error: no assembly output" >&2
     exit 1
 fi
 
-# Write assembly to temp file
-TMPASM=$(mktemp /tmp/plsw-XXXXXX.s)
-trap "rm -f $TMPASM" EXIT
-echo "$ASM" > "$TMPASM"
-
+# Save assembly
+echo "$ASM" > build/out.s
 ASM_LINES=$(echo "$ASM" | wc -l | tr -d ' ')
-echo "=== Compiled $(basename "$MAIN") ($ASM_LINES lines of assembly) ===" >&2
+echo "Assembly: $ASM_LINES lines -> build/out.s" >&2
 
-# Show registered includes if any
+# Show registered includes
 echo "$UART_OUT" | grep "registered:" >&2 || true
 
-# Run the generated assembly
-echo "=== Running ===" >&2
-RUN_OUT=$(cor24-run --run "$TMPASM" -n 10000000 -t 30 --speed 0 2>&1)
+# Run with --dump
+echo "=== Running with --dump ===" >&2
+RUN_OUT=$(cor24-run --run build/out.s -n 50000000 -t 30 --speed 0 --dump 2>&1)
 
-# Extract program output (multiline UART output block)
+# Save full dump
+echo "$RUN_OUT" > build/run-dump.txt
+echo "Dump saved to build/run-dump.txt" >&2
+
+# Show UART output
 PROG_OUT=$(echo "$RUN_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
-
 if [ -n "$PROG_OUT" ]; then
     echo "$PROG_OUT"
-else
-    echo "(no output)" >&2
 fi
+
+# Show key stats
+echo "$RUN_OUT" | grep -E "^  Instructions:|^  Halted:" >&2

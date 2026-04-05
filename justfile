@@ -27,6 +27,11 @@ test: build
 pipeline *args: build
     ./scripts/pipeline.sh {{args}}
 
+# Compile a .plsw, save .s, and run with --dump for memory inspection
+# Output: build/out.s (assembly) and build/run-dump.txt (memory dump)
+pipeline-dump *args: build
+    ./scripts/pipeline-dump.sh {{args}}
+
 # Clean build artifacts
 clean:
-    rm -f build/*.s
+    rm -f build/*.s build/out.s build/run-dump.txt

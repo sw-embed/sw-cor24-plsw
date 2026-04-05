@@ -1,0 +1,14 @@
+/* tcb.msw -- Task Control Block (simplified for COR24) */
+
+%INCLUDE types;
+
+DCL 1 TCB BASED,
+  3 TCBEYE     INT,           /* 'TCB ' eyecatcher */
+  3 TCBLEN     INT(16),
+  3 TCBVER     BYTE,
+  3 TCBFLAGS   BYTE,
+  3 TCBNEXT    PTR,           /* next TCB in chain */
+  3 TCBPREV    PTR,           /* prev TCB in chain */
+  3 TCBASCB    PTR,           /* owning ASCB */
+  3 TCBSTATE   BYTE,
+  3 TCBPRI     BYTE;

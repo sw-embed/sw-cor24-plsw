@@ -1,0 +1,13 @@
+/* asxb.msw -- Address Space Extension Block (simplified for COR24) */
+
+%INCLUDE types;
+
+DCL 1 ASXB BASED,
+  3 ASXBEYE    INT,           /* 'ASXB' eyecatcher */
+  3 ASXBLEN    INT(16),
+  3 ASXBVER    BYTE,
+  3 ASXBFLAGS  BYTE,
+  3 ASXBASCB   PTR,           /* back pointer to ASCB */
+  3 ASXBFTCB   PTR,           /* first TCB */
+  3 ASXBLTCB   PTR,           /* last TCB */
+  3 ASXBCTCB   PTR;           /* current TCB */

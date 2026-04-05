@@ -1,0 +1,13 @@
+/* cvt.msw -- Communications Vector Table (simplified for COR24) */
+
+%INCLUDE types;
+
+DCL 1 CVT BASED,
+  3 CVTEYE     INT,           /* 'CVT ' eyecatcher */
+  3 CVTLEN     INT(16),
+  3 CVTVER     BYTE,
+  3 CVTFLAGS   BYTE,
+  3 CVTASCBH   PTR,           /* head of ASCB chain */
+  3 CVTASCBL   PTR,           /* tail of ASCB chain */
+  3 CVTCASCB   PTR,           /* current ASCB (bootstrap) */
+  3 CVTCTCB    PTR;           /* current TCB (bootstrap) */

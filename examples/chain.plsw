@@ -1,0 +1,84 @@
+/* chain.plsw -- Control Block Chain Demo
+ * Allocates CVT, ASCB, ASXB, TCB from a bump arena and
+ * wires the pointer chain: CVT -> ASCB -> ASXB, ASCB -> TCB.
+ * Verify with --dump to see eyecatchers and pointer linkage in memory.
+ *
+ * On a real system the CVT address lives at a fixed lowcore offset
+ * (PSA+0x10). On COR24 that conflicts with the loaded program,
+ * so CVTPTR is a variable here. */
+
+/* --- Arena allocator --- */
+DCL ARENA(512) BYTE;
+DCL ARENA_POS INT INIT(0);
+
+ALLOC: PROC(SIZE INT) RETURNS(INT);
+    DCL BASE INT;
+    BASE = ADDR(ARENA) + ARENA_POS;
+    ARENA_POS = ARENA_POS + SIZE;
+    RETURN(BASE);
+END;
+
+/* --- Control block declarations (BASED = template only) --- */
+
+DCL 1 CVT BASED,
+  3 CVTEYE     INT,
+  3 CVTASCBH   PTR,
+  3 CVTASCBL   PTR;
+DCL CVTPTR PTR;
+
+DCL 1 ASCB BASED,
+  3 ASCBEYE    INT,
+  3 ASCBNEXT   PTR,
+  3 ASCBPREV   PTR,
+  3 ASCBASXB   PTR,
+  3 ASCBTCBH   PTR;
+DCL ASCBPTR PTR;
+
+DCL 1 ASXB BASED,
+  3 ASXBEYE    INT,
+  3 ASXBASCB   PTR,
+  3 ASXBFTCB   PTR;
+DCL ASXBPTR PTR;
+
+DCL 1 TCB BASED,
+  3 TCBEYE     INT,
+  3 TCBNEXT    PTR,
+  3 TCBPREV    PTR,
+  3 TCBASCB    PTR;
+DCL TCBPTR PTR;
+
+/* --- Main: build the chain --- */
+MAIN: PROC;
+    /* Allocate from arena */
+    CVTPTR  = ALLOC(9);
+    ASCBPTR = ALLOC(18);
+    ASXBPTR = ALLOC(12);
+    TCBPTR  = ALLOC(15);
+
+    /* Set eyecatchers (CVT=0xC10000, ASCB=0xA5CB00, etc.) */
+    CVTPTR->CVTEYE   = 12648448;
+    ASCBPTR->ASCBEYE  = 10866432;
+    ASXBPTR->ASXBEYE  = 10870528;
+    TCBPTR->TCBEYE   = 15584256;
+
+    /* Wire: CVT -> ASCB */
+    CVTPTR->CVTASCBH  = ASCBPTR;
+    CVTPTR->CVTASCBL  = ASCBPTR;
+
+    /* Wire: ASCB chain (single entry) */
+    ASCBPTR->ASCBNEXT  = 0;
+    ASCBPTR->ASCBPREV  = 0;
+
+    /* Wire: ASCB -> ASXB, ASCB -> TCB */
+    ASCBPTR->ASCBASXB  = ASXBPTR;
+    ASCBPTR->ASCBTCBH  = TCBPTR;
+
+    /* Wire: ASXB back to ASCB, ASXB -> TCB */
+    ASXBPTR->ASXBASCB  = ASCBPTR;
+    ASXBPTR->ASXBFTCB  = TCBPTR;
+
+    /* Wire: TCB chain (single entry), back to ASCB */
+    TCBPTR->TCBNEXT    = 0;
+    TCBPTR->TCBPREV    = 0;
+    TCBPTR->TCBASCB    = ASCBPTR;
+END;

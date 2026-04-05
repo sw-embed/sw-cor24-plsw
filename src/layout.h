@@ -231,6 +231,10 @@ void layout_globals(int prog_node) {
                 if (nd_ival[child] > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;
                 }
+                /* PTR: associate with most recent record type descriptor */
+                if (nd_type[child] == TYPE_PTR && layout_last_tdesc >= 0) {
+                    sym_tdesc[idx] = layout_last_tdesc;
+                }
             }
         }
         child = nd_next[child];
