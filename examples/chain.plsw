@@ -2,13 +2,6 @@
  * Arena with eyecatcher header, allocates CVT/ASCB/ASXB/TCB,
  * wires pointer chain. Verify with --dump. */
 
-/* --- Eyecatcher constants (static, used as copy sources) --- */
-DCL E_ARENA(6) CHAR INIT('ARENA');
-DCL E_CVT(5)   CHAR INIT('CVT ');
-DCL E_ASCB(5)  CHAR INIT('ASCB');
-DCL E_ASXB(5)  CHAR INIT('ASXB');
-DCL E_TCB(5)   CHAR INIT('TCB ');
-
 /* --- Arena control block --- */
 DCL 1 ARENABLOCK BASED,
   3 ARNAEYE(6)  CHAR,
@@ -19,29 +12,6 @@ DCL ARENAPTR PTR;
 
 /* Static storage for the arena */
 DCL ARENA_STORE(492) BYTE;
-
-/* Copy N bytes from SRC to DST */
-MEMCPY: PROC(DST PTR, SRC PTR, N INT);
-    DCL I INT;
-    I = 0;
-    DO WHILE (I < N);
-        ASM DO;
-            'lw      r0,12(fp)';
-            'lw      r1,-3(fp)';
-            'add     r0,r1';
-            'mov     r2,r0';
-            'lbu     r0,0(r2)';
-            'push    r0';
-            'lw      r0,9(fp)';
-            'lw      r1,-3(fp)';
-            'add     r0,r1';
-            'mov     r2,r0';
-            'pop     r0';
-            'sb      r0,0(r2)';
-        END;
-        I = I + 1;
-    END;
-END;
 
 /* Allocate from arena pool. Returns pointer into pool. */
 ALLOC: PROC(SIZE INT) RETURNS(INT);
@@ -90,7 +60,7 @@ DCL TCBPTR PTR;
 MAIN: PROC;
     /* Initialize arena */
     ARENAPTR = ADDR(ARENA_STORE);
-    CALL MEMCPY(ARENAPTR, ADDR(E_ARENA), 5);
+    ARENAPTR->ARNAEYE = 'ARENA';
     ARENAPTR->ARNASIZE = 480;
     ARENAPTR->ARNAUSED = 0;
 
@@ -100,11 +70,11 @@ MAIN: PROC;
     ASXBPTR = ALLOC(14);
     TCBPTR  = ALLOC(14);
 
-    /* Set eyecatchers */
-    CALL MEMCPY(CVTPTR,  ADDR(E_CVT),  4);
-    CALL MEMCPY(ASCBPTR, ADDR(E_ASCB), 4);
-    CALL MEMCPY(ASXBPTR, ADDR(E_ASXB), 4);
-    CALL MEMCPY(TCBPTR,  ADDR(E_TCB),  4);
+    /* Set eyecatchers -- direct string assignment */
+    CVTPTR->CVTEYE   = 'CVT ';
+    ASCBPTR->ASCBEYE  = 'ASCB';
+    ASXBPTR->ASXBEYE  = 'ASXB';
+    TCBPTR->TCBEYE   = 'TCB ';
 
     /* Wire: CVT -> ASCB, CVT -> TCB */
     CVTPTR->CVTASCBH  = ASCBPTR;

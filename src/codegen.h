@@ -987,9 +987,56 @@ void cg_expr(int node) {
 /* --- Assignment codegen --- */
 /* Evaluate RHS into r0, store into LHS variable */
 
+/* Emit unrolled byte stores for string literal to ptr->field.
+ * r2 = base address of field (already computed by cg_deref_addr).
+ * s = string content, len = bytes to copy. */
+void cg_string_to_deref(int deref_node, char *s, int len) {
+    int fw;
+    int i;
+
+    /* Compute field address into r2 */
+    fw = cg_deref_addr(deref_node);
+    if (fw == 0) return;
+
+    emit_comment("string -> ptr->field");
+    i = 0;
+    while (i < len && s[i]) {
+        emit_str(EMIT_INDENT);
+        emit_str("lc      r0,");
+        emit_int(s[i]);
+        emit_nl();
+        emit_str(EMIT_INDENT);
+        emit_str("sb      r0,");
+        emit_int(i);
+        emit_str("(r2)");
+        emit_nl();
+        i = i + 1;
+    }
+    /* Null-terminate if room */
+    if (i < fw) {
+        emit_str(EMIT_INDENT);
+        emit_str("lc      r0,0");
+        emit_nl();
+        emit_str(EMIT_INDENT);
+        emit_str("sb      r0,");
+        emit_int(i);
+        emit_str("(r2)");
+        emit_nl();
+    }
+}
+
 void cg_assign(int node) {
     int lhs = nd_left[node];
     int rhs = nd_right[node];
+
+    /* Special case: string literal assigned to ptr->field (CHAR array) */
+    if (nd_kind[lhs] == NODE_DEREF
+        && nd_kind[rhs] == NODE_LITERAL
+        && nd_type[rhs] == TYPE_CHAR
+        && nd_name[rhs]) {
+        cg_string_to_deref(lhs, nd_name[rhs], str_len(nd_name[rhs]));
+        return;
+    }
 
     /* Evaluate RHS into r0 */
     cg_expr(rhs);
