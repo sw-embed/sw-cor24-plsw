@@ -151,11 +151,56 @@ int  cur_type;
 int  cur_ival;
 char cur_text[TOK_TEXT_MAX];
 
+/* Line tracking for source listing */
+int  lex_line;              /* current line number (1-based) */
+
+#define SRC_LINE_MAX 256    /* max source lines tracked */
+char *src_line_ptr[SRC_LINE_MAX];  /* pointer to start of each line */
+int   src_line_count;
+
+/* Build source line table from source buffer */
+void src_lines_init(char *src, int len) {
+    int i;
+    src_line_count = 0;
+    if (len == 0) return;
+    /* First line starts at position 0 */
+    src_line_ptr[0] = src;
+    src_line_count = 1;
+    i = 0;
+    while (i < len && src_line_count < SRC_LINE_MAX) {
+        if (src[i] == 10) {
+            /* Next line starts after this newline */
+            if (i + 1 < len) {
+                src_line_ptr[src_line_count] = src + i + 1;
+                src_line_count = src_line_count + 1;
+            }
+        }
+        i = i + 1;
+    }
+}
+
+/* Get pointer to source line text (0-based line index).
+ * Copies up to maxlen chars into buf, stopping at \n or end. */
+void src_line_text(int line_idx, char *buf, int maxlen) {
+    char *p;
+    int i;
+    buf[0] = 0;
+    if (line_idx < 0 || line_idx >= src_line_count) return;
+    p = src_line_ptr[line_idx];
+    i = 0;
+    while (i < maxlen - 1 && p[i] && p[i] != 10 && p[i] != 13) {
+        buf[i] = p[i];
+        i = i + 1;
+    }
+    buf[i] = 0;
+}
+
 /* Initialize lexer with a source buffer */
 void lex_init(char *src, int len) {
     lex_src = src;
     lex_pos = 0;
     lex_len = len;
+    lex_line = 1;
     inc_depth = 0;
     def_init();
     kw_init();
@@ -172,6 +217,7 @@ int lex_advance(void) {
     if (lex_pos >= lex_len) return 0;
     int c = lex_src[lex_pos];
     lex_pos = lex_pos + 1;
+    if (c == 10) lex_line = lex_line + 1;
     return c;
 }
 

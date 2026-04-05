@@ -62,6 +62,7 @@ int nd_left[NODE_POOL_MAX];       /* left child index */
 int nd_right[NODE_POOL_MAX];      /* right child index */
 int nd_next[NODE_POOL_MAX];       /* sibling/next index */
 int nd_ival[NODE_POOL_MAX];       /* integer value or operator */
+int nd_line[NODE_POOL_MAX];       /* source line number (1-based) */
 char *nd_name[NODE_POOL_MAX];     /* name (arena-allocated) */
 
 int nd_count;                     /* number of allocated nodes */
@@ -85,6 +86,7 @@ int nd_alloc(int kind) {
     nd_right[i] = NODE_NULL;
     nd_next[i]  = NODE_NULL;
     nd_ival[i]  = 0;
+    nd_line[i]  = lex_line;
     nd_name[i]  = 0;
     return i;
 }

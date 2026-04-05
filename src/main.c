@@ -5385,6 +5385,9 @@ char *compile_program(char *source) {
     cg_static_init();
     mac_init();
 
+    /* Build source line table for listing */
+    src_lines_init(source, str_len(source));
+
     /* Parse */
     parse_init(source);
     prog = parse_program();

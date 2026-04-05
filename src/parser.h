@@ -533,8 +533,12 @@ int parse_stmt(void) {
     int end_expr;
     char *name;
     int nlen;
+    int stmt_line;
 
     if (parse_err) return NODE_NULL;
+
+    /* Capture line number at start of statement for listing */
+    stmt_line = lex_line;
 
     /* ?MACRO(...) invocation -- expand and re-parse */
     if (cur_type == TOK_QUESTION) {
@@ -686,6 +690,7 @@ int parse_stmt(void) {
         if (n != NODE_NULL) {
             nd_name[n] = name;
             nd_left[n] = args;
+            nd_line[n] = stmt_line;
         }
         return n;
     }
@@ -700,7 +705,9 @@ int parse_stmt(void) {
             parse_expect(TOK_RPAREN);
         }
         parse_expect(TOK_SEMI);
-        return nd_return(expr);
+        n = nd_return(expr);
+        if (n != NODE_NULL) nd_line[n] = stmt_line;
+        return n;
     }
 
     /* ASM DO; 'instr'; ... END; */
@@ -760,11 +767,14 @@ int parse_stmt(void) {
             nd_kind[lhs] = NODE_ARRAY_ACCESS;
         }
 
-        return nd_assign(lhs, rhs);
+        n = nd_assign(lhs, rhs);
+        if (n != NODE_NULL) nd_line[n] = stmt_line;
+        return n;
     }
 
     /* Expression statement (e.g., bare function call) */
     parse_expect(TOK_SEMI);
+    if (lhs != NODE_NULL) nd_line[lhs] = stmt_line;
     return lhs;
 }
 

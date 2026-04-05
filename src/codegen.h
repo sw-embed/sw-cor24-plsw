@@ -40,11 +40,36 @@ void cg_init(void) {
     cg_init_regs();
     cg_err = 0;
     cg_errmsg = 0;
+    cg_listing = 1;  /* enabled by default */
+    cg_last_line = 0;
 }
 
 void cg_error(char *msg) {
     cg_err = 1;
     cg_errmsg = msg;
+}
+
+/* --- Source listing state --- */
+
+int cg_listing;        /* 1 = emit source line comments */
+int cg_last_line;      /* last source line emitted as comment */
+
+/* Emit a source line comment if the line changed */
+void cg_source_comment(int node) {
+    int ln;
+    char buf[120];
+    if (!cg_listing) return;
+    if (node == NODE_NULL) return;
+    ln = nd_line[node];
+    if (ln <= 0 || ln == cg_last_line) return;
+    cg_last_line = ln;
+    src_line_text(ln - 1, buf, 120);
+    if (buf[0]) {
+        emit_str("; ");
+        emit_int(ln);
+        emit_str(": ");
+        emit_line(buf);
+    }
 }
 
 /* --- Forward declarations --- */
@@ -1407,6 +1432,9 @@ void cg_asm_block(int node) {
 void cg_stmt(int node) {
     if (node == NODE_NULL) return;
 
+    /* Emit source line comment if listing enabled */
+    cg_source_comment(node);
+
     if (nd_kind[node] == NODE_ASSIGN) {
         cg_assign(node);
     } else if (nd_kind[node] == NODE_RETURN) {
@@ -1483,6 +1511,9 @@ void cg_proc(int proc_node) {
 
     opts = nd_ival[proc_node];
     body = nd_right[proc_node];
+
+    /* Emit source line comment for PROC */
+    cg_source_comment(proc_node);
 
     /* Ensure we're in .text section */
     emit_text_section();

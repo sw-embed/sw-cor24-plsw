@@ -1,6 +1,6 @@
 number = 38
 slug = "038-mixed-listing"
-status = "pending"
+status = "in-progress"
 description = "Implement mixed listing output. Add a compiler flag (-l or --listing) that pr..."
 role = "production"
 context_files = []
