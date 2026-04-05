@@ -10,6 +10,7 @@
 char *lex_src;    /* source buffer pointer */
 int   lex_pos;    /* current position in source */
 int   lex_len;    /* length of source */
+int   lex_line;   /* current line number (1-based) */
 
 /* ---- %INCLUDE processing ---- */
 
@@ -25,6 +26,7 @@ int   inc_count;
 char *inc_src_stack[INC_MAX_DEPTH];
 int   inc_pos_stack[INC_MAX_DEPTH];
 int   inc_len_stack[INC_MAX_DEPTH];
+int   inc_line_stack[INC_MAX_DEPTH];
 int   inc_depth;
 
 void inc_init(void) {
@@ -61,11 +63,13 @@ int inc_push(char *content) {
     inc_src_stack[inc_depth] = lex_src;
     inc_pos_stack[inc_depth] = lex_pos;
     inc_len_stack[inc_depth] = lex_len;
+    inc_line_stack[inc_depth] = lex_line;
     inc_depth = inc_depth + 1;
 
     lex_src = content;
     lex_pos = 0;
     lex_len = str_len(content);
+    lex_line = 0;  /* included content: line 0 = not from main source */
     return 1;
 }
 
@@ -76,6 +80,7 @@ int inc_pop(void) {
     lex_src = inc_src_stack[inc_depth];
     lex_pos = inc_pos_stack[inc_depth];
     lex_len = inc_len_stack[inc_depth];
+    lex_line = inc_line_stack[inc_depth];
     return 1;
 }
 
@@ -152,8 +157,6 @@ int  cur_ival;
 char cur_text[TOK_TEXT_MAX];
 
 /* Line tracking for source listing */
-int  lex_line;              /* current line number (1-based) */
-
 #define SRC_LINE_MAX 256    /* max source lines tracked */
 char *src_line_ptr[SRC_LINE_MAX];  /* pointer to start of each line */
 int   src_line_count;

@@ -795,6 +795,7 @@ int parse_program(void) {
 
     while (!parse_err && cur_type != TOK_EOF) {
         int child = NODE_NULL;
+        int top_line = lex_line;
 
         if (cur_type == TOK_DCL || cur_type == TOK_DECLARE) {
             child = parse_dcl();
@@ -837,6 +838,7 @@ int parse_program(void) {
         }
 
         if (child != NODE_NULL) {
+            nd_line[child] = top_line;
             nd_append(prog, child);
         }
     }
