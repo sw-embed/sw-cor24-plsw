@@ -32,6 +32,10 @@ pipeline *args: build
 pipeline-dump *args: build
     ./scripts/pipeline-dump.sh {{args}}
 
+# Compile hello_macro example (macro demo)
+hello-macro: build
+    ./scripts/pipeline-dump.sh examples/greet.msw examples/hello_macro.plsw
+
 # Clean build artifacts
 clean:
     rm -f build/*.s build/out.s build/run-dump.txt

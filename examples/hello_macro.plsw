@@ -1,7 +1,10 @@
-/* hello_macro.plsw -- Hello World using macros */
+/* hello_macro.plsw -- Hello World using macros
+ * Demonstrates ?GREET macro from greet.msw */
 
-DCL MSG(20) CHAR INIT('Hello from PL/SW!');
+%INCLUDE greet;
+
+DCL MSG(20) CHAR INIT('Hello from macros!');
 
 MAIN: PROC;
-    CALL UART_PUTS(ADDR(MSG));
+    ?GREET(MSG(_MSG));
 END;

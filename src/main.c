@@ -5320,6 +5320,15 @@ void emit_runtime_uart_putchar(void) {
     emit_line("        push    r2");
     emit_line("        push    r1");
     emit_line("        mov     fp,sp");
+    /* Busy-wait: poll TX busy (bit 7 of status at 0xFF0101) */
+    emit_line("_uart_tx_wait:");
+    emit_line("        la      r2,16711937");
+    emit_line("        lbu     r0,0(r2)");
+    emit_line("        lcu     r1,128");
+    emit_line("        and     r0,r1");
+    emit_line("        ceq     r0,z");
+    emit_line("        brf     _uart_tx_wait");
+    /* Write byte to UART data register (0xFF0100) */
     emit_line("        la      r2,16711936");
     emit_line("        lw      r0,9(fp)");
     emit_line("        sb      r0,0(r2)");
