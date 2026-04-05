@@ -1,4 +1,4 @@
-# PL/SW Compiler -- Usage Guide
+# PL/SW Compiler -- Usage Guide & Language Reference
 
 ## Building the Compiler
 
@@ -6,218 +6,346 @@ The PL/SW compiler is written in C and compiled by tc24r to run
 on the COR24 emulator.
 
 ```bash
-# Compile the PL/SW compiler itself
-tc24r src/plsw.c -o build/plsw.s
-
-# Run the compiler on the emulator to compile a PL/SW program
-# (the compiler reads .plsw from UART/stdin and emits .s to UART/stdout)
-cor24-run --run build/plsw.s < examples/hello.plsw > output.s
-
-# Assemble and run the compiled program
-cor24-run --run output.s
+just build    # tc24r src/main.c -o build/plsw.s
 ```
 
-## Compiler Invocation
+## Compiling PL/SW Programs
 
-When running on COR24, the compiler reads from UART input and writes
-assembly to UART output. Include paths for .msw files are configured
-at compile time or via a simple command-line protocol.
+Use the pipeline scripts to compile and run .plsw programs:
+
+```bash
+# Simple program (no includes)
+just pipeline examples/hello.plsw
+
+# Program with .msw include files (FILE: protocol)
+just pipeline-dump include/cvt.msw include/ascb.msw examples/chain.plsw
+
+# Shortcut targets for demos
+just chain          # control block chain with .msw includes
+just hello-macro    # macro invocation demo
+```
+
+### Pipeline Output
+
+`pipeline-dump` produces three files in `build/`:
+
+| File | Contents |
+|------|----------|
+| `build/<name>.s` | Generated assembly with source line comments |
+| `build/<name>-dump.txt` | Emulator memory dump (registers, SRAM, I/O) |
+| `build/<name>-combined.plsw` | All .msw + .plsw concatenated with path comments |
 
 ## Source File Types
 
-| Extension | Purpose                                          |
-|-----------|--------------------------------------------------|
-| `.plsw`   | PL/SW source code                                |
-| `.msw`    | Macro definitions and shared declarations        |
-| `.s`      | Generated COR24 assembly (compiler output)       |
+| Extension | Purpose |
+|-----------|---------|
+| `.plsw` | PL/SW source code |
+| `.msw` | Macro definitions and shared declarations |
+| `.s` | Generated COR24 assembly (compiler output) |
 
-## Language Quick Reference
+## Compiler Modes
+
+The compiler runs on the COR24 emulator with UART I/O. At startup
+it prompts for a mode:
+
+- **Suite number** (0-34) -- run a specific test suite
+- **`a`** -- run all test suites
+- **`c`** -- compile mode (accepts source via UART)
+- **`r`** -- REPL (tokenizer)
+
+### Compile Mode Protocol
+
+In compile mode, the compiler accepts two input formats:
+
+**Legacy** (single file): raw PL/SW source terminated by EOT (0x04).
+
+**FILE:/SOURCE:** (multi-file): named include files followed by main source:
+```
+FILE:cvt.msw\n<content>\x1E
+FILE:ascb.msw\n<content>\x1E
+SOURCE:\n<main.plsw source>\x04
+```
+
+Each FILE: block registers content via `inc_register()` for `%INCLUDE` resolution.
+
+## Language Reference
+
+### Types
+
+| Type | Width | Description |
+|------|-------|-------------|
+| `INT` or `INT(24)` | 3 bytes | Default 24-bit integer |
+| `INT(16)` | 2 bytes | 16-bit integer |
+| `INT(8)` | 1 byte | 8-bit integer |
+| `BYTE` | 1 byte | Unsigned byte |
+| `CHAR` | 1 byte | Character |
+| `PTR` | 3 bytes | 24-bit pointer |
+| `WORD` | 3 bytes | 24-bit unsigned |
+| `BIT` | 1 byte | Boolean |
 
 ### Declarations
 
 ```plsw
-/* Simple scalar declarations */
-DCL COUNT INT(24);
+/* Scalar */
+DCL COUNT INT;
 DCL FLAGS BYTE;
 DCL LETTER CHAR;
-DCL BUFPTR PTR;
+
+/* With explicit width */
+DCL ASID INT(16);
 
 /* Array */
 DCL BUFFER(80) CHAR;
+DCL TABLE(10) INT;
 
-/* Record with levels */
+/* String initialized */
+DCL MSG(20) CHAR INIT('Hello from PL/SW!');
+
+/* Numeric initialized */
+DCL ARENA_POS INT INIT(0);
+
+/* Record with levels (1, 3, 5, ...) */
 DCL 1 POINT,
-      3 X INT(24),
-      3 Y INT(24);
+    3 X INT,
+    3 Y INT;
+
+/* BASED record (template for pointer access) */
+DCL 1 CVT BASED,
+    3 CVTEYE(4) CHAR,
+    3 CVTASCBH  PTR;
+
+/* Pointer associated with preceding BASED record */
+DCL CVTPTR PTR;
 
 /* Storage classes */
-DCL COUNTER INT(24) STATIC;
-DCL TEMP INT(24) AUTOMATIC;      /* default for locals */
-DCL EXTERN_SYM INT(24) EXTERNAL;
+DCL COUNTER INT STATIC;
+DCL TEMP INT AUTOMATIC;     /* default for locals */
+DCL SYM INT EXTERNAL;
 ```
 
 ### Procedures
 
 ```plsw
-PROC ADD(A INT(24), B INT(24)) RETURNS(INT(24));
-   RETURN(A + B);
+/* Simple procedure */
+MAIN: PROC;
+    CALL UART_PUTS(ADDR(MSG));
 END;
 
-PROC MAIN OPTIONS(FREESTANDING);
-   DCL RESULT INT(24);
-   RESULT = CALL ADD(3, 4);
-   CALL PRINT_INT(RESULT);
+/* With parameters and return type */
+ADD: PROC(A INT, B INT) RETURNS(INT);
+    RETURN(A + B);
+END;
+
+/* Call as expression (without CALL keyword) */
+RESULT = ADD(3, 4);
+
+/* Call as statement */
+CALL UART_PUTS(ADDR(MSG));
+
+/* Naked procedure (no prologue/epilogue) */
+ISR: PROC OPTIONS(NAKED);
+    ASM DO;
+        'push    r0';
+        'pop     r0';
+        'jmp     (iv)';
+    END;
 END;
 ```
 
 ### Control Flow
 
 ```plsw
-/* IF/THEN/ELSE */
-IF (COUNT > 0) THEN DO;
-   CALL PROCESS();
+/* IF/THEN */
+IF (COUNT > 0) THEN
+    CALL PROCESS();
+
+/* IF/THEN/ELSE with blocks */
+IF (X = 0) THEN DO;
+    X = 1;
 END;
 ELSE DO;
-   CALL INIT();
+    X = 0;
 END;
 
 /* DO WHILE */
 DO WHILE (COUNT > 0);
-   CALL STEP(COUNT);
-   COUNT = COUNT - 1;
+    COUNT = COUNT - 1;
 END;
 
 /* Counted DO */
 DO I = 1 TO 10;
-   CALL PRINT_INT(I);
+    CALL PRINT_INT(I);
 END;
-```
-
-### Inline Assembly
-
-```plsw
-/* Statement-level ASM block */
-ASM DO;
-   "push r1";
-   "mvi r1,42";
-   "sw r1,0xFF0000(z)";   /* write to LED */
-   "pop r1";
-END;
-
-/* Naked procedure (no prologue/epilogue) */
-PROC IRQ_HANDLER OPTIONS(NAKED);
-   ASM DO;
-      "push r0";
-      "push r1";
-      /* ... handler logic ... */
-      "pop r1";
-      "pop r0";
-      "reti";
-   END;
-END;
-```
-
-### Macro Invocation
-
-```plsw
-/* Include macro definitions */
-%INCLUDE SYSTEM;    /* finds SYSTEM.msw on search path */
-
-/* Invoke a macro */
-?GETMAIN(LENGTH(256), SUBPOOL(0), ADDRESS(BUF));
-
-/* Macro with optional clauses */
-?ENTRY(SAVE(R1,R2), WORKAREA(MYWS));
 ```
 
 ### Expressions
 
 ```plsw
-/* Arithmetic */
-X = A + B * C - D;
+/* Arithmetic: +, -, *, / */
+X = A + B * C;
+D = N / 10;
 
-/* Comparison */
+/* Comparison: =, <, >, <=, >=, != */
 IF (X >= 10) THEN ...
 
-/* Bitwise */
+/* Bitwise: &, |, ^, ~ */
 FLAGS = FLAGS & MASK;
-FLAGS = FLAGS | BIT3;
-SHIFTED = X << 4;
 
 /* Pointer arithmetic */
-NEXT = PTR + 3;    /* advance 3 bytes */
+NEXT = PTR + 3;
+
+/* Address-of */
+P = ADDR(VARIABLE);
+P = ADDR(RECORD);
+
+/* Size-of (compile-time record size) */
+SZ = SIZEOF(CVT);
+P = ALLOC(SIZEOF(ASCB));
 ```
+
+### Record and Pointer Access
+
+```plsw
+/* Direct field access */
+POINT.X = 100;
+POINT.Y = 200;
+
+/* Pointer dereference */
+CVTPTR->CVTEYE = 'CVT ';    /* string literal to CHAR array field */
+CVTPTR->CVTASCBH = ASCBPTR;  /* pointer field */
+
+/* Array access */
+BUFFER(0) = 65;
+DIGITS(I) = N + 48;
+```
+
+### Inline Assembly
+
+```plsw
+/* ASM DO block -- strings are emitted verbatim as instructions */
+ASM DO;
+    'la      r2,16711936';     /* UART data register */
+    'lw      r0,9(fp)';       /* load parameter */
+    'sb      r0,0(r2)';       /* store byte */
+END;
+```
+
+Note: ASM strings use **single quotes**, not double quotes.
+
+### Preprocessor Directives
+
+```plsw
+/* Include a .msw file */
+%INCLUDE system;          /* finds system.msw via include registry */
+
+/* Conditional compilation */
+%DEFINE TARGET_COR24;
+%IF DEFINED(TARGET_COR24);
+    DCL UART_ADDR INT INIT(16711936);
+%ENDIF;
+```
+
+### Macro System
+
+Macro definitions in .msw files:
+
+```msw
+MACRODEF LED_SET;
+    REQUIRED VAL(expr);
+    GEN DO;
+        'la      r2,16711680';
+        'lc      r0,{VAL}';
+        'sb      r0,0(r2)';
+    END;
+END;
+```
+
+Macro invocation in .plsw source:
+
+```plsw
+%INCLUDE system;
+?LED_SET(VAL(1));      /* expands to ASM DO block */
+```
+
+GEN blocks expand to `ASM DO; ... END;` with `{KEYWORD}` substitution.
+
+Note: macro clause keywords must not collide with PL/SW reserved words
+(e.g., use `CH` not `CHAR`, `VAL` not `INT`).
 
 ## Example: Hello World
 
 ```plsw
-/* hello.plsw -- Hello World for COR24 */
+/* hello.plsw */
+DCL MSG(20) CHAR INIT('Hello from PL/SW!');
 
-DCL MSG(18) CHAR STATIC INIT('Hello from PL/SW!');
-
-PROC UART_PUTC(CH CHAR);
-   ASM DO;
-      "lw r0,9(fp)";          /* load char argument */
-      "sw r0,0xFF0100(z)";    /* write to UART data */
-   END;
-END;
-
-PROC UART_PUTS(S PTR);
-   DCL I INT(24);
-   DCL CH CHAR;
-   I = 0;
-   DO WHILE (1);
-      CH = S(I);              /* S treated as char array via ptr */
-      IF (CH = 0) THEN RETURN;
-      CALL UART_PUTC(CH);
-      I = I + 1;
-   END;
-END;
-
-PROC MAIN OPTIONS(FREESTANDING);
-   CALL UART_PUTS(ADDR(MSG));
+MAIN: PROC;
+    CALL UART_PUTS(ADDR(MSG));
 END;
 ```
 
-## Build Pipeline
-
 ```
-hello.plsw + system.msw
-       |
-       v
-   PL/SW Compiler (on COR24)
-       |
-       v
-   hello.s (COR24 assembly)
-       |
-       v
-   cor24-run --run hello.s
-       |
-       v
-   "Hello from PL/SW!" on UART
+$ just pipeline examples/hello.plsw
+=== Compiled hello.plsw (87 lines of assembly) ===
+=== Running ===
+Hello from PL/SW!
 ```
 
-## Macro Definition Example
+## Example: Control Block Chain
 
-```msw
-/* system.msw -- System service macros for COR24 */
+```plsw
+/* chain.plsw -- uses .msw includes for record templates */
+%INCLUDE cvt;
+DCL CVTPTR PTR;
+%INCLUDE ascb;
+DCL ASCBPTR PTR;
 
-MACRODEF GETMAIN;
-   REQUIRED LENGTH(expr);
-   OPTIONAL SUBPOOL(expr);
-   OPTIONAL ADDRESS(lvalue);
-   OPTIONAL RC(lvalue);
-
-   GEN DO;
-      "mvi r0,{LENGTH}";
-      "svc 10";
-   END;
-
-   IF ADDRESS THEN DO;
-      ADDRESS = ASM_EXPR("mov %0,r0");
-   END;
-   IF RC THEN DO;
-      RC = ASM_EXPR("mov %0,r1");
-   END;
+MAIN: PROC;
+    CVTPTR = ALLOC(SIZEOF(CVT));
+    CVTPTR->CVTEYE = 'CVT ';
+    CVTPTR->CVTASCBH = ASCBPTR;
+    ...
 END;
+```
+
+```
+$ just chain
+=== Compiling chain.plsw ===
+  registered: cvt.msw
+  registered: ascb.msw
+  ...
+=== Running with --dump ===
+  Instructions: 317
+  Halted: true
+```
+
+Memory dump shows eyecatchers: `CVT `, `ASCB`, `ASXB`, `TCB `.
+
+## Generated Assembly
+
+The compiler emits COR24 assembly with source line comments:
+
+```asm
+; 28:     CVTPTR  = ALLOC(SIZEOF(CVT));
+        lc      r0,15
+        push    r0
+        la      r2,_ALLOC
+        jal     r1,(r2)
+        add     sp,3
+        la      r2,_CVTPTR
+        sw      r0,0(r2)
+```
+
+Runtime stubs for UART_PUTCHAR (with TX busy-wait) and UART_PUTS
+are emitted automatically.
+
+## Error Messages
+
+Errors include source line numbers:
+
+```
+SYNTAX ERROR line 3: expected expression
+SYNTAX ERROR line 5: unexpected token
+  expected ;, got END
+CODEGEN ERROR: undefined variable for store
+STORAGE ERROR: ...
 ```

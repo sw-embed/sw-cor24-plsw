@@ -1,6 +1,6 @@
 number = 40
 slug = "040-final-docs"
-status = "pending"
+status = "in-progress"
 description = "Final documentation pass. Update README.md with project overview, build instr..."
 role = "production"
 context_files = []
