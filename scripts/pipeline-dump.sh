@@ -80,21 +80,26 @@ if [ -z "$ASM" ]; then
     exit 1
 fi
 
+# Derive output names from input .plsw filename
+BASENAME=$(basename "$MAIN" .plsw)
+OUT_S="build/${BASENAME}.s"
+OUT_DUMP="build/${BASENAME}-dump.txt"
+
 # Save assembly
-echo "$ASM" > build/out.s
+echo "$ASM" > "$OUT_S"
 ASM_LINES=$(echo "$ASM" | wc -l | tr -d ' ')
-echo "Assembly: $ASM_LINES lines -> build/out.s" >&2
+echo "Assembly: $ASM_LINES lines -> $OUT_S" >&2
 
 # Show registered includes
 echo "$UART_OUT" | grep "registered:" >&2 || true
 
 # Run with --dump
 echo "=== Running with --dump ===" >&2
-RUN_OUT=$(cor24-run --run build/out.s -n 50000000 -t 30 --speed 0 --dump 2>&1)
+RUN_OUT=$(cor24-run --run "$OUT_S" -n 50000000 -t 30 --speed 0 --dump 2>&1)
 
 # Save full dump
-echo "$RUN_OUT" > build/run-dump.txt
-echo "Dump saved to build/run-dump.txt" >&2
+echo "$RUN_OUT" > "$OUT_DUMP"
+echo "Dump saved to $OUT_DUMP" >&2
 
 # Show UART output
 PROG_OUT=$(echo "$RUN_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
