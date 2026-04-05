@@ -353,6 +353,31 @@ int parse_primary(void) {
         return nd_unop(TOK_NOT, operand);
     }
 
+    /* SIZEOF(name) -- size of a declared record/variable */
+    if (cur_type == TOK_SIZEOF) {
+        parse_advance();
+        parse_expect(TOK_LPAREN);
+        /* Expect an identifier (record or variable name) */
+        if (cur_type != TOK_IDENT) {
+            parse_error("expected name in SIZEOF");
+            return NODE_NULL;
+        }
+        int nlen = str_len(cur_text);
+        char *name = arena_alloc(nlen + 1);
+        if (name) str_copy(name, cur_text);
+        parse_advance();
+        parse_expect(TOK_RPAREN);
+        /* Create a LITERAL node -- resolved to size during codegen */
+        int n = nd_alloc(NODE_LITERAL);
+        if (n != NODE_NULL) {
+            nd_name[n] = name;
+            nd_type[n] = TYPE_INT24;
+            nd_ival[n] = -1;  /* marker: resolve in codegen */
+            nd_stor[n] = TOK_SIZEOF;  /* tag for codegen to identify */
+        }
+        return n;
+    }
+
     /* ADDR(expr) -- address-of */
     if (cur_type == TOK_ADDR) {
         parse_advance();

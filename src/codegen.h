@@ -91,6 +91,16 @@ int cg_is_simple(int node) {
 
 void cg_literal(int node) {
     int val = nd_ival[node];
+    /* SIZEOF(name): resolve to symbol width */
+    if (nd_stor[node] == TOK_SIZEOF && nd_name[node]) {
+        int si = sym_lookup(nd_name[node]);
+        if (si >= 0) {
+            val = sym_width[si];
+        } else {
+            cg_error("undefined name in SIZEOF");
+            val = 0;
+        }
+    }
     if (val >= -128 && val <= 127) {
         /* Small constant: use lc (sign-extending 8-bit immediate) */
         emit_str(EMIT_INDENT);
@@ -239,6 +249,17 @@ void cg_load_simple_into(int node, char *reg) {
 
     if (nd_kind[node] == NODE_LITERAL) {
         val = nd_ival[node];
+        /* SIZEOF(name): resolve to symbol width at codegen time */
+        if (nd_stor[node] == TOK_SIZEOF && nd_name[node]) {
+            idx = sym_lookup(nd_name[node]);
+            if (idx >= 0) {
+                val = sym_width[idx];
+            } else {
+                cg_error("undefined name in SIZEOF");
+                emit_comment("ERROR: undefined name in SIZEOF");
+                val = 0;
+            }
+        }
         if (val >= -128 && val <= 127) {
             emit_str(EMIT_INDENT);
             emit_str("lc      ");

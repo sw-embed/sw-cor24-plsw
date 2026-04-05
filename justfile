@@ -38,7 +38,7 @@ hello-macro: build
 
 # Compile chain example (control block demo with .msw includes)
 chain: build
-    ./scripts/pipeline-dump.sh include/types.msw include/cvt.msw include/ascb.msw include/asxb.msw include/tcb.msw examples/chain.plsw
+    ./scripts/pipeline-dump.sh include/cvt.msw include/ascb.msw include/asxb.msw include/tcb.msw examples/chain.plsw
 
 # Clean build artifacts
 clean:

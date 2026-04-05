@@ -2,7 +2,6 @@
  * Allocates CVT/ASCB/ASXB/TCB from a bump arena,
  * wires pointer chain. Verify with --dump. */
 
-%INCLUDE types;
 %INCLUDE cvt;
 DCL CVTPTR PTR;
 %INCLUDE ascb;
@@ -26,10 +25,10 @@ END;
 /* --- Main: build the chain --- */
 MAIN: PROC;
     /* Allocate control blocks */
-    CVTPTR  = ALLOC(CVT_SIZE);
-    ASCBPTR = ALLOC(ASCB_SIZE);
-    ASXBPTR = ALLOC(ASXB_SIZE);
-    TCBPTR  = ALLOC(TCB_SIZE);
+    CVTPTR  = ALLOC(SIZEOF(CVT));
+    ASCBPTR = ALLOC(SIZEOF(ASCB));
+    ASXBPTR = ALLOC(SIZEOF(ASXB));
+    TCBPTR  = ALLOC(SIZEOF(TCB));
 
     /* Set eyecatchers */
     CVTPTR->CVTEYE   = 'CVT ';
