@@ -1,6 +1,6 @@
 number = 39
 slug = "039-error-messages"
-status = "pending"
+status = "in-progress"
 description = "Improve error handling and messages. Add source line number tracking through ..."
 role = "production"
 context_files = []

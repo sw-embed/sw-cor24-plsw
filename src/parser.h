@@ -18,11 +18,13 @@ void parse_init(char *src) {
     lex_scan();  /* prime the first token */
 }
 
-/* Report a parse error */
+/* Report a parse error with line number */
 void parse_error(char *msg) {
     parse_err = 1;
     str_copy(parse_errmsg, msg);
-    uart_putstr("ERROR: ");
+    uart_putstr("SYNTAX ERROR line ");
+    print_int(lex_line);
+    uart_putstr(": ");
     uart_puts(msg);
 }
 
@@ -39,9 +41,9 @@ void parse_advance(void) {
 /* Expect a specific token; consume and advance. Error if wrong. */
 int parse_expect(int type) {
     if (cur_type != type) {
-        uart_putstr("expected ");
+        uart_putstr("  expected ");
         uart_putstr(tok_name(type));
-        uart_putstr(" got ");
+        uart_putstr(", got ");
         uart_putstr(tok_name(cur_type));
         uart_putchar(10);
         parse_error("unexpected token");

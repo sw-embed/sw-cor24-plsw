@@ -45,6 +45,11 @@ void cg_init(void) {
 }
 
 void cg_error(char *msg) {
+    if (!cg_err) {
+        /* Only report first error */
+        uart_putstr("CODEGEN ERROR: ");
+        uart_puts(msg);
+    }
     cg_err = 1;
     cg_errmsg = msg;
 }

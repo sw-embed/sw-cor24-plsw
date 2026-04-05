@@ -5401,15 +5401,13 @@ char *compile_program(char *source) {
     parse_init(source);
     prog = parse_program();
     if (parse_err) {
-        uart_putstr("COMPILE ERROR: ");
-        uart_puts(parse_errmsg);
         return 0;
     }
 
     /* Layout globals */
     layout_globals(prog);
     if (layout_err) {
-        uart_putstr("LAYOUT ERROR: ");
+        uart_putstr("STORAGE ERROR: ");
         uart_puts(layout_errmsg);
         return 0;
     }
@@ -5422,8 +5420,6 @@ char *compile_program(char *source) {
     /* Emit user procedures */
     cg_program_procs(prog);
     if (cg_err) {
-        uart_putstr("CODEGEN ERROR: ");
-        uart_puts(cg_errmsg);
         return 0;
     }
 
