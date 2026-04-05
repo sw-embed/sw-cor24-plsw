@@ -1,6 +1,6 @@
 number = 37
 slug = "037-macro-demo"
-status = "pending"
+status = "in-progress"
 description = "Build macro system demo. Write examples/system.msw with a service macro (e.g...."
 role = "production"
 context_files = []

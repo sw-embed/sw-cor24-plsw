@@ -536,6 +536,19 @@ int parse_stmt(void) {
 
     if (parse_err) return NODE_NULL;
 
+    /* ?MACRO(...) invocation -- expand and re-parse */
+    if (cur_type == TOK_QUESTION) {
+        char *expansion = mac_invoke();
+        if (expansion && expansion[0]) {
+            if (inc_push(expansion)) {
+                lex_scan();  /* start scanning the expansion */
+                return parse_stmt();
+            }
+        }
+        parse_error("macro invocation failed");
+        return NODE_NULL;
+    }
+
     /* IF (cond) THEN stmt ELSE stmt */
     if (cur_type == TOK_IF) {
         parse_advance();
@@ -778,8 +791,13 @@ int parse_program(void) {
         } else if (cur_type == TOK_PROC) {
             child = parse_proc();
         } else {
-            /* Skip label: NAME COLON before PROC */
+            /* Skip label: NAME COLON before PROC, or MACRODEF */
             if (cur_type == TOK_IDENT) {
+                /* Check for MACRODEF -- parse macro definition */
+                if (str_eq_nocase(cur_text, "MACRODEF")) {
+                    mac_parse_def();
+                    continue;
+                }
                 /* Look ahead: could be LABEL: PROC */
                 int nlen = str_len(cur_text);
                 char *name = arena_alloc(nlen + 1);

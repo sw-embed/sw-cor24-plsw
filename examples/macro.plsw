@@ -1,0 +1,23 @@
+/* macro.plsw -- Macro System Demo
+ * Includes system.msw, invokes ?LED_SET and ?NOP macros.
+ * Uses runtime UART_PUTS for output.
+ * Demonstrates: %INCLUDE, MACRODEF, ?MACRO() invocation,
+ * GEN block expansion to inline ASM. */
+
+%INCLUDE system;
+
+DCL MSG(20) CHAR INIT('Macro demo OK');
+
+MAIN: PROC;
+    /* Print message using runtime UART */
+    CALL UART_PUTS(ADDR(MSG));
+
+    /* LED on via macro (active-low: 0=on) */
+    ?LED_SET(VAL(0));
+
+    /* NOP macro -- just loads a constant */
+    ?NOP(COUNT(99));
+
+    /* LED off via macro */
+    ?LED_SET(VAL(1));
+END;

@@ -1,0 +1,19 @@
+/* system.msw -- System service macros for COR24 */
+
+/* ?LED_SET(VAL(n)) -- write a byte to LED MMIO register */
+MACRODEF LED_SET;
+    REQUIRED VAL(expr);
+    GEN DO;
+        'la      r2,16711680';
+        'lc      r0,{VAL}';
+        'sb      r0,0(r2)';
+    END;
+END;
+
+/* ?NOP(COUNT(n)) -- emit n NOP instructions */
+MACRODEF NOP;
+    REQUIRED COUNT(expr);
+    GEN DO;
+        'lc      r0,{COUNT}';
+    END;
+END;

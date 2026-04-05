@@ -5383,6 +5383,7 @@ char *compile_program(char *source) {
     emit_init();
     cg_init();
     cg_static_init();
+    mac_init();
 
     /* Parse */
     parse_init(source);
