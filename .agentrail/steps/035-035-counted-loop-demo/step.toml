@@ -1,6 +1,6 @@
 number = 35
 slug = "035-counted-loop-demo"
-status = "pending"
+status = "in-progress"
 description = "Build counted loop demo. Write examples/loop.plsw that uses DO I = 1 TO 10 to..."
 role = "production"
 context_files = []

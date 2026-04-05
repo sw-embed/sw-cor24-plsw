@@ -1,0 +1,42 @@
+/* loop.plsw -- Counted Loop Demo for PL/SW
+ * Prints numbers 1 through 10 using DO I = 1 TO 10.
+ * Demonstrates: DO count syntax, procedure calls, arithmetic,
+ * integer-to-decimal output via UART. */
+
+DCL DIGITS(12) CHAR;
+
+/* Print an integer to UART as decimal digits */
+PRINT_INT: PROC(N INT);
+    DCL D INT;
+    DCL POS INT;
+
+    /* Handle zero */
+    IF (N = 0) THEN DO;
+        CALL UART_PUTCHAR(48);
+        RETURN;
+    END;
+
+    /* Extract digits into buffer (reverse order) */
+    POS = 0;
+    DO WHILE (N > 0);
+        D = N / 10;
+        DIGITS(POS) = N - D * 10 + 48;
+        N = D;
+        POS = POS + 1;
+    END;
+
+    /* Print digits in forward order */
+    DO WHILE (POS > 0);
+        POS = POS - 1;
+        CALL UART_PUTCHAR(DIGITS(POS));
+    END;
+END;
+
+/* Main: print numbers 1 through 10 */
+MAIN: PROC;
+    DCL I INT;
+    DO I = 1 TO 10;
+        CALL PRINT_INT(I);
+        CALL UART_PUTCHAR(10);
+    END;
+END;

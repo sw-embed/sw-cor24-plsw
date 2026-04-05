@@ -5627,6 +5627,106 @@ void test_led_toggle(void) {
     uart_putchar(10);
 }
 
+void test_counted_loop(void) {
+    int errs;
+    char *src;
+    char *out;
+
+    errs = 0;
+
+    /* Counted loop PL/SW source -- DO I = 1 TO 10, PRINT_INT */
+    src = "DCL DIGITS(12) CHAR;"
+          "PRINT_INT: PROC(N INT);"
+          "  DCL D INT;"
+          "  DCL POS INT;"
+          "  IF (N = 0) THEN DO;"
+          "    CALL UART_PUTCHAR(48);"
+          "    RETURN;"
+          "  END;"
+          "  POS = 0;"
+          "  DO WHILE (N > 0);"
+          "    D = N / 10;"
+          "    DIGITS(POS) = N - D * 10 + 48;"
+          "    N = D;"
+          "    POS = POS + 1;"
+          "  END;"
+          "  DO WHILE (POS > 0);"
+          "    POS = POS - 1;"
+          "    CALL UART_PUTCHAR(DIGITS(POS));"
+          "  END;"
+          "END;"
+          "MAIN: PROC;"
+          "  DCL I INT;"
+          "  DO I = 1 TO 10;"
+          "    CALL PRINT_INT(I);"
+          "    CALL UART_PUTCHAR(10);"
+          "  END;"
+          "END;";
+
+    uart_puts("--- compiling loop.plsw ---");
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        uart_puts("--- generated assembly ---");
+        uart_putstr(out);
+        uart_puts("--- end assembly ---");
+
+        /* Verify PRINT_INT procedure */
+        if (!str_find(out, "_PRINT_INT:")) {
+            uart_puts("  FAIL: missing PRINT_INT proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has PRINT_INT proc");
+        }
+
+        /* Verify MAIN procedure */
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing MAIN proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has MAIN proc");
+        }
+
+        /* Verify DO count loop (call to PRINT_INT inside loop) */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing CALL PRINT_INT");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL PRINT_INT");
+        }
+
+        /* Verify division used for digit extraction */
+        if (!str_find(out, "__plsw_div")) {
+            uart_puts("  FAIL: missing software div routine");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has software division");
+        }
+
+        /* Verify DIGITS array in data section */
+        if (!str_find(out, "_DIGITS:")) {
+            uart_puts("  FAIL: missing DIGITS array");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has DIGITS array");
+        }
+
+        /* Verify CALL UART_PUTCHAR */
+        if (!str_find(out, "la      r2,_UART_PUTCHAR")) {
+            uart_puts("  FAIL: missing CALL UART_PUTCHAR");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL UART_PUTCHAR");
+        }
+    }
+
+    uart_putstr("counted loop compile errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5662,12 +5762,13 @@ int run_suite(int n) {
     else if (n == 30) { uart_puts("=== Conditional Compilation Tests ==="); test_conditional(); }
     else if (n == 31) { uart_puts("=== Hello World Compile ==="); test_hello_world(); }
     else if (n == 32) { uart_puts("=== LED Toggle Compile ==="); test_led_toggle(); }
+    else if (n == 33) { uart_puts("=== Counted Loop Compile ==="); test_counted_loop(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 33
+#define SUITE_COUNT 34
 
 int main() {
     char line[LINE_MAX];
@@ -5676,7 +5777,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-32), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-33), 'a' for all, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 
