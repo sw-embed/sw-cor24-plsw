@@ -1,13 +1,10 @@
-/* cvt.msw -- Communications Vector Table (simplified for COR24) */
-
-%INCLUDE types;
+/* cvt.msw -- Communications Vector Table (COR24) */
 
 DCL 1 CVT BASED,
-  3 CVTEYE     INT,           /* 'CVT ' eyecatcher */
-  3 CVTLEN     INT(16),
+  3 CVTEYE(4)  CHAR,          /* 'CVT ' eyecatcher */
   3 CVTVER     BYTE,
   3 CVTFLAGS   BYTE,
   3 CVTASCBH   PTR,           /* head of ASCB chain */
   3 CVTASCBL   PTR,           /* tail of ASCB chain */
-  3 CVTCASCB   PTR,           /* current ASCB (bootstrap) */
   3 CVTCTCB    PTR;           /* current TCB (bootstrap) */
+/* size = 4 + 1 + 1 + 3 + 3 + 3 = 15. Padded to CVT_SIZE=19 */

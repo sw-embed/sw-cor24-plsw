@@ -1,17 +1,14 @@
-/* ascb.msw -- Address Space Control Block (simplified for COR24) */
-
-%INCLUDE types;
+/* ascb.msw -- Address Space Control Block (COR24) */
 
 DCL 1 ASCB BASED,
-  3 ASCBEYE    INT,           /* 'ASCB' eyecatcher */
-  3 ASCBLEN    INT(16),
+  3 ASCBEYE(4) CHAR,          /* 'ASCB' eyecatcher */
   3 ASCBVER    BYTE,
   3 ASCBFLAGS  BYTE,
   3 ASCBNEXT   PTR,           /* next ASCB in chain */
   3 ASCBPREV   PTR,           /* prev ASCB in chain */
   3 ASCBASID   INT(16),       /* address space ID */
   3 ASCBSTATE  BYTE,
-  3 ASCBTCBH   PTR,           /* first TCB in this AS */
-  3 ASCBTCBL   PTR,           /* last TCB in this AS */
   3 ASCBASXB   PTR,           /* -> ASXB */
-  3 ASCBASTE   PTR;           /* -> ASTE */
+  3 ASCBTCBH   PTR,           /* first TCB in this AS */
+  3 ASCBTCBL   PTR;           /* last TCB in this AS */
+/* size = 4 + 1 + 1 + 3 + 3 + 2 + 1 + 3 + 3 + 3 = 24 */

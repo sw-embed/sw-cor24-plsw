@@ -1,76 +1,37 @@
 /* chain.plsw -- Control Block Chain Demo
- * Arena with eyecatcher header, allocates CVT/ASCB/ASXB/TCB,
+ * Allocates CVT/ASCB/ASXB/TCB from a bump arena,
  * wires pointer chain. Verify with --dump. */
 
-/* --- Arena control block --- */
-DCL 1 ARENABLOCK BASED,
-  3 ARNAEYE(6)  CHAR,
-  3 ARNASIZE    INT,
-  3 ARNAUSED    INT,
-  3 ARNAPOOL(480) BYTE;
-DCL ARENAPTR PTR;
+%INCLUDE types;
+%INCLUDE cvt;
+DCL CVTPTR PTR;
+%INCLUDE ascb;
+DCL ASCBPTR PTR;
+%INCLUDE asxb;
+DCL ASXBPTR PTR;
+%INCLUDE tcb;
+DCL TCBPTR PTR;
 
-/* Static storage for the arena */
-DCL ARENA_STORE(492) BYTE;
+/* --- Arena --- */
+DCL ARENA(512) BYTE;
+DCL ARENA_POS INT INIT(0);
 
-/* Allocate from arena pool. Returns pointer into pool. */
 ALLOC: PROC(SIZE INT) RETURNS(INT);
     DCL BASE INT;
-    DCL POOL_BASE INT;
-    POOL_BASE = ARENAPTR + 12;
-    BASE = POOL_BASE + ARENAPTR->ARNAUSED;
-    ARENAPTR->ARNAUSED = ARENAPTR->ARNAUSED + SIZE;
+    BASE = ADDR(ARENA) + ARENA_POS;
+    ARENA_POS = ARENA_POS + SIZE;
     RETURN(BASE);
 END;
 
-/* --- Control block templates (BASED) --- */
-
-DCL 1 CVT BASED,
-  3 CVTEYE(5)  CHAR,
-  3 CVTASCBH   PTR,
-  3 CVTASCBL   PTR,
-  3 CVTCTCB    PTR;
-DCL CVTPTR PTR;
-
-DCL 1 ASCB BASED,
-  3 ASCBEYE(5) CHAR,
-  3 ASCBNEXT   PTR,
-  3 ASCBPREV   PTR,
-  3 ASCBASID   INT(16),
-  3 ASCBASXB   PTR,
-  3 ASCBTCBH   PTR,
-  3 ASCBTCBL   PTR;
-DCL ASCBPTR PTR;
-
-DCL 1 ASXB BASED,
-  3 ASXBEYE(5) CHAR,
-  3 ASXBASCB   PTR,
-  3 ASXBFTCB   PTR,
-  3 ASXBLTCB   PTR;
-DCL ASXBPTR PTR;
-
-DCL 1 TCB BASED,
-  3 TCBEYE(5)  CHAR,
-  3 TCBNEXT    PTR,
-  3 TCBPREV    PTR,
-  3 TCBASCB    PTR;
-DCL TCBPTR PTR;
-
 /* --- Main: build the chain --- */
 MAIN: PROC;
-    /* Initialize arena */
-    ARENAPTR = ADDR(ARENA_STORE);
-    ARENAPTR->ARNAEYE = 'ARENA';
-    ARENAPTR->ARNASIZE = 480;
-    ARENAPTR->ARNAUSED = 0;
-
     /* Allocate control blocks */
-    CVTPTR  = ALLOC(14);
-    ASCBPTR = ALLOC(24);
-    ASXBPTR = ALLOC(14);
-    TCBPTR  = ALLOC(14);
+    CVTPTR  = ALLOC(CVT_SIZE);
+    ASCBPTR = ALLOC(ASCB_SIZE);
+    ASXBPTR = ALLOC(ASXB_SIZE);
+    TCBPTR  = ALLOC(TCB_SIZE);
 
-    /* Set eyecatchers -- direct string assignment */
+    /* Set eyecatchers */
     CVTPTR->CVTEYE   = 'CVT ';
     ASCBPTR->ASCBEYE  = 'ASCB';
     ASXBPTR->ASXBEYE  = 'ASXB';

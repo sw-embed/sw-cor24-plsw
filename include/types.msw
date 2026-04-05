@@ -1,13 +1,8 @@
-/* types.msw -- Simplified type aliases for PL/SW on COR24
- * Maps swvs types to compiler-supported primitives. */
+/* types.msw -- Common constants for PL/SW control blocks on COR24 */
 
-/* Scalar types -- all map to compiler primitives */
-/* U8, I8, FLAGS8, STATE_T, MODE_T, KEY_T, CPU_T -> BYTE */
-/* U16, I16, ASID_T, TID_T, REASON_T, PCNO_T -> INT(16) */
-/* U24, I24, WORD24, PTRN24 -> INT (24-bit) */
-
-/* Size constants for control block allocation */
-DCL CVT_SIZE INT INIT(60);
-DCL ASCB_SIZE INT INIT(48);
-DCL ASXB_SIZE INT INIT(42);
-DCL TCB_SIZE INT INIT(48);
+/* Size constants for control block allocation.
+ * Must match the BASED record layouts in cvt/ascb/asxb/tcb.msw */
+DCL CVT_SIZE  INT INIT(15);
+DCL ASCB_SIZE INT INIT(24);
+DCL ASXB_SIZE INT INIT(18);
+DCL TCB_SIZE  INT INIT(17);

@@ -36,6 +36,10 @@ pipeline-dump *args: build
 hello-macro: build
     ./scripts/pipeline-dump.sh examples/greet.msw examples/hello_macro.plsw
 
+# Compile chain example (control block demo with .msw includes)
+chain: build
+    ./scripts/pipeline-dump.sh include/types.msw include/cvt.msw include/ascb.msw include/asxb.msw include/tcb.msw examples/chain.plsw
+
 # Clean build artifacts
 clean:
-    rm -f build/*.s build/out.s build/run-dump.txt
+    rm -f build/*.s build/*-combined.plsw build/*-dump.txt
