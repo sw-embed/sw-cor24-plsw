@@ -1086,22 +1086,22 @@ int cg_add_string(char *s) {
     return lbl;
 }
 
-/* Emit a single string literal as .byte directives with null terminator */
+/* Emit a string literal as comma-separated .byte with null terminator */
 void cg_emit_string_bytes(char *s) {
     int i;
-    int ch;
 
+    emit_str(EMIT_INDENT);
+    emit_str(".byte   ");
     i = 0;
     while (s[i]) {
-        emit_str(EMIT_INDENT);
-        emit_str(".byte   ");
+        if (i > 0) emit_str(",");
         emit_int(s[i]);
-        emit_nl();
         i = i + 1;
     }
     /* Null terminator */
-    emit_str(EMIT_INDENT);
-    emit_line(".byte   0");
+    if (i > 0) emit_str(",");
+    emit_str("0");
+    emit_nl();
 }
 
 /* Emit all collected string literals in the .data section */
@@ -1155,22 +1155,22 @@ void cg_emit_static_var(int sym_idx, int init_node) {
 
     if (init_node != NODE_NULL && nd_kind[init_node] == NODE_LITERAL) {
         if (nd_type[init_node] == TYPE_CHAR && nd_name[init_node]) {
-            /* String initializer: emit bytes */
+            /* String initializer: emit as comma-separated .byte */
             sval = nd_name[init_node];
+            emit_str(EMIT_INDENT);
+            emit_str(".byte   ");
             i = 0;
             while (sval[i]) {
-                emit_str(EMIT_INDENT);
-                emit_str(".byte   ");
+                if (i > 0) emit_str(",");
                 emit_int(sval[i]);
-                emit_nl();
                 i = i + 1;
             }
-            /* Pad remaining space with zeros */
+            /* Pad remaining with zeros up to declared width */
             while (i < w) {
-                emit_str(EMIT_INDENT);
-                emit_line(".byte   0");
+                emit_str(",0");
                 i = i + 1;
             }
+            emit_nl();
         } else {
             /* Numeric initializer */
             val = nd_ival[init_node];
