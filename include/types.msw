@@ -1,8 +1,0 @@
-/* types.msw -- Common constants for PL/SW control blocks on COR24 */
-
-/* Size constants for control block allocation.
- * Must match the BASED record layouts in cvt/ascb/asxb/tcb.msw */
-DCL CVT_SIZE  INT INIT(15);
-DCL ASCB_SIZE INT INIT(24);
-DCL ASXB_SIZE INT INIT(18);
-DCL TCB_SIZE  INT INIT(17);
