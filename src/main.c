@@ -3357,7 +3357,7 @@ void test_if_codegen(void) {
             errs = errs + 1;
         }
         /* Branch to skip then-body when false */
-        if (!str_find(out, "bc      ")) {
+        if (!str_find(out, "brt     ")) {
             uart_puts("  FAIL: missing bc (conditional branch)");
             errs = errs + 1;
         }
@@ -3367,7 +3367,7 @@ void test_if_codegen(void) {
             errs = errs + 1;
         }
         /* No jmp to label (no else means no jump-over-else) */
-        if (str_find(out, "jmp     L")) {
+        if (str_find(out, "bra     L")) {
             uart_puts("  FAIL: unexpected jmp in if/then (no else)");
             errs = errs + 1;
         }
@@ -3400,12 +3400,12 @@ void test_if_codegen(void) {
             uart_puts("  FAIL: missing condition branch (ceq r0,z)");
             errs = errs + 1;
         }
-        if (!str_find(out, "bc      ")) {
+        if (!str_find(out, "brt     ")) {
             uart_puts("  FAIL: missing bc (conditional branch to else)");
             errs = errs + 1;
         }
         /* Must have jmp to skip else block after then */
-        if (!str_find(out, "jmp     L")) {
+        if (!str_find(out, "bra     L")) {
             uart_puts("  FAIL: missing jmp (skip else after then)");
             errs = errs + 1;
         }
@@ -3506,12 +3506,12 @@ void test_do_while_codegen(void) {
             errs = errs + 1;
         }
         /* Conditional branch to end */
-        if (!str_find(out, "bc      ")) {
+        if (!str_find(out, "brt     ")) {
             uart_puts("  FAIL: missing bc (branch to end)");
             errs = errs + 1;
         }
         /* Unconditional branch back to top */
-        if (!str_find(out, "jmp     L0")) {
+        if (!str_find(out, "bra     L0")) {
             uart_puts("  FAIL: missing jmp back to header (jmp L0)");
             errs = errs + 1;
         }
@@ -3555,7 +3555,7 @@ void test_do_while_codegen(void) {
             errs = errs + 1;
         }
         /* Loop structure: header, condition, body, jump back */
-        if (!str_find(out, "jmp     L")) {
+        if (!str_find(out, "bra     L")) {
             uart_puts("  FAIL: missing jump back to loop header");
             errs = errs + 1;
         }
@@ -3593,11 +3593,11 @@ void test_do_while_codegen(void) {
             errs = errs + 1;
         }
         /* Jump back for both loops */
-        if (!str_find(out, "jmp     L0")) {
+        if (!str_find(out, "bra     L0")) {
             uart_puts("  FAIL: missing outer loop jmp back");
             errs = errs + 1;
         }
-        if (!str_find(out, "jmp     L2")) {
+        if (!str_find(out, "bra     L2")) {
             uart_puts("  FAIL: missing inner loop jmp back");
             errs = errs + 1;
         }
@@ -3654,7 +3654,7 @@ void test_do_count_codegen(void) {
             errs = errs + 1;
         }
         /* Branch to end when I > end */
-        if (!str_find(out, "bc      ")) {
+        if (!str_find(out, "brt     ")) {
             uart_puts("  FAIL: missing bc (branch to end)");
             errs = errs + 1;
         }
@@ -3664,7 +3664,7 @@ void test_do_count_codegen(void) {
             errs = errs + 1;
         }
         /* Jump back to header */
-        if (!str_find(out, "jmp     L0")) {
+        if (!str_find(out, "bra     L0")) {
             uart_puts("  FAIL: missing jmp back to header (jmp L0)");
             errs = errs + 1;
         }
@@ -3752,11 +3752,11 @@ void test_do_count_codegen(void) {
             errs = errs + 1;
         }
         /* Jump back for both loops */
-        if (!str_find(out, "jmp     L0")) {
+        if (!str_find(out, "bra     L0")) {
             uart_puts("  FAIL: missing outer loop jmp back");
             errs = errs + 1;
         }
-        if (!str_find(out, "jmp     L2")) {
+        if (!str_find(out, "bra     L2")) {
             uart_puts("  FAIL: missing inner loop jmp back");
             errs = errs + 1;
         }
@@ -5598,7 +5598,7 @@ void test_led_toggle(void) {
         }
 
         /* Verify DO WHILE loop structure */
-        if (!str_find(out, "L") && str_find(out, "jmp")) {
+        if (!str_find(out, "L") && str_find(out, "bra")) {
             uart_puts("  FAIL: missing loop structure");
             errs = errs + 1;
         } else {

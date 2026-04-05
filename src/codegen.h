@@ -1262,14 +1262,14 @@ void cg_if(int node) {
         /* Branch to else if r0 == 0 (condition false) */
         emit_instr("ceq     r0,z");
         emit_str(EMIT_INDENT);
-        emit_str("bc      ");
+        emit_str("brt     ");
         emit_label_ref(lbl_else);
         emit_nl();
 
         /* Then body */
         cg_stmt(nd_right[node]);
         emit_str(EMIT_INDENT);
-        emit_str("jmp     ");
+        emit_str("bra     ");
         emit_label_ref(lbl_end);
         emit_nl();
 
@@ -1286,7 +1286,7 @@ void cg_if(int node) {
         /* Branch to end if r0 == 0 (condition false) */
         emit_instr("ceq     r0,z");
         emit_str(EMIT_INDENT);
-        emit_str("bc      ");
+        emit_str("brt     ");
         emit_label_ref(lbl_end);
         emit_nl();
 
@@ -1316,7 +1316,7 @@ void cg_do_while(int node) {
     /* Branch to end if r0 == 0 (condition false) */
     emit_instr("ceq     r0,z");
     emit_str(EMIT_INDENT);
-    emit_str("bc      ");
+    emit_str("brt     ");
     emit_label_ref(lbl_end);
     emit_nl();
 
@@ -1325,7 +1325,7 @@ void cg_do_while(int node) {
 
     /* Branch back to header */
     emit_str(EMIT_INDENT);
-    emit_str("jmp     ");
+    emit_str("bra     ");
     emit_label_ref(lbl_top);
     emit_nl();
 
@@ -1360,7 +1360,7 @@ void cg_do_count(int node) {
     /* Branch to end if I > end (i.e., end < I) */
     emit_instr("cls     r1,r0");  /* carry if end < I */
     emit_str(EMIT_INDENT);
-    emit_str("bc      ");
+    emit_str("brt     ");
     emit_label_ref(lbl_end);
     emit_nl();
 
@@ -1375,7 +1375,7 @@ void cg_do_count(int node) {
 
     /* Branch back to header */
     emit_str(EMIT_INDENT);
-    emit_str("jmp     ");
+    emit_str("bra     ");
     emit_label_ref(lbl_top);
     emit_nl();
 
