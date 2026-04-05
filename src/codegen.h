@@ -1137,6 +1137,18 @@ void cg_emit_static_var(int sym_idx, int init_node) {
 
     emit_data_section();
 
+    /* Large zero-fill without initializer: use .comm */
+    if (init_node == NODE_NULL && w > 3) {
+        emit_comment(sym_name[sym_idx]);
+        emit_str(EMIT_INDENT);
+        emit_str(".comm   _");
+        emit_str(sym_name[sym_idx]);
+        emit_str(", ");
+        emit_int(w);
+        emit_nl();
+        return;
+    }
+
     /* Emit label at the static address */
     emit_comment(sym_name[sym_idx]);
     emit_named_label(sym_name[sym_idx]);
@@ -1175,21 +1187,13 @@ void cg_emit_static_var(int sym_idx, int init_node) {
             }
         }
     } else {
-        /* No initializer: zero-fill */
+        /* No initializer: zero-fill (small vars only, large handled above) */
         if (w == 1) {
             emit_str(EMIT_INDENT);
             emit_line(".byte   0");
-        } else if (w <= 3) {
+        } else {
             emit_str(EMIT_INDENT);
             emit_line(".word   0");
-        } else {
-            /* Large zero fill: emit individual bytes */
-            i = 0;
-            while (i < w) {
-                emit_str(EMIT_INDENT);
-                emit_line(".byte   0");
-                i = i + 1;
-            }
         }
     }
 }
