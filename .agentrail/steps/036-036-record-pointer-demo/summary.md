@@ -1,0 +1,1 @@
+Added record and pointer demo (examples/record.plsw) with level-based DCL, field access, ADDR(), pointer dereference P->field, and field arithmetic. Added test suite 34 (test_record_pointer) with 7 checks -- all passing. Bumped SUITE_COUNT to 35.

@@ -21,6 +21,12 @@ run-input input: build
 test: build
     cor24-run --run {{main_s}} --terminal --speed 0 -n 100000000
 
+# Compile and run a .plsw program end-to-end
+# Usage: just pipeline examples/hello.plsw
+#        just pipeline examples/greet.msw examples/hello_macro.plsw
+pipeline *args: build
+    ./scripts/pipeline.sh {{args}}
+
 # Clean build artifacts
 clean:
     rm -f build/*.s
