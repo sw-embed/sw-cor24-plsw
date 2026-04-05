@@ -1,6 +1,6 @@
 number = 34
 slug = "034-led-toggle"
-status = "pending"
+status = "in-progress"
 description = "Build LED toggle demo. Write examples/led.plsw that uses inline ASM to write ..."
 role = "production"
 context_files = []

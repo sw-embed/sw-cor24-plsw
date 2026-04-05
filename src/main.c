@@ -5512,6 +5512,121 @@ void test_hello_world(void) {
     uart_putchar(10);
 }
 
+void test_led_toggle(void) {
+    int errs;
+    char *src;
+    char *out;
+
+    errs = 0;
+
+    /* LED toggle PL/SW source -- inline ASM + DO WHILE + MMIO */
+    src = "DCL LED_STATE BYTE INIT(0);"
+          "DCL COUNT INT;"
+          "DELAY: PROC;"
+          "  COUNT = 0;"
+          "  DO WHILE (COUNT < 50000);"
+          "    COUNT = COUNT + 1;"
+          "  END;"
+          "END;"
+          "LED_WRITE: PROC(VAL BYTE);"
+          "  ASM DO;"
+          "    'la      r0,0xFF0000';"
+          "    'lw      r1,9(fp)';"
+          "    'sb      r1,0(r0)';"
+          "  END;"
+          "END;"
+          "MAIN: PROC;"
+          "  DCL I INT;"
+          "  I = 0;"
+          "  DO WHILE (I < 10);"
+          "    IF (LED_STATE = 0) THEN"
+          "      LED_STATE = 1;"
+          "    ELSE"
+          "      LED_STATE = 0;"
+          "    CALL LED_WRITE(LED_STATE);"
+          "    CALL DELAY();"
+          "    I = I + 1;"
+          "  END;"
+          "  CALL LED_WRITE(0);"
+          "END;";
+
+    uart_puts("--- compiling led.plsw ---");
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        uart_puts("--- generated assembly ---");
+        uart_putstr(out);
+        uart_puts("--- end assembly ---");
+
+        /* Verify inline ASM passthrough */
+        if (!str_find(out, "la      r0,0xFF0000")) {
+            uart_puts("  FAIL: missing LED MMIO address");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has LED MMIO address");
+        }
+
+        if (!str_find(out, "sb      r1,0(r0)")) {
+            uart_puts("  FAIL: missing store byte to MMIO");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has store byte to MMIO");
+        }
+
+        /* Verify procedures */
+        if (!str_find(out, "_DELAY:")) {
+            uart_puts("  FAIL: missing DELAY proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has DELAY proc");
+        }
+
+        if (!str_find(out, "_LED_WRITE:")) {
+            uart_puts("  FAIL: missing LED_WRITE proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has LED_WRITE proc");
+        }
+
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing MAIN proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has MAIN proc");
+        }
+
+        /* Verify DO WHILE loop structure */
+        if (!str_find(out, "L") && str_find(out, "jmp")) {
+            uart_puts("  FAIL: missing loop structure");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has loop structure");
+        }
+
+        /* Verify CALL to LED_WRITE */
+        if (!str_find(out, "la      r2,_LED_WRITE")) {
+            uart_puts("  FAIL: missing CALL LED_WRITE");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL LED_WRITE");
+        }
+
+        /* Verify CALL to DELAY */
+        if (!str_find(out, "la      r2,_DELAY")) {
+            uart_puts("  FAIL: missing CALL DELAY");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL DELAY");
+        }
+    }
+
+    uart_putstr("led toggle compile errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5546,12 +5661,13 @@ int run_suite(int n) {
     else if (n == 29) { uart_puts("=== Macro Expansion Tests ==="); test_macro_expand(); }
     else if (n == 30) { uart_puts("=== Conditional Compilation Tests ==="); test_conditional(); }
     else if (n == 31) { uart_puts("=== Hello World Compile ==="); test_hello_world(); }
+    else if (n == 32) { uart_puts("=== LED Toggle Compile ==="); test_led_toggle(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 32
+#define SUITE_COUNT 33
 
 int main() {
     char line[LINE_MAX];
@@ -5560,7 +5676,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-31), 'a' for all, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-32), 'a' for all, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 

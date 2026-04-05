@@ -1,0 +1,48 @@
+/* led.plsw -- LED Toggle Demo for PL/SW
+ * Toggles the LED at MMIO address 0xFF0000 on/off
+ * in a loop with a delay between toggles.
+ * Demonstrates: inline ASM, MMIO access, DO WHILE loop. */
+
+DCL LED_STATE BYTE INIT(0);
+DCL COUNT INT;
+
+/* Delay loop -- waste cycles for visible toggle */
+DELAY: PROC;
+    COUNT = 0;
+    DO WHILE (COUNT < 50000);
+        COUNT = COUNT + 1;
+    END;
+END;
+
+/* Write a byte to the LED MMIO register via inline ASM */
+LED_WRITE: PROC(VAL BYTE);
+    ASM DO;
+        'la      r0,0xFF0000';
+        'lw      r1,9(fp)';
+        'sb      r1,0(r0)';
+    END;
+END;
+
+/* Main: toggle LED on/off 10 times */
+MAIN: PROC;
+    DCL I INT;
+    I = 0;
+    DO WHILE (I < 10);
+        /* Toggle state: 0->1, 1->0 */
+        IF (LED_STATE = 0) THEN
+            LED_STATE = 1;
+        ELSE
+            LED_STATE = 0;
+
+        /* Write to LED hardware */
+        CALL LED_WRITE(LED_STATE);
+
+        /* Wait for visible effect */
+        CALL DELAY();
+
+        I = I + 1;
+    END;
+
+    /* Turn LED off at exit */
+    CALL LED_WRITE(0);
+END;
