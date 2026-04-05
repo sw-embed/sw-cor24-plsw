@@ -1,11 +1,11 @@
 /* chain.plsw -- Control Block Chain Demo
  * Allocates CVT, ASCB, ASXB, TCB from a bump arena and
  * wires the pointer chain: CVT -> ASCB -> ASXB, ASCB -> TCB.
- * Verify with --dump to see eyecatchers and pointer linkage in memory.
+ * Verify with --dump to see eyecatchers and pointers in memory.
  *
- * On a real system the CVT address lives at a fixed lowcore offset
- * (PSA+0x10). On COR24 that conflicts with the loaded program,
- * so CVTPTR is a variable here. */
+ * On a real system the CVT address lives at a fixed lowcore
+ * offset (PSA+0x10). On COR24 that conflicts with the loaded
+ * program, so CVTPTR is a variable. */
 
 /* --- Arena allocator --- */
 DCL ARENA(512) BYTE;
@@ -18,66 +18,93 @@ ALLOC: PROC(SIZE INT) RETURNS(INT);
     RETURN(BASE);
 END;
 
-/* --- Control block declarations (BASED = template only) --- */
+/* --- Control block declarations (BASED = layout template) ---
+ * Each block starts with a 4-byte eyecatcher stored as an array,
+ * followed by pointer fields for chain linkage.
+ * Sizes: CVT=16, ASCB=25, ASXB=16, TCB=19 */
 
 DCL 1 CVT BASED,
-  3 CVTEYE     INT,
+  3 CVTEYE(4)  CHAR,
   3 CVTASCBH   PTR,
-  3 CVTASCBL   PTR;
+  3 CVTASCBL   PTR,
+  3 CVTCTCB    PTR;
 DCL CVTPTR PTR;
 
 DCL 1 ASCB BASED,
-  3 ASCBEYE    INT,
+  3 ASCBEYE(4) CHAR,
   3 ASCBNEXT   PTR,
   3 ASCBPREV   PTR,
+  3 ASCBASID   INT(16),
   3 ASCBASXB   PTR,
-  3 ASCBTCBH   PTR;
+  3 ASCBTCBH   PTR,
+  3 ASCBTCBL   PTR;
 DCL ASCBPTR PTR;
 
 DCL 1 ASXB BASED,
-  3 ASXBEYE    INT,
+  3 ASXBEYE(4) CHAR,
   3 ASXBASCB   PTR,
-  3 ASXBFTCB   PTR;
+  3 ASXBFTCB   PTR,
+  3 ASXBLTCB   PTR;
 DCL ASXBPTR PTR;
 
 DCL 1 TCB BASED,
-  3 TCBEYE     INT,
+  3 TCBEYE(4)  CHAR,
   3 TCBNEXT    PTR,
   3 TCBPREV    PTR,
   3 TCBASCB    PTR;
 DCL TCBPTR PTR;
 
+/* Set 4-byte eyecatcher at ptr: e.g. 'C','V','T',' ' */
+SET_EYE: PROC(P PTR, C0 INT, C1 INT, C2 INT, C3 INT);
+    ASM DO;
+        'lw      r0,9(fp)';
+        'mov     r2,r0';
+        'lw      r0,12(fp)';
+        'sb      r0,0(r2)';
+        'lw      r0,15(fp)';
+        'sb      r0,1(r2)';
+        'lw      r0,18(fp)';
+        'sb      r0,2(r2)';
+        'lw      r0,21(fp)';
+        'sb      r0,3(r2)';
+    END;
+END;
+
 /* --- Main: build the chain --- */
 MAIN: PROC;
     /* Allocate from arena */
-    CVTPTR  = ALLOC(9);
-    ASCBPTR = ALLOC(18);
-    ASXBPTR = ALLOC(12);
-    TCBPTR  = ALLOC(15);
+    CVTPTR  = ALLOC(16);
+    ASCBPTR = ALLOC(25);
+    ASXBPTR = ALLOC(16);
+    TCBPTR  = ALLOC(19);
 
-    /* Set eyecatchers (CVT=0xC10000, ASCB=0xA5CB00, etc.) */
-    CVTPTR->CVTEYE   = 12648448;
-    ASCBPTR->ASCBEYE  = 10866432;
-    ASXBPTR->ASXBEYE  = 10870528;
-    TCBPTR->TCBEYE   = 15584256;
+    /* Set ASCII eyecatchers (visible in hex dump) */
+    CALL SET_EYE(CVTPTR,  67, 86, 84, 32);
+    CALL SET_EYE(ASCBPTR, 65, 83, 67, 66);
+    CALL SET_EYE(ASXBPTR, 65, 83, 88, 66);
+    CALL SET_EYE(TCBPTR,  84, 67, 66, 32);
 
-    /* Wire: CVT -> ASCB */
+    /* Wire: CVT -> ASCB (head and tail, single entry) */
     CVTPTR->CVTASCBH  = ASCBPTR;
     CVTPTR->CVTASCBL  = ASCBPTR;
+    CVTPTR->CVTCTCB   = TCBPTR;
 
-    /* Wire: ASCB chain (single entry) */
+    /* Wire: ASCB chain (single entry, no next/prev) */
     ASCBPTR->ASCBNEXT  = 0;
     ASCBPTR->ASCBPREV  = 0;
+    ASCBPTR->ASCBASID  = 1;
 
     /* Wire: ASCB -> ASXB, ASCB -> TCB */
     ASCBPTR->ASCBASXB  = ASXBPTR;
     ASCBPTR->ASCBTCBH  = TCBPTR;
+    ASCBPTR->ASCBTCBL  = TCBPTR;
 
     /* Wire: ASXB back to ASCB, ASXB -> TCB */
     ASXBPTR->ASXBASCB  = ASCBPTR;
     ASXBPTR->ASXBFTCB  = TCBPTR;
+    ASXBPTR->ASXBLTCB  = TCBPTR;
 
-    /* Wire: TCB chain (single entry), back to ASCB */
+    /* Wire: TCB (single, no next/prev), back to ASCB */
     TCBPTR->TCBNEXT    = 0;
     TCBPTR->TCBPREV    = 0;
     TCBPTR->TCBASCB    = ASCBPTR;
