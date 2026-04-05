@@ -59,6 +59,20 @@ build_input() {
 
 INPUT=$(build_input)
 
+# Save combined source with file-path comments
+BASENAME=$(basename "$MAIN" .plsw)
+OUT_COMBINED="build/${BASENAME}-combined.plsw"
+{
+    for m in "${MACROS[@]+"${MACROS[@]}"}"; do
+        echo "/* ---- $(realpath "$m") ---- */"
+        cat "$m"
+        echo ""
+    done
+    echo "/* ---- $(realpath "$MAIN") ---- */"
+    cat "$MAIN"
+} > "$OUT_COMBINED"
+echo "Combined source: $OUT_COMBINED" >&2
+
 # Compile
 echo "=== Compiling $(basename "$MAIN") ===" >&2
 COMPILER_OUT=$(cor24-run --run "$COMPILER_ASM" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)

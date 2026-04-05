@@ -1207,9 +1207,13 @@ void cg_emit_static_data(int prog_node) {
 
     if (prog_node == NODE_NULL) return;
 
+    /* Reset listing state so DCL lines show in data section */
+    cg_last_line = 0;
+
     child = nd_left[prog_node];
     while (child != NODE_NULL) {
         if (nd_kind[child] == NODE_DCL) {
+            cg_source_comment(child);
             idx = sym_lookup(nd_name[child]);
             if (idx >= 0) {
                 cg_emit_static_var(idx, nd_right[child]);
