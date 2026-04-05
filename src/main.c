@@ -5727,6 +5727,119 @@ void test_counted_loop(void) {
     uart_putchar(10);
 }
 
+void test_record_pointer(void) {
+    int errs;
+    char *src;
+    char *out;
+
+    errs = 0;
+
+    /* Record and pointer PL/SW source */
+    src = "DCL DIGITS(12) CHAR;"
+          "PRINT_INT: PROC(N INT);"
+          "  DCL D INT;"
+          "  DCL POS INT;"
+          "  IF (N = 0) THEN DO;"
+          "    CALL UART_PUTCHAR(48);"
+          "    RETURN;"
+          "  END;"
+          "  POS = 0;"
+          "  DO WHILE (N > 0);"
+          "    D = N / 10;"
+          "    DIGITS(POS) = N - D * 10 + 48;"
+          "    N = D;"
+          "    POS = POS + 1;"
+          "  END;"
+          "  DO WHILE (POS > 0);"
+          "    POS = POS - 1;"
+          "    CALL UART_PUTCHAR(DIGITS(POS));"
+          "  END;"
+          "END;"
+          "MAIN: PROC;"
+          "  DCL 1 POINT, 3 X INT, 3 Y INT;"
+          "  DCL P PTR;"
+          "  POINT.X = 100;"
+          "  POINT.Y = 200;"
+          "  CALL PRINT_INT(POINT.X);"
+          "  CALL PRINT_INT(POINT.Y);"
+          "  P = ADDR(POINT);"
+          "  CALL PRINT_INT(P->X);"
+          "  CALL PRINT_INT(P->Y);"
+          "  CALL PRINT_INT(P->X + P->Y);"
+          "END;";
+
+    uart_puts("--- compiling record.plsw ---");
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        uart_puts("--- generated assembly ---");
+        uart_putstr(out);
+        uart_puts("--- end assembly ---");
+
+        /* Verify MAIN procedure */
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing MAIN proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has MAIN proc");
+        }
+
+        /* Verify PRINT_INT procedure */
+        if (!str_find(out, "_PRINT_INT:")) {
+            uart_puts("  FAIL: missing PRINT_INT proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has PRINT_INT proc");
+        }
+
+        /* Verify record field store (sw to computed offset) */
+        if (!str_find(out, "sw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing record field store");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has record field store");
+        }
+
+        /* Verify ADDR operation (add r0,fp for local address) */
+        if (!str_find(out, "add     r0,fp")) {
+            uart_puts("  FAIL: missing ADDR (add r0,fp)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has ADDR operation");
+        }
+
+        /* Verify pointer dereference load (lw r0,0(r2)) */
+        if (!str_find(out, "lw      r0,0(r2)")) {
+            uart_puts("  FAIL: missing ptr->field load");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has ptr->field load");
+        }
+
+        /* Verify addition for P->X + P->Y */
+        if (!str_find(out, "add     r0,r1")) {
+            uart_puts("  FAIL: missing add for field sum");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has field sum addition");
+        }
+
+        /* Verify calls to PRINT_INT */
+        if (!str_find(out, "la      r2,_PRINT_INT")) {
+            uart_puts("  FAIL: missing CALL PRINT_INT");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has CALL PRINT_INT");
+        }
+    }
+
+    uart_putstr("record pointer compile errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5763,12 +5876,13 @@ int run_suite(int n) {
     else if (n == 31) { uart_puts("=== Hello World Compile ==="); test_hello_world(); }
     else if (n == 32) { uart_puts("=== LED Toggle Compile ==="); test_led_toggle(); }
     else if (n == 33) { uart_puts("=== Counted Loop Compile ==="); test_counted_loop(); }
+    else if (n == 34) { uart_puts("=== Record Pointer Compile ==="); test_record_pointer(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 34
+#define SUITE_COUNT 35
 
 /* Source buffer for compile mode -- 4KB */
 #define SRC_BUF_SIZE 4096
@@ -5802,7 +5916,7 @@ int main() {
 
     uart_puts("PL/SW Compiler v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-33), 'a' for all, 'c' to compile, or 'r' for REPL: ");
+    uart_putstr("Enter suite # (0-34), 'a' for all, 'c' to compile, or 'r' for REPL: ");
 
     len = uart_getline(line, LINE_MAX);
 

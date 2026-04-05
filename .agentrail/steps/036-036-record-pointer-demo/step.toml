@@ -1,6 +1,6 @@
 number = 36
 slug = "036-record-pointer-demo"
-status = "pending"
+status = "in-progress"
 description = "Build record and pointer demo. Write examples/record.plsw that declares a mul..."
 role = "production"
 context_files = []

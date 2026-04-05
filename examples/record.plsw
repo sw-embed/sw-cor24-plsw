@@ -1,0 +1,68 @@
+/* record.plsw -- Record and Pointer Demo for PL/SW
+ * Declares a multi-level record, fills fields, takes address,
+ * accesses fields via pointer dereference.
+ * Demonstrates: level-based DCL, record field access, ADDR(),
+ * pointer dereference (P->field), arithmetic on fields. */
+
+DCL DIGITS(12) CHAR;
+
+/* Print an integer to UART as decimal digits */
+PRINT_INT: PROC(N INT);
+    DCL D INT;
+    DCL POS INT;
+
+    IF (N = 0) THEN DO;
+        CALL UART_PUTCHAR(48);
+        RETURN;
+    END;
+
+    POS = 0;
+    DO WHILE (N > 0);
+        D = N / 10;
+        DIGITS(POS) = N - D * 10 + 48;
+        N = D;
+        POS = POS + 1;
+    END;
+
+    DO WHILE (POS > 0);
+        POS = POS - 1;
+        CALL UART_PUTCHAR(DIGITS(POS));
+    END;
+END;
+
+/* Main: record and pointer operations */
+MAIN: PROC;
+    DCL 1 POINT,
+        3 X INT,
+        3 Y INT;
+    DCL P PTR;
+
+    /* Fill record fields directly */
+    POINT.X = 100;
+    POINT.Y = 200;
+
+    /* Print field values */
+    CALL UART_PUTS(ADDR('X = '));
+    CALL PRINT_INT(POINT.X);
+    CALL UART_PUTCHAR(10);
+
+    CALL UART_PUTS(ADDR('Y = '));
+    CALL PRINT_INT(POINT.Y);
+    CALL UART_PUTCHAR(10);
+
+    /* Take address, access via pointer */
+    P = ADDR(POINT);
+
+    CALL UART_PUTS(ADDR('P->X = '));
+    CALL PRINT_INT(P->X);
+    CALL UART_PUTCHAR(10);
+
+    CALL UART_PUTS(ADDR('P->Y = '));
+    CALL PRINT_INT(P->Y);
+    CALL UART_PUTCHAR(10);
+
+    /* Compute sum via pointer */
+    CALL UART_PUTS(ADDR('Sum = '));
+    CALL PRINT_INT(P->X + P->Y);
+    CALL UART_PUTCHAR(10);
+END;
