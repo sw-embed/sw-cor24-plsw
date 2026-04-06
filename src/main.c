@@ -6001,7 +6001,7 @@ int run_suite(int n) {
 char src_buf[SRC_BUF_SIZE];
 
 /* Include file buffer -- stores content for FILE: uploads */
-#define INC_BUF_SIZE 12288
+#define INC_BUF_SIZE 32768
 char inc_buf[INC_BUF_SIZE];
 int inc_buf_top;
 

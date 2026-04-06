@@ -1,6 +1,6 @@
 number = 43
 slug = "increase-include-buffer"
-status = "pending"
+status = "in-progress"
 description = "Increase the include buffer size from 12KB to a larger value (GitHub issue #3..."
 role = "production"
 context_files = []
