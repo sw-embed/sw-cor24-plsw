@@ -1,0 +1,1 @@
+Increased SRC_BUF_SIZE from 32768 to 65536 in main.c (GitHub #26).

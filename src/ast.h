@@ -52,7 +52,7 @@
 #define NODE_NULL (-1)
 
 /* Node pool -- parallel arrays */
-#define NODE_POOL_MAX 4096
+#define NODE_POOL_MAX 8192
 
 int nd_kind[NODE_POOL_MAX];       /* node kind */
 int nd_type[NODE_POOL_MAX];       /* type info */
@@ -79,7 +79,7 @@ int nd_alloc(int kind) {
     if (nd_count >= NODE_POOL_MAX) {
         if (!ast_pool_exhausted) {
             ast_pool_exhausted = 1;
-            uart_puts("ERROR: AST node pool exhausted (4096 nodes)");
+            uart_puts("ERROR: AST node pool exhausted (8192 nodes)");
             uart_puts("Program too large for single compilation unit.");
         }
         return NODE_NULL;
