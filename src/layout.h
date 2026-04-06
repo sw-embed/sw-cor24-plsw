@@ -146,6 +146,20 @@ void layout_locals(int body_node) {
 
     if (body_node == NODE_NULL) return;
 
+    /* If this node is itself a statement (not a BLOCK), handle it directly */
+    if (nd_kind[body_node] == NODE_IF) {
+        if (nd_right[body_node] != NODE_NULL)
+            layout_locals(nd_right[body_node]);
+        if (nd_ival[body_node] != NODE_NULL)
+            layout_locals(nd_ival[body_node]);
+        return;
+    }
+    if (nd_kind[body_node] == NODE_DO_WHILE || nd_kind[body_node] == NODE_DO_COUNT) {
+        if (nd_right[body_node] != NODE_NULL)
+            layout_locals(nd_right[body_node]);
+        return;
+    }
+
     /* Walk statements in the body block */
     stmt = nd_left[body_node];
     while (stmt != NODE_NULL) {

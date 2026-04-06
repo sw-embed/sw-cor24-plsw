@@ -1,0 +1,7 @@
+number = 63
+slug = "dcl-else-if-blocks"
+status = "pending"
+description = "Fix DCL inside ELSE IF THEN DO blocks causing 'undefined variable' (GitHub is..."
+role = "production"
+context_files = []
+created_at = "2026-04-06T00:26:14"

@@ -76,7 +76,7 @@
 #define TOK_EOF       99
 
 /* Token structure */
-#define TOK_TEXT_MAX  64
+#define TOK_TEXT_MAX  256
 
 struct token {
     int type;
