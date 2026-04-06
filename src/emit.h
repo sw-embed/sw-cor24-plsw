@@ -130,6 +130,50 @@ void emit_label_ref(int label_num) {
     emit_int(label_num);
 }
 
+/* Long branch helpers (unlimited range via la+jmp) */
+
+/* Unconditional long branch: la r0,Lxx; jmp (r0) */
+void emit_branch(int label_num) {
+    emit_str(EMIT_INDENT);
+    emit_str("la      r0,");
+    emit_label_ref(label_num);
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_line("jmp     (r0)");
+}
+
+/* Conditional long branch (true): brf _skip; la r0,Lxx; jmp (r0); _skip: */
+void emit_branch_true(int label_num) {
+    int skip = emit_new_label();
+    emit_str(EMIT_INDENT);
+    emit_str("brf     ");
+    emit_label_ref(skip);
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_str("la      r0,");
+    emit_label_ref(label_num);
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_line("jmp     (r0)");
+    emit_label(skip);
+}
+
+/* Conditional long branch (false): brt _skip; la r0,Lxx; jmp (r0); _skip: */
+void emit_branch_false(int label_num) {
+    int skip = emit_new_label();
+    emit_str(EMIT_INDENT);
+    emit_str("brt     ");
+    emit_label_ref(skip);
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_str("la      r0,");
+    emit_label_ref(label_num);
+    emit_nl();
+    emit_str(EMIT_INDENT);
+    emit_line("jmp     (r0)");
+    emit_label(skip);
+}
+
 /* Emit a named label (e.g., "_main:") */
 void emit_named_label(char *name) {
     emit_char(95);  /* '_' */

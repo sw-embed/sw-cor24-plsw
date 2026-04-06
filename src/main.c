@@ -6157,8 +6157,8 @@ int run_suite(int n) {
 
 #define SUITE_COUNT 36
 
-/* Source buffer for compile mode -- 8KB */
-#define SRC_BUF_SIZE 8192
+/* Source buffer for compile mode -- 32KB */
+#define SRC_BUF_SIZE 32768
 char src_buf[SRC_BUF_SIZE];
 
 /* Include file buffer -- stores content for FILE: uploads */

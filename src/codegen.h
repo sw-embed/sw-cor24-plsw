@@ -1373,17 +1373,11 @@ void cg_if(int node) {
 
         /* Branch to else if r0 == 0 (condition false) */
         emit_instr("ceq     r0,z");
-        emit_str(EMIT_INDENT);
-        emit_str("brt     ");
-        emit_label_ref(lbl_else);
-        emit_nl();
+        emit_branch_true(lbl_else);
 
         /* Then body */
         cg_stmt(nd_right[node]);
-        emit_str(EMIT_INDENT);
-        emit_str("bra     ");
-        emit_label_ref(lbl_end);
-        emit_nl();
+        emit_branch(lbl_end);
 
         /* Else label and body */
         emit_label(lbl_else);
@@ -1397,10 +1391,7 @@ void cg_if(int node) {
 
         /* Branch to end if r0 == 0 (condition false) */
         emit_instr("ceq     r0,z");
-        emit_str(EMIT_INDENT);
-        emit_str("brt     ");
-        emit_label_ref(lbl_end);
-        emit_nl();
+        emit_branch_true(lbl_end);
 
         /* Then body */
         cg_stmt(nd_right[node]);
@@ -1427,19 +1418,13 @@ void cg_do_while(int node) {
 
     /* Branch to end if r0 == 0 (condition false) */
     emit_instr("ceq     r0,z");
-    emit_str(EMIT_INDENT);
-    emit_str("brt     ");
-    emit_label_ref(lbl_end);
-    emit_nl();
+    emit_branch_true(lbl_end);
 
     /* Loop body */
     cg_stmt(nd_right[node]);
 
     /* Branch back to header */
-    emit_str(EMIT_INDENT);
-    emit_str("bra     ");
-    emit_label_ref(lbl_top);
-    emit_nl();
+    emit_branch(lbl_top);
 
     /* End label */
     emit_label(lbl_end);
@@ -1471,10 +1456,7 @@ void cg_do_count(int node) {
 
     /* Branch to end if I > end (i.e., end < I) */
     emit_instr("cls     r1,r0");  /* carry if end < I */
-    emit_str(EMIT_INDENT);
-    emit_str("brt     ");
-    emit_label_ref(lbl_end);
-    emit_nl();
+    emit_branch_true(lbl_end);
 
     /* Loop body */
     cg_stmt(nd_right[node]);
@@ -1486,10 +1468,7 @@ void cg_do_count(int node) {
     cg_store_var(node);
 
     /* Branch back to header */
-    emit_str(EMIT_INDENT);
-    emit_str("bra     ");
-    emit_label_ref(lbl_top);
-    emit_nl();
+    emit_branch(lbl_top);
 
     /* End label */
     emit_label(lbl_end);
