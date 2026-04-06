@@ -8,8 +8,8 @@
 
 /* --- Output buffer --- */
 
-/* 128KB output buffer for generated assembly */
-#define EMIT_BUF_SIZE 131072
+/* 256KB output buffer for generated assembly */
+#define EMIT_BUF_SIZE 262144
 
 char emit_buf[EMIT_BUF_SIZE];
 int emit_pos;     /* current write position */

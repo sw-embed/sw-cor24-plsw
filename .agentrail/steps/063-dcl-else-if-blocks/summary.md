@@ -1,0 +1,1 @@
+Already fixed in step 062 (commit 78b6178). layout_locals now handles NODE_IF/DO_WHILE/DO_COUNT passed directly, not just BLOCKs. ELSE IF creates a nested IF as else body; layout_locals was treating its condition (nd_left) as statement list.

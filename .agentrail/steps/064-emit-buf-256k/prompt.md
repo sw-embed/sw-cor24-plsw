@@ -1,0 +1,1 @@
+Increase EMIT_BUF_SIZE from 128KB to 256KB (GitHub issue #24). Simple constant change in emit.h.
