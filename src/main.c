@@ -5952,6 +5952,63 @@ void test_record_pointer(void) {
     uart_putchar(10);
 }
 
+void test_multi_based(void) {
+    int errs;
+    char *src;
+    char *out;
+
+    errs = 0;
+
+    /* Two BASED records + PTR derefs to fields from both */
+    src = "DCL 1 DESCR BASED,"
+          "    3 DTAG BYTE,"
+          "    3 DPAY PTR;"
+          "DCL 1 OBJHDR BASED,"
+          "    3 OKIND BYTE,"
+          "    3 OSIZE INT;"
+          "DCL D1(6) BYTE;"
+          "DCL H1(6) BYTE;"
+          "MAIN: PROC;"
+          "  DCL DPTR PTR;"
+          "  DCL HPTR PTR;"
+          "  DPTR = ADDR(D1);"
+          "  HPTR = ADDR(H1);"
+          "  DPTR->DTAG = 3;"
+          "  DPTR->DPAY = 0;"
+          "  HPTR->OKIND = 1;"
+          "  HPTR->OSIZE = 256;"
+          "END;";
+
+    uart_puts("--- compiling multi-based test ---");
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: compiled with two BASED records");
+
+        /* Verify both DTAG and OKIND field accesses compiled */
+        if (!str_find(out, "sb      r0,0(r2)")) {
+            uart_puts("  FAIL: missing byte store for field access");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has byte store for field");
+        }
+
+        /* Verify MAIN proc exists */
+        if (!str_find(out, "_MAIN:")) {
+            uart_puts("  FAIL: missing MAIN proc");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has MAIN proc");
+        }
+    }
+
+    uart_putstr("multi-based pointer errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -5989,12 +6046,13 @@ int run_suite(int n) {
     else if (n == 32) { uart_puts("=== LED Toggle Compile ==="); test_led_toggle(); }
     else if (n == 33) { uart_puts("=== Counted Loop Compile ==="); test_counted_loop(); }
     else if (n == 34) { uart_puts("=== Record Pointer Compile ==="); test_record_pointer(); }
+    else if (n == 35) { uart_puts("=== Multi-BASED Pointer Tests ==="); test_multi_based(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 35
+#define SUITE_COUNT 36
 
 /* Source buffer for compile mode -- 8KB */
 #define SRC_BUF_SIZE 8192

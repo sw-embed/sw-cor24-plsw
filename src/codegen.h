@@ -886,14 +886,17 @@ int cg_deref_addr(int node) {
 
     /* Get the type descriptor for the pointed-to record */
     desc = sym_tdesc[sym_idx];
-    if (desc < 0) {
-        cg_error("pointer has no type descriptor");
-        emit_comment("ERROR: no type descriptor for pointer");
-        return 0;
-    }
 
-    /* Look up the field */
-    fidx = td_field_lookup(desc, nd_name[node]);
+    /* Look up the field -- try associated descriptor first,
+       then search all BASED record descriptors */
+    fidx = -1;
+    if (desc >= 0) {
+        fidx = td_field_lookup(desc, nd_name[node]);
+    }
+    if (fidx < 0) {
+        /* Search all record descriptors for this field */
+        fidx = td_field_search(nd_name[node], &desc);
+    }
     if (fidx < 0) {
         cg_error("undefined field in pointer dereference");
         emit_comment("ERROR: undefined field in deref");

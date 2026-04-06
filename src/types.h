@@ -167,6 +167,26 @@ int td_field_lookup(int desc, char *name) {
     return -1;
 }
 
+/* Search ALL record descriptors for a field by name.
+   Sets *out_desc to the descriptor index containing the field.
+   Returns the field index, or -1 if not found in any descriptor. */
+int td_field_search(char *name, int *out_desc) {
+    int i;
+    int fidx;
+    i = 0;
+    while (i < td_count_alloc) {
+        if (td_kind[i] == TDESC_RECORD) {
+            fidx = td_field_lookup(i, name);
+            if (fidx >= 0) {
+                *out_desc = i;
+                return fidx;
+            }
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
 /* Get field offset within a record descriptor */
 int td_field_offset(int desc, int field_idx) {
     int fbase;
