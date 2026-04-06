@@ -6107,6 +6107,47 @@ void test_multi_based(void) {
         uart_puts("  OK: DCL in DO blocks compiled");
     }
 
+    /* Test 5: Double-quoted strings + delimiter doubling (GitHub #21) */
+    uart_puts("--- double-quoted strings ---");
+    arena_init();
+    lex_init("\"hello\" 'world' \"it''s\" 'He said \"hi\"'", 39);
+    lex_scan();
+    if (cur_type != TOK_STRING || !str_eq(cur_text, "hello")) {
+        uart_puts("  FAIL: double-quoted string");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: double-quoted string");
+    }
+    lex_scan();
+    if (cur_type != TOK_STRING || !str_eq(cur_text, "world")) {
+        uart_puts("  FAIL: single-quoted string");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: single-quoted string");
+    }
+    lex_scan(); /* "it''s" -- no doubling since '' is not the active delimiter */
+    lex_scan(); /* 'He said "hi"' -- double quotes inside single quotes */
+    if (cur_type != TOK_STRING || !str_find(cur_text, "\"hi\"")) {
+        uart_putstr("  FAIL: dquote in squote, got: ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: double quotes inside single-quoted string");
+    }
+
+    /* Test delimiter doubling */
+    uart_puts("--- delimiter doubling ---");
+    arena_init();
+    lex_init("'it''s fine'", 12);
+    lex_scan();
+    if (cur_type != TOK_STRING || !str_find(cur_text, "'")) {
+        uart_putstr("  FAIL: '' doubling, got: ");
+        uart_puts(cur_text);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: '' delimiter doubling");
+    }
+
     uart_putstr("multi-based pointer errors: ");
     print_int(errs);
     uart_putchar(10);

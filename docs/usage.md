@@ -98,8 +98,10 @@ DCL ASID INT(16);
 DCL BUFFER(80) CHAR;
 DCL TABLE(10) INT;
 
-/* String initialized */
+/* String initialized (single or double quotes) */
 DCL MSG(20) CHAR INIT('Hello from PL/SW!');
+DCL CMD(24) CHAR INIT("OUTPUT = 'hello'");   /* single quotes inside double */
+DCL APO(12) CHAR INIT('It''s fine');          /* doubled delimiter = literal */
 
 /* Numeric initialized */
 DCL ARENA_POS INT INIT(0);

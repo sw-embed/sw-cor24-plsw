@@ -542,9 +542,9 @@ int lex_scan(void) {
     /* If inside a false %IF branch, skip tokens until next % directive */
     if (!cond_emitting()) {
         /* Skip the current token intelligently */
-        if (c == 39) { /* string literal -- skip to closing quote */
+        if (c == 39 || c == 34) { /* string literal -- skip to closing quote */
             lex_advance();
-            while (lex_pos < lex_len && lex_peek() != 39) lex_advance();
+            while (lex_pos < lex_len && lex_peek() != c) lex_advance();
             if (lex_pos < lex_len) lex_advance();
         } else if (is_alpha(c)) {
             while (lex_pos < lex_len && is_alnum(lex_peek())) lex_advance();
@@ -612,18 +612,27 @@ int lex_scan(void) {
         return TOK_NUM;
     }
 
-    /* String literal (single-quoted) */
-    if (c == 39) {
+    /* String literal (single-quoted or double-quoted) */
+    if (c == 39 || c == 34) {
+        int delim = c;
         lex_advance(); /* skip opening quote */
         int i = 0;
-        while (lex_pos < lex_len && lex_peek() != 39 && i < TOK_TEXT_MAX - 1) {
-            cur_text[i] = lex_advance();
-            i = i + 1;
+        while (lex_pos < lex_len && i < TOK_TEXT_MAX - 1) {
+            if (lex_peek() == delim) {
+                lex_advance(); /* consume delimiter */
+                /* Check for doubled delimiter (escape) */
+                if (lex_pos < lex_len && lex_peek() == delim) {
+                    cur_text[i] = lex_advance(); /* doubled -> literal */
+                    i = i + 1;
+                } else {
+                    break; /* closing delimiter */
+                }
+            } else {
+                cur_text[i] = lex_advance();
+                i = i + 1;
+            }
         }
         cur_text[i] = 0;
-        if (lex_pos < lex_len && lex_peek() == 39) {
-            lex_advance(); /* skip closing quote */
-        }
         cur_type = TOK_STRING;
         return TOK_STRING;
     }
