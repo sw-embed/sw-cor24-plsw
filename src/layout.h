@@ -179,6 +179,22 @@ void layout_locals(int body_node) {
                 }
             }
         }
+        /* Recurse into nested blocks to find DCLs */
+        if (nd_kind[stmt] == NODE_BLOCK) {
+            layout_locals(stmt);
+        } else if (nd_kind[stmt] == NODE_IF) {
+            /* then-body is nd_right, else-body is nd_ival */
+            if (nd_right[stmt] != NODE_NULL)
+                layout_locals(nd_right[stmt]);
+            if (nd_ival[stmt] != NODE_NULL)
+                layout_locals(nd_ival[stmt]);
+        } else if (nd_kind[stmt] == NODE_DO_WHILE) {
+            if (nd_right[stmt] != NODE_NULL)
+                layout_locals(nd_right[stmt]);
+        } else if (nd_kind[stmt] == NODE_DO_COUNT) {
+            if (nd_right[stmt] != NODE_NULL)
+                layout_locals(nd_right[stmt]);
+        }
         stmt = nd_next[stmt];
     }
 }

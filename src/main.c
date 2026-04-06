@@ -6084,6 +6084,29 @@ void test_multi_based(void) {
         }
     }
 
+    /* Test 4: DCL inside nested DO blocks (GitHub #11) */
+    uart_puts("--- DCL inside DO blocks ---");
+    src = "MAIN: PROC;"
+          "  DCL X INT;"
+          "  X = 1;"
+          "  IF (X = 1) THEN DO;"
+          "    DCL Y INT;"
+          "    Y = 42;"
+          "  END;"
+          "  ELSE DO;"
+          "    DCL Z INT;"
+          "    Z = 99;"
+          "  END;"
+          "END;";
+
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: DCL in DO block failed to compile");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: DCL in DO blocks compiled");
+    }
+
     uart_putstr("multi-based pointer errors: ");
     print_int(errs);
     uart_putchar(10);
