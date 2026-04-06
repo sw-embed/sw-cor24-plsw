@@ -51,8 +51,8 @@
 /* Null node index sentinel */
 #define NODE_NULL (-1)
 
-/* Node pool -- parallel arrays, 256 nodes max */
-#define NODE_POOL_MAX 256
+/* Node pool -- parallel arrays */
+#define NODE_POOL_MAX 1024
 
 int nd_kind[NODE_POOL_MAX];       /* node kind */
 int nd_type[NODE_POOL_MAX];       /* type info */
@@ -69,11 +69,19 @@ int nd_count;                     /* number of allocated nodes */
 
 void ast_init(void) {
     nd_count = 0;
+    ast_pool_exhausted = 0;
 }
 
 /* Allocate a new node. Returns node index or NODE_NULL on OOM. */
+int ast_pool_exhausted;
+
 int nd_alloc(int kind) {
     if (nd_count >= NODE_POOL_MAX) {
+        if (!ast_pool_exhausted) {
+            ast_pool_exhausted = 1;
+            uart_puts("ERROR: AST node pool exhausted (1024 nodes)");
+            uart_puts("Program too large for single compilation unit.");
+        }
         return NODE_NULL;
     }
     int i = nd_count;
