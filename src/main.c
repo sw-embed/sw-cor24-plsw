@@ -5291,6 +5291,74 @@ void test_conditional(void) {
         }
     }
 
+    /* Test 10: %DEFINE value substitution in expressions */
+    uart_puts("Test 10: %DEFINE value substitution (numeric)");
+    arena_init();
+    src = "%DEFINE TAG_NULL 0;"
+          "TAG_NULL";
+    lex_init(src, str_len(src));
+    lex_scan(); /* TAG_NULL -> should become TOK_NUM with value 0 */
+    if (cur_type != TOK_NUM || cur_ival != 0) {
+        uart_putstr("  FAIL: expected TOK_NUM 0, got type=");
+        print_int(cur_type);
+        uart_putstr(" val=");
+        print_int(cur_ival);
+        uart_putchar(10);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: TAG_NULL -> TOK_NUM 0");
+    }
+
+    /* Test 11: %DEFINE value substitution (text/keyword) */
+    uart_puts("Test 11: %DEFINE value substitution (text)");
+    arena_init();
+    src = "%DEFINE MYTYPE INT;"
+          "DCL A MYTYPE(24);";
+    lex_init(src, str_len(src));
+    lex_scan(); /* DCL */
+    lex_scan(); /* A */
+    lex_scan(); /* MYTYPE -> should become INT keyword */
+    if (cur_type != TOK_INT) {
+        uart_putstr("  FAIL: expected TOK_INT, got ");
+        uart_puts(tok_name(cur_type));
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: MYTYPE -> TOK_INT");
+    }
+
+    /* Test 12: %DEFINE with larger numeric value */
+    uart_puts("Test 12: %DEFINE numeric value 255");
+    arena_init();
+    src = "%DEFINE BUFSIZE 255;"
+          "BUFSIZE";
+    lex_init(src, str_len(src));
+    lex_scan(); /* BUFSIZE -> 255 */
+    if (cur_type != TOK_NUM || cur_ival != 255) {
+        uart_putstr("  FAIL: expected TOK_NUM 255, got type=");
+        print_int(cur_type);
+        uart_putstr(" val=");
+        print_int(cur_ival);
+        uart_putchar(10);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: BUFSIZE -> TOK_NUM 255");
+    }
+
+    /* Test 13: %DEFINE with no value does NOT substitute */
+    uart_puts("Test 13: %DEFINE flag-only (no substitution)");
+    arena_init();
+    src = "%DEFINE FLAG;"
+          "FLAG";
+    lex_init(src, str_len(src));
+    lex_scan(); /* FLAG -> should remain TOK_IDENT */
+    if (cur_type != TOK_IDENT) {
+        uart_putstr("  FAIL: expected TOK_IDENT, got ");
+        uart_puts(tok_name(cur_type));
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: FLAG remains TOK_IDENT (flag-only define)");
+    }
+
     /* Summary */
     uart_putstr("conditional compilation errors: ");
     print_int(errs);

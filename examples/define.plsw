@@ -1,0 +1,42 @@
+/* define.plsw -- %DEFINE Value Substitution Demo
+ * Demonstrates compile-time constants via %DEFINE.
+ * Constants are substituted at lex time -- zero runtime cost. */
+
+%DEFINE UART_DATA 16711936;   /* 0xFF0100 */
+%DEFINE NEWLINE 10;
+%DEFINE MAX_COUNT 5;
+
+DCL DIGITS(12) CHAR;
+
+/* Print an integer to UART */
+PRINT_INT: PROC(N INT);
+    DCL D INT;
+    DCL POS INT;
+
+    IF (N = 0) THEN DO;
+        CALL UART_PUTCHAR(48);
+        RETURN;
+    END;
+
+    POS = 0;
+    DO WHILE (N > 0);
+        D = N / 10;
+        DIGITS(POS) = N - D * 10 + 48;
+        N = D;
+        POS = POS + 1;
+    END;
+
+    DO WHILE (POS > 0);
+        POS = POS - 1;
+        CALL UART_PUTCHAR(DIGITS(POS));
+    END;
+END;
+
+/* Main: count from 1 to MAX_COUNT */
+MAIN: PROC;
+    DCL I INT;
+    DO I = 1 TO MAX_COUNT;
+        CALL PRINT_INT(I);
+        CALL UART_PUTCHAR(NEWLINE);
+    END;
+END;

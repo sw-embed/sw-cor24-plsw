@@ -21,7 +21,7 @@ All 40 implementation steps complete across 12 phases:
 - **Code generation** -- COR24 assembly for all constructs
 - **Inline assembly** -- ASM DO blocks, NAKED procedures
 - **Macros** -- MACRODEF/GEN, %INCLUDE, ?MACRO() invocation
-- **Conditionals** -- %IF/%DEFINE/%ELSE/%ENDIF
+- **Conditionals** -- %IF/%DEFINE/%ELSE/%ENDIF, %DEFINE value substitution
 - **Built-ins** -- ADDR(), SIZEOF(), string literal assignment to ptr->field
 - **Listing** -- source lines as assembly comments, line numbers in errors
 - **Pipeline** -- FILE: protocol for multi-file compilation via UART

@@ -243,6 +243,12 @@ Note: ASM strings use **single quotes**, not double quotes.
 %IF DEFINED(TARGET_COR24);
     DCL UART_ADDR INT INIT(16711936);
 %ENDIF;
+
+/* Compile-time constants (value substitution) */
+%DEFINE BUFSIZE 256;          /* numeric -- substituted as integer literal */
+%DEFINE NEWLINE 10;
+DCL BUF(BUFSIZE) BYTE;       /* BUFSIZE -> 256 at lex time, zero runtime cost */
+CALL UART_PUTCHAR(NEWLINE);   /* NEWLINE -> 10 */
 ```
 
 ### Macro System

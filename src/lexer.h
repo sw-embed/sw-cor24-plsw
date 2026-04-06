@@ -562,6 +562,34 @@ int lex_scan(void) {
         }
         cur_text[i] = 0;
         cur_type = kw_lookup(cur_text);
+        /* %DEFINE value substitution: if identifier matches a define
+           with a non-empty value, substitute the value as a token */
+        if (cur_type == TOK_IDENT) {
+            char *dval = def_get(cur_text);
+            if (dval && dval[0]) {
+                /* Check if value is numeric */
+                if (is_digit(dval[0]) || (dval[0] == 45 && is_digit(dval[1]))) {
+                    /* Numeric value -- parse as integer */
+                    int neg = 0;
+                    int vi = 0;
+                    int val = 0;
+                    if (dval[0] == 45) { neg = 1; vi = 1; }
+                    while (dval[vi] && is_digit(dval[vi])) {
+                        val = val * 10 + (dval[vi] - 48);
+                        vi = vi + 1;
+                    }
+                    if (neg) val = -val;
+                    cur_type = TOK_NUM;
+                    cur_ival = val;
+                    str_copy(cur_text, dval);
+                } else {
+                    /* Text value -- copy and re-lookup as keyword/ident */
+                    str_copy(cur_text, dval);
+                    cur_type = kw_lookup(cur_text);
+                }
+                return cur_type;
+            }
+        }
         return cur_type;
     }
 
