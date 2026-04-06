@@ -153,7 +153,7 @@ void cg_load_var(int node) {
         emit_str(sym_name[idx]);
         emit_nl();
         if (w == 1) {
-            emit_instr("lb      r0,0(r2)");
+            emit_instr("lbu     r0,0(r2)");
         } else {
             emit_instr("lw      r0,0(r2)");
         }
@@ -162,7 +162,7 @@ void cg_load_var(int node) {
         if (off >= -128 && off <= 127) {
             if (w == 1) {
                 emit_str(EMIT_INDENT);
-                emit_str("lb      r0,");
+                emit_str("lbu     r0,");
                 emit_int(off);
                 emit_line("(fp)");
             } else {
@@ -179,7 +179,7 @@ void cg_load_var(int node) {
             emit_nl();
             emit_instr("add     r2,fp");
             if (w == 1) {
-                emit_instr("lb      r0,0(r2)");
+                emit_instr("lbu     r0,0(r2)");
             } else {
                 emit_instr("lw      r0,0(r2)");
             }
@@ -297,7 +297,7 @@ void cg_load_simple_into(int node, char *reg) {
             emit_nl();
             if (w == 1) {
                 emit_str(EMIT_INDENT);
-                emit_str("lb      ");
+                emit_str("lbu     ");
                 emit_str(reg);
                 emit_line(",0(r2)");
             } else {
@@ -310,7 +310,7 @@ void cg_load_simple_into(int node, char *reg) {
             if (off >= -128 && off <= 127) {
                 if (w == 1) {
                     emit_str(EMIT_INDENT);
-                    emit_str("lb      ");
+                    emit_str("lbu     ");
                     emit_str(reg);
                     emit_char(44);
                     emit_int(off);
@@ -332,7 +332,7 @@ void cg_load_simple_into(int node, char *reg) {
                 emit_instr("add     r2,fp");
                 if (w == 1) {
                     emit_str(EMIT_INDENT);
-                    emit_str("lb      ");
+                    emit_str("lbu     ");
                     emit_str(reg);
                     emit_line(",0(r2)");
                 } else {
@@ -648,7 +648,7 @@ void cg_field_load(int node) {
     if (fw == 0) return;
 
     if (fw == 1) {
-        emit_instr("lb      r0,0(r2)");
+        emit_instr("lbu     r0,0(r2)");
     } else {
         emit_instr("lw      r0,0(r2)");
     }
@@ -754,7 +754,7 @@ void cg_array_load(int node) {
     if (ew == 0) return;
 
     if (ew == 1) {
-        emit_instr("lb      r0,0(r2)");
+        emit_instr("lbu     r0,0(r2)");
     } else {
         emit_instr("lw      r0,0(r2)");
     }
@@ -936,7 +936,7 @@ void cg_deref_load(int node) {
     if (fw == 0) return;
 
     if (fw == 1) {
-        emit_instr("lb      r0,0(r2)");
+        emit_instr("lbu     r0,0(r2)");
     } else {
         emit_instr("lw      r0,0(r2)");
     }

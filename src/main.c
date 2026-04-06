@@ -3989,7 +3989,7 @@ void test_array_codegen(void) {
             errs = errs + 1;
         }
         /* Byte load: lb r0,0(r2) */
-        if (!str_find(out, "lb      r0,0(r2)")) {
+        if (!str_find(out, "lbu     r0,0(r2)")) {
             uart_puts("  FAIL: missing lb r0,0(r2) for CHAR array load");
             errs = errs + 1;
         }
@@ -6064,13 +6064,13 @@ void test_multi_based(void) {
     } else {
         uart_puts("  OK: compiled with BYTE params");
         /* T at 12(fp), S at 15(fp), V at 18(fp) -- all 3-byte slots */
-        if (!str_find(out, "lb      r0,12(fp)")) {
+        if (!str_find(out, "lbu     r0,12(fp)")) {
             uart_puts("  FAIL: T should be at 12(fp)");
             errs = errs + 1;
         } else {
             uart_puts("  OK: T at 12(fp)");
         }
-        if (!str_find(out, "lb      r0,15(fp)")) {
+        if (!str_find(out, "lbu     r0,15(fp)")) {
             uart_puts("  FAIL: S should be at 15(fp)");
             errs = errs + 1;
         } else {
