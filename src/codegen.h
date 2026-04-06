@@ -1089,7 +1089,7 @@ void cg_assign(int node) {
  * Used to collect string literals during codegen, then
  * emit them all in the .data section at the end. */
 
-#define CG_STR_MAX 32     /* max string literals per compilation */
+#define CG_STR_MAX 128    /* max string literals per compilation */
 
 int cg_str_count;          /* number of string literals collected */
 int cg_str_label[CG_STR_MAX];     /* label number for each string */
