@@ -1,0 +1,1 @@
+Issue #14 was already fixed by step 045 (commit 153c907) which added TOK_AMP/TOK_AND handling to cg_binop. Verified &, |, ^ all compile correctly. Closed issue with comment.

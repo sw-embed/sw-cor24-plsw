@@ -86,7 +86,7 @@ int inc_pop(void) {
 
 /* ---- %DEFINE / %IF / %ELSE / %ENDIF conditional compilation ---- */
 
-#define DEF_MAX  32   /* max compile-time defines */
+#define DEF_MAX  128  /* max compile-time defines */
 #define COND_MAX  8   /* max %IF nesting depth */
 
 /* Define table: name -> value (value may be empty string) */
@@ -118,6 +118,9 @@ void def_set(char *name, char *value) {
         def_names[def_count] = name;
         def_values[def_count] = value;
         def_count = def_count + 1;
+    } else {
+        uart_putstr("WARNING: %%DEFINE table full, ignoring ");
+        uart_puts(name);
     }
 }
 
