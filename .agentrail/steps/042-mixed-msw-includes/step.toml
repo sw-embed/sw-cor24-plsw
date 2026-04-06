@@ -1,6 +1,6 @@
 number = 42
 slug = "mixed-msw-includes"
-status = "pending"
+status = "in-progress"
 description = "Investigate and fix MACRODEF and DCL coexistence in .msw include files (GitHu..."
 role = "production"
 context_files = []

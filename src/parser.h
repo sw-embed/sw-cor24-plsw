@@ -833,7 +833,10 @@ int parse_program(void) {
             if (cur_type == TOK_IDENT) {
                 /* Check for MACRODEF -- parse macro definition */
                 if (str_eq_nocase(cur_text, "MACRODEF")) {
-                    mac_parse_def();
+                    if (mac_parse_def() < 0) {
+                        parse_error(mac_parse_errmsg);
+                        break;
+                    }
                     continue;
                 }
                 /* Look ahead: could be LABEL: PROC */

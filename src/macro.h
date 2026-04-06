@@ -133,7 +133,9 @@ int mac_parse_clause(int mi) {
         return 0;
     }
 
-    if (cur_type != TOK_IDENT) {
+    /* Clause name may be an identifier or a keyword (e.g. PTR, INT)
+       since the name is just a macro parameter label */
+    if (cur_text[0] == 0) {
         mac_error("expected clause name");
         return 0;
     }

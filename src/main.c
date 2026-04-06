@@ -4500,6 +4500,41 @@ void test_include(void) {
         uart_puts("  OK: %FOO -> TOK_PERCENT");
     }
 
+    /* Test 6: Mixed DCL + MACRODEF in same .msw include (GitHub #2) */
+    uart_puts("--- include: mixed DCL + MACRODEF ---");
+    inc_init();
+    inc_register("MIXED", "DCL MVAR INT(24); MACRODEF MTEST; REQUIRED PTR(expr); GEN DO; 'mvi r0,0'; END; END;");
+
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+    mac_init();
+
+    parse_init("%INCLUDE MIXED; MAIN: PROC; MVAR = 1; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  FAIL parse: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: mixed DCL + MACRODEF parsed");
+        /* Verify the macro was registered */
+        if (mac_count < 1) {
+            uart_puts("  FAIL: macro not registered");
+            errs = errs + 1;
+        } else if (!str_eq_nocase(mac_name(0), "MTEST")) {
+            uart_puts("  FAIL: wrong macro name");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: MTEST macro registered");
+        }
+    }
+
     /* Summary */
     uart_putstr("include processing errors: ");
     print_int(errs);
