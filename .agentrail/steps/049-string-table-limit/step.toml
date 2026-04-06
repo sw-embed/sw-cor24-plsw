@@ -1,7 +1,8 @@
 number = 49
 slug = "string-table-limit"
-status = "in-progress"
+status = "completed"
 description = "Increase the string literal table limit from 32 to 128 (GitHub issue #9). CG_..."
 role = "production"
 context_files = []
 created_at = "2026-04-05T21:23:27"
+completed_at = "2026-04-05T21:24:56"

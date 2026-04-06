@@ -7,14 +7,14 @@
 #include "arena.h"
 
 /* Max symbols per scope */
-#define SYM_SCOPE_MAX 64
+#define SYM_SCOPE_MAX 256
 
 /* Max scope nesting depth (global + procedures + blocks) */
 #define SYM_DEPTH_MAX 8
 
 /* Symbol fields -- parallel arrays per scope */
-/* We flatten all scopes into one big table: 8 * 64 = 512 entries */
-#define SYM_TOTAL 512
+/* We flatten all scopes into one big table: 8 * 256 = 2048 entries */
+#define SYM_TOTAL 2048
 
 char *sym_name[SYM_TOTAL];    /* symbol name (arena-allocated) */
 int   sym_type[SYM_TOTAL];    /* type tag (TYPE_INT8, TYPE_PTR, etc.) */
