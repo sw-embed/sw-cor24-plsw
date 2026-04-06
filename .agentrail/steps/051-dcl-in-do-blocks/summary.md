@@ -1,0 +1,1 @@
+Made layout_locals recurse into nested NODE_BLOCK, NODE_IF (then+else), NODE_DO_WHILE, and NODE_DO_COUNT to find DCL nodes (GitHub #11). Variables in nested blocks get proc-level stack allocation. Added test for DCL inside IF/ELSE DO blocks.

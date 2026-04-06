@@ -1164,14 +1164,19 @@ void cg_emit_static_var(int sym_idx, int init_node) {
 
     emit_data_section();
 
-    /* Large zero-fill without initializer: use .comm */
+    /* Zero-fill without initializer: emit explicit .byte 0 entries
+       (.comm overlaps with .data on COR24 assembler) */
     if (init_node == NODE_NULL && w > 3) {
         emit_comment(sym_name[sym_idx]);
+        emit_named_label(sym_name[sym_idx]);
         emit_str(EMIT_INDENT);
-        emit_str(".comm   _");
-        emit_str(sym_name[sym_idx]);
-        emit_str(", ");
-        emit_int(w);
+        emit_str(".byte   ");
+        i = 0;
+        while (i < w) {
+            if (i > 0) emit_str(",");
+            emit_str("0");
+            i = i + 1;
+        }
         emit_nl();
         return;
     }
