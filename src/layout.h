@@ -128,7 +128,8 @@ void layout_params(int first_param) {
             sym_flags[idx] = sym_flags[idx] | SYM_F_PARAM;
         }
 
-        offset = offset + w;
+        /* Parameters always occupy 3-byte stack slots (push is 3 bytes) */
+        offset = offset + 3;
         p = nd_next[p];
     }
 }

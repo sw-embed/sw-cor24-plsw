@@ -6038,6 +6038,52 @@ void test_multi_based(void) {
         }
     }
 
+    /* Test 3: BYTE param offsets (GitHub #7) */
+    uart_puts("--- BYTE param stack offsets ---");
+    src = "DCL 1 DESCR BASED,"
+          "    3 DTAG BYTE,"
+          "    3 DSUB BYTE,"
+          "    3 DRSV BYTE,"
+          "    3 DPAY PTR;"
+          "DCL D1(6) BYTE;"
+          "DESC_INIT: PROC(P PTR, T BYTE, S BYTE, V INT);"
+          "  DCL DPTR PTR;"
+          "  DPTR = P;"
+          "  DPTR->DTAG = T;"
+          "  DPTR->DSUB = S;"
+          "  DPTR->DPAY = V;"
+          "END;"
+          "MAIN: PROC;"
+          "  CALL DESC_INIT(ADDR(D1), 2, 0, 42);"
+          "END;";
+
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: compilation failed");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: compiled with BYTE params");
+        /* T at 12(fp), S at 15(fp), V at 18(fp) -- all 3-byte slots */
+        if (!str_find(out, "lb      r0,12(fp)")) {
+            uart_puts("  FAIL: T should be at 12(fp)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: T at 12(fp)");
+        }
+        if (!str_find(out, "lb      r0,15(fp)")) {
+            uart_puts("  FAIL: S should be at 15(fp)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: S at 15(fp)");
+        }
+        if (!str_find(out, "lw      r0,18(fp)")) {
+            uart_puts("  FAIL: V should be at 18(fp)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: V at 18(fp)");
+        }
+    }
+
     uart_putstr("multi-based pointer errors: ");
     print_int(errs);
     uart_putchar(10);
