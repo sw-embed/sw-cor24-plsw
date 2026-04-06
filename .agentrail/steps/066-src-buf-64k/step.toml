@@ -1,0 +1,7 @@
+number = 66
+slug = "src-buf-64k"
+status = "in-progress"
+description = "Increase SRC_BUF_SIZE from 32KB to 64KB (GitHub issue #26). Simple constant c..."
+role = "production"
+context_files = []
+created_at = "2026-04-06T11:32:17"

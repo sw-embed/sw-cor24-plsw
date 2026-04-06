@@ -1,0 +1,1 @@
+Added %DEFINE NOLISTING support (GitHub #25). compile_program checks def_defined('NOLISTING') after parsing and sets cg_listing=0. Source line comments are suppressed in the generated assembly. Added test verifying no '; N:' comments appear when NOLISTING is defined.
