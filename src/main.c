@@ -6004,6 +6004,40 @@ void test_multi_based(void) {
         }
     }
 
+    /* Test 2: AND/OR with ptr->field comparisons (GitHub #5) */
+    uart_puts("--- AND/OR with ptr->field ---");
+    src = "DCL 1 DESCR BASED,"
+          "    3 DTAG BYTE,"
+          "    3 DPAY PTR;"
+          "DCL D1(6) BYTE;"
+          "MAIN: PROC;"
+          "  DCL DPTR PTR;"
+          "  DCL OK INT;"
+          "  DPTR = ADDR(D1);"
+          "  OK = (DPTR->DTAG = 0) AND (DPTR->DPAY = 0);"
+          "  OK = (DPTR->DTAG = 3) OR (DPTR->DPAY != 0);"
+          "END;";
+
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: AND/OR with deref failed to compile");
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: AND/OR with ptr->field compiled");
+        if (!str_find(out, "and     r0,r1")) {
+            uart_puts("  FAIL: missing AND instruction");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has AND instruction");
+        }
+        if (!str_find(out, "or      r0,r1")) {
+            uart_puts("  FAIL: missing OR instruction");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: has OR instruction");
+        }
+    }
+
     uart_putstr("multi-based pointer errors: ");
     print_int(errs);
     uart_putchar(10);

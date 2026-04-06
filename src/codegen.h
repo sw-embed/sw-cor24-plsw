@@ -466,14 +466,12 @@ void cg_binop(int node) {
         emit_nl();
         emit_instr("jal     r1,(r2)");
         /* Result in r0 (quotient) */
-    } else if (op == TOK_AMP) {
-        /* Bitwise AND: COR24 doesn't have direct AND.
-         * Use a helper or emit inline sequence.
-         * For now, we'll note this and use a simple approach. */
-        emit_comment("bitwise AND (r0 & r1)");
+    } else if (op == TOK_AMP || op == TOK_AND) {
+        /* Bitwise/logical AND */
+        emit_comment("AND (r0 & r1)");
         emit_instr("and     r0,r1");
-    } else if (op == TOK_PIPE) {
-        emit_comment("bitwise OR (r0 | r1)");
+    } else if (op == TOK_PIPE || op == TOK_OR) {
+        emit_comment("OR (r0 | r1)");
         emit_instr("or      r0,r1");
     } else if (op == TOK_CARET) {
         emit_comment("bitwise XOR (r0 ^ r1)");
