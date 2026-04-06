@@ -5507,6 +5507,11 @@ char *compile_program(char *source) {
         return 0;
     }
 
+    /* Check for %DEFINE NOLISTING */
+    if (def_defined("NOLISTING")) {
+        cg_listing = 0;
+    }
+
     /* Layout globals */
     layout_globals(prog);
     if (layout_err) {
@@ -6146,6 +6151,28 @@ void test_multi_based(void) {
         errs = errs + 1;
     } else {
         uart_puts("  OK: '' delimiter doubling");
+    }
+
+    /* Test 7: %DEFINE NOLISTING suppresses source comments (GitHub #25) */
+    uart_puts("--- NOLISTING ---");
+    src = "%DEFINE NOLISTING;"
+          "DCL X INT;"
+          "MAIN: PROC;"
+          "  X = 42;"
+          "END;";
+
+    out = compile_program(src);
+    if (!out) {
+        uart_puts("  FAIL: NOLISTING compilation failed");
+        errs = errs + 1;
+    } else {
+        /* Should NOT contain "; N:" source line comments */
+        if (str_find(out, "; 1:") || str_find(out, "; 2:")) {
+            uart_puts("  FAIL: source comments present despite NOLISTING");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: NOLISTING suppresses source comments");
+        }
     }
 
     uart_putstr("multi-based pointer errors: ");
