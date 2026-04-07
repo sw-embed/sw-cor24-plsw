@@ -346,6 +346,82 @@ The compiler emits COR24 assembly with source line comments:
 Runtime stubs for UART_PUTCHAR (with TX busy-wait) and UART_PUTS
 are emitted automatically.
 
+## Modular Compilation
+
+For programs too large for a single source file, PL/SW supports
+multi-module builds linked by the FIXUP-based `link24` toolchain in
+`components/linker/`. See `docs/linker-design.md` for the full
+pipeline; this section is the language-level summary.
+
+### `%DEFINE LIBRARY;`
+
+A module that begins with `%DEFINE LIBRARY;` is compiled in *library
+mode*. The compiler then suppresses:
+
+1. **The runtime preamble** -- no `_start`, `_UART_PUTCHAR`, or
+   `_UART_PUTS` is emitted. These live in the entry module only.
+2. **The `MAIN` wrapper procedure** -- a library has no entry point.
+3. **All top-level DCL data emission** -- BASED records, globals, and
+   arrays declared at file scope produce no `.data`. Top-level globals
+   (including any pulled in via `%INCLUDE`) are *owned* by the entry
+   module; library modules reference them as externals.
+
+### Shared globals are owned by main
+
+Because top-level DCLs in a library module emit nothing, anything that
+needs persistent storage in a library must be a **PROC-local STATIC**
+variable, not a top-level DCL:
+
+```plsw
+%DEFINE LIBRARY;
+
+LIB_COUNT: PROC RETURNS(INT);
+    DCL N INT STATIC;       /* OK: module-private state */
+    N = N + 1;
+    RETURN(N);
+END;
+```
+
+Anything truly shared across modules (control blocks, big tables,
+runtime state) is declared in the entry module's source (or in a
+`.msw` it `%INCLUDE`s) and referenced from libraries via `EXTERNAL`
+declarations.
+
+### External resolution is automatic
+
+Cross-module symbol references are *not* marked at compile time.
+The compiler simply emits `la rN,_NAME` for any name it doesn't
+define locally. The `meta-gen prep` tool then scans the `.s` output,
+rewrites unresolved `la` references to `la rN,0` placeholders, and
+records FIXUPs in a `.meta` file. `link24` patches the placeholders
+at link time.
+
+This means there is no `EXTERNAL` keyword for procedures and no
+build-time module list -- a library can call any procedure by name
+and the linker will resolve it (or fail loudly if no module exports
+it).
+
+### Build pipeline
+
+End-to-end (per `docs/linker-design.md`):
+
+1. Compile each `.plsw` to `.s` (libraries with `%DEFINE LIBRARY;`)
+2. `meta-gen prep` -- rewrite external `la` refs to placeholders
+3. Pass-1 `cor24-run --assemble` at base 0 -- get sizes and `.lst`
+4. `meta-gen emit` -- produce `.meta` (EXPORT/FIXUP) from pass-1 `.lst`
+5. Compute layout (entry module first)
+6. Pass-2 `cor24-run --assemble --base-addr` -- internal refs at
+   final addresses
+7. `link24` -- combine binaries, patch FIXUPs
+8. `cor24-run --load-binary` -- execute
+
+Worked example: `components/linker/tests/demo-plsw-modular.sh`
+exercises the full pipeline on a 2-module fixture under
+`components/linker/tests/fixtures-plsw/` (`main.plsw` + `lib.plsw`
+with `%DEFINE LIBRARY;`). The SNOBOL4 interpreter
+(`sw-cor24-snobol4`) uses the same flow at scale via its
+`scripts/build-modular.sh`.
+
 ## Error Messages
 
 Errors include source line numbers:
