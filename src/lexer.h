@@ -86,13 +86,18 @@ int inc_pop(void) {
 
 /* ---- %DEFINE / %IF / %ELSE / %ENDIF conditional compilation ---- */
 
-#define DEF_MAX  128  /* max compile-time defines */
+#define DEF_MAX  512  /* max compile-time defines */
 #define COND_MAX  8   /* max %IF nesting depth */
 
 /* Define table: name -> value (value may be empty string) */
 char *def_names[DEF_MAX];
 char *def_values[DEF_MAX];
 int   def_count;
+
+/* Fatal lexer error flag (e.g. %DEFINE table overflow). Checked by
+   compile_program after parsing so overflow becomes a hard error
+   instead of silently dropping defines. */
+int lex_fatal;
 
 /* Conditional compilation stack */
 int cond_active[COND_MAX];   /* 1 = emitting tokens, 0 = skipping */
@@ -102,6 +107,7 @@ int cond_depth;              /* current nesting depth */
 void def_init(void) {
     def_count = 0;
     cond_depth = 0;
+    lex_fatal = 0;
 }
 
 /* Add or update a define */
@@ -119,8 +125,13 @@ void def_set(char *name, char *value) {
         def_values[def_count] = value;
         def_count = def_count + 1;
     } else {
-        uart_putstr("WARNING: %%DEFINE table full, ignoring ");
+        uart_putstr("ERROR line ");
+        print_int(lex_line);
+        uart_putstr(": %%DEFINE table overflow (limit ");
+        print_int(DEF_MAX);
+        uart_putstr("), cannot add ");
         uart_puts(name);
+        lex_fatal = 1;
     }
 }
 

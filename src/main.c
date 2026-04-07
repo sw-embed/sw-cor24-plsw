@@ -5506,6 +5506,9 @@ char *compile_program(char *source) {
     if (parse_err) {
         return 0;
     }
+    if (lex_fatal) {
+        return 0;
+    }
 
     /* Check for %DEFINE NOLISTING */
     if (def_defined("NOLISTING")) {
