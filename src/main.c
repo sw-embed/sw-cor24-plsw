@@ -5523,10 +5523,12 @@ char *compile_program(char *source) {
         return 0;
     }
 
-    /* Emit runtime preamble */
-    emit_runtime_start();
-    emit_runtime_uart_putchar();
-    emit_runtime_uart_puts();
+    /* Emit runtime preamble (suppressed by %DEFINE LIBRARY) */
+    if (!def_defined("LIBRARY")) {
+        emit_runtime_start();
+        emit_runtime_uart_putchar();
+        emit_runtime_uart_puts();
+    }
 
     /* Emit user procedures */
     cg_program_procs(prog);

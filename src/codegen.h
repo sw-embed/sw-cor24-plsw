@@ -1245,8 +1245,20 @@ void cg_emit_static_data(int prog_node) {
     child = nd_left[prog_node];
     while (child != NODE_NULL) {
         if (nd_kind[child] == NODE_DCL) {
-            cg_source_comment(child);
+            /* In LIBRARY mode, suppress ALL top-level DCL data emission.
+             * Top-level globals (BASED records, shared globals from
+             * .msw includes, and any other DCLs) are owned by the main
+             * module. Library modules reference them as externals
+             * resolved by the linker via FIXUP.
+             *
+             * Library modules must use procedure-local STATIC variables
+             * for module-private persistent state, not top-level DCLs. */
+            if (def_defined("LIBRARY")) {
+                child = nd_next[child];
+                continue;
+            }
             idx = sym_lookup(nd_name[child]);
+            cg_source_comment(child);
             if (idx >= 0) {
                 cg_emit_static_var(idx, nd_right[child]);
             }
@@ -1629,6 +1641,12 @@ void cg_program_procs(int prog_node) {
     child = nd_left[prog_node];
     while (child != NODE_NULL) {
         if (nd_kind[child] == NODE_PROC) {
+            /* In LIBRARY mode, skip the MAIN wrapper procedure */
+            if (def_defined("LIBRARY") && nd_name[child] &&
+                str_eq(nd_name[child], "MAIN")) {
+                child = nd_next[child];
+                continue;
+            }
             /* Layout procedure (enters scope, assigns offsets) */
             layout_proc(child);
             /* Emit code */
