@@ -1613,12 +1613,22 @@ void cg_proc(int proc_node) {
     /* Standard prologue: push fp, push r2, push r1, mov fp,sp */
     emit_prologue();
 
-    /* Allocate stack space for locals */
+    /* Allocate stack space for locals.
+     * `add sp,i8` is signed 8-bit (-128..127); for frames larger
+     * than 127 bytes the immediate would silently wrap (e.g. -204
+     * encodes to +52, growing sp instead of shrinking it and
+     * corrupting the saved register slots on nested calls).
+     * Fall back to `sub sp,i24` (24-bit immediate) for big frames. */
     frame_sz = layout_frame_size;
     if (frame_sz > 0) {
         emit_str(EMIT_INDENT);
-        emit_str("add     sp,-");
-        emit_int(frame_sz);
+        if (frame_sz <= 127) {
+            emit_str("add     sp,-");
+            emit_int(frame_sz);
+        } else {
+            emit_str("sub     sp,");
+            emit_int(frame_sz);
+        }
         emit_nl();
     }
 
