@@ -1,0 +1,6 @@
+/* main.plsw -- entry module for multi-module test
+ * Provides runtime + MAIN, calls LIB_HI from sibling library module. */
+
+MAIN: PROC;
+    CALL LIB_HI;
+END;

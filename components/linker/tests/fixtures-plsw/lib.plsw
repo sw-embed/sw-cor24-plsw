@@ -1,0 +1,10 @@
+/* lib.plsw -- library module (%DEFINE LIBRARY)
+ * Defines LIB_HI which calls UART_PUTCHAR (resolved as external via FIXUP). */
+
+%DEFINE LIBRARY;
+
+LIB_HI: PROC;
+    CALL UART_PUTCHAR(72);  /* 'H' */
+    CALL UART_PUTCHAR(73);  /* 'I' */
+    CALL UART_PUTCHAR(10);  /* \n */
+END;
