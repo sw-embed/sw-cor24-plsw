@@ -110,6 +110,13 @@ just clean          # Remove build artifacts
 - Variable-length instructions (1, 2, or 4 bytes)
 - Calling convention: args on stack R-to-L, return in r0
 
+## Projects Using PL/SW
+
+- [sw-cor24-snobol4](https://github.com/sw-embed/sw-cor24-snobol4) -- SNOBOL4 interpreter for COR24
+
+Note: SNOBOL was originally implemented in SIL (SNOBOL Implementation
+Language) which had macros, much like PL/SW does.
+
 ## License
 
 See [LICENSE](LICENSE).
