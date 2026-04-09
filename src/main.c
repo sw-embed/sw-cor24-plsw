@@ -5443,6 +5443,33 @@ void emit_runtime_uart_putchar(void) {
     emit_nl();
 }
 
+/* COR24 UART_GETCHAR runtime: poll UART RX, return byte in r0 */
+void emit_runtime_uart_getchar(void) {
+    emit_line("        .globl  _UART_GETCHAR");
+    emit_line("_UART_GETCHAR:");
+    emit_line("        push    fp");
+    emit_line("        push    r2");
+    emit_line("        push    r1");
+    emit_line("        mov     fp,sp");
+    /* Busy-wait: poll RX ready (bit 0 of status at 0xFF0101) */
+    emit_line("_uart_rx_wait:");
+    emit_line("        la      r2,16711937");
+    emit_line("        lbu     r0,0(r2)");
+    emit_line("        lcu     r1,1");
+    emit_line("        and     r0,r1");
+    emit_line("        ceq     r0,z");
+    emit_line("        brt     _uart_rx_wait");
+    /* Read byte from UART data register (0xFF0100); read clears RX ready */
+    emit_line("        la      r2,16711936");
+    emit_line("        lbu     r0,0(r2)");
+    emit_line("        mov     sp,fp");
+    emit_line("        pop     r1");
+    emit_line("        pop     r2");
+    emit_line("        pop     fp");
+    emit_line("        jmp     (r1)");
+    emit_nl();
+}
+
 /* COR24 UART_PUTS runtime: print null-terminated string + newline */
 void emit_runtime_uart_puts(void) {
     emit_line("        .globl  _UART_PUTS");
@@ -5527,6 +5554,7 @@ char *compile_program(char *source) {
     if (!def_defined("LIBRARY")) {
         emit_runtime_start();
         emit_runtime_uart_putchar();
+        emit_runtime_uart_getchar();
         emit_runtime_uart_puts();
     }
 
