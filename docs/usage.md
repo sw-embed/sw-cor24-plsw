@@ -433,3 +433,36 @@ SYNTAX ERROR line 5: unexpected token
 CODEGEN ERROR: undefined variable for store
 STORAGE ERROR: ...
 ```
+
+## Known Limitations
+
+### Long `IF / ELSE IF` chains — use `SELECT` instead
+
+The parser and code generator handle `IF / ELSE IF` as right-nested
+recursion: each `ELSE IF` becomes a nested `NODE_IF` inside the parent's
+else branch. Because PL/SW itself runs on COR24 (8 KB EBR stack), a
+single chain of roughly 90+ `ELSE IF` branches exhausts the host
+compiler's call stack during parse or codegen. The symptom is that the
+compiler produces no assembly output and either resets or runs to the
+cycle limit -- no explicit error is reported. See issue #33.
+
+**Workaround -- use `SELECT / WHEN` for dispatch-style code:**
+
+```plsw
+/* Instead of a long ELSE IF chain: */
+SELECT;
+    WHEN (OP = 1) CALL DO_ADD();
+    WHEN (OP = 2) CALL DO_SUB();
+    WHEN (OP = 3) CALL DO_MUL();
+    /* ...hundreds more WHEN clauses are fine... */
+    OTHERWISE CALL BAD_OPCODE();
+END;
+```
+
+`SELECT` iterates its `WHEN` children in a loop inside `cg_select`, so
+it does not recurse per branch and has no practical limit on the number
+of `WHEN` clauses. `OTHERWISE` is optional -- omitting it means "no
+action when no `WHEN` matches."
+
+The SNOBOL4 interpreter (`sw-cor24-snobol4`) uses this pattern for its
+AM opcode dispatch.

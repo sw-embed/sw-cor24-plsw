@@ -127,6 +127,15 @@ If `agentrail audit` reports orphan commits or working-tree drift,
 fix it before starting new work. Use `--emit-commands` to scaffold
 retroactive `add` lines, then review and run.
 
+**Known artifact:** the commit that initializes a saga (or runs
+`agentrail archive` + `agentrail init`) cannot reference itself as
+its own backing step, and `agentrail complete` rewrites the step
+file with summary and HEAD hash *after* its own commit. So a brand
+new saga always has a one-commit "self-orphan" lag and a small
+post-complete diff for the most recent step. This is expected, not
+a bug -- don't chase it with another bookkeeping commit (you'll
+just create the next one).
+
 ## Build / Test
 
 This project uses tc24r (C compiler) and cor24-run (emulator):

@@ -1,0 +1,1 @@
+Bundle two cleanups: (1) commit the 'Known Limitations' section in docs/usage.md documenting GitHub issue #33 (long IF/ELSE-IF chain stack-exhaustion, with SELECT/WHEN workaround); (2) add a CLAUDE.md note that the saga-init self-orphan pattern is expected, not a bug. Retroactively binds the 3160803 saga-init chore.
