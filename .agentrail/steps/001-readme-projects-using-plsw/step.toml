@@ -1,0 +1,12 @@
+number = 1
+slug = "readme-projects-using-plsw"
+status = "completed"
+description = "Add 'Projects Using PL/SW' section to README, listing the SNOBOL4 interpreter..."
+role = "production"
+context_files = []
+created_at = "2026-04-11T11:59:14"
+completed_at = "2026-04-11T11:59:32"
+commits = [
+    "85a58f34b5355afc8635a6853fedd3d1ee1b40bb",
+    "af4a10ae30bd377b1af28e1df11632ecd60e8219",
+]

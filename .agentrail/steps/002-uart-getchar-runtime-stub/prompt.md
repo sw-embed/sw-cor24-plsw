@@ -1,0 +1,1 @@
+Add _UART_GETCHAR runtime stub for UART RX, the receive counterpart to _UART_PUTCHAR. Resolves GitHub issue #32. Adds the stub to the runtime preamble emitted in non-LIBRARY mode.

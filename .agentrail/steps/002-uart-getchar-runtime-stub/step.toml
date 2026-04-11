@@ -1,0 +1,12 @@
+number = 2
+slug = "uart-getchar-runtime-stub"
+status = "completed"
+description = "Add _UART_GETCHAR runtime stub for UART RX, the receive counterpart to _UART_..."
+role = "production"
+context_files = []
+created_at = "2026-04-11T11:59:46"
+completed_at = "2026-04-11T11:59:46"
+commits = [
+    "e43f01a0508f87bd7584e2601b8723f143e27507",
+    "af4a10ae30bd377b1af28e1df11632ecd60e8219",
+]

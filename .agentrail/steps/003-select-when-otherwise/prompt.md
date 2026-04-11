@@ -1,0 +1,1 @@
+Implement SELECT/WHEN/OTHERWISE control flow construct in the PL/SW parser and code generator. PL/I-style multi-branch dispatch: parses to NODE_SELECT with WHEN children and an optional OTHERWISE body, codegen emits a linear compare-and-branch chain in cg_select.

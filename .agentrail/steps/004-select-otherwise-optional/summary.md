@@ -1,0 +1,1 @@
+Fixed SELECT-without-OTHERWISE bug (issue #34). One-line fix in src/parser.h: explicitly set nd_ival[n] = NODE_NULL when allocating the NODE_SELECT, so cg_select correctly detects the absent OTHERWISE branch. Verified all three cases: matching WHEN, fall-through no-match, non-MAIN proc.

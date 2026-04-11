@@ -1,0 +1,1 @@
+Added _UART_GETCHAR runtime stub to the runtime preamble. Mirror of _UART_PUTCHAR for the RX side. Closes issue #32.

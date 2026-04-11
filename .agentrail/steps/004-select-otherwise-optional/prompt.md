@@ -1,0 +1,1 @@
+Fix GitHub issue #34: SELECT/WHEN should compile when OTHERWISE is omitted. Root cause is that nd_alloc initializes nd_ival to 0, but NODE_NULL is -1, so cg_select's check for an absent OTHERWISE body always fails and runs cg_stmt(0) on whatever node 0 happens to be.

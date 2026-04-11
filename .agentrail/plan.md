@@ -1,49 +1,42 @@
-# PL/SW Modular Compilation (GitHub issue #28)
+# PL/SW Maintenance Saga
 
-Implement LIBRARY mode in the PL/SW compiler so large programs (e.g.
-the SNOBOL4 interpreter) can be split across separately compiled
-modules and linked with the existing FIXUP-based link24 toolchain in
-components/linker/.
+Ongoing maintenance saga for the PL/SW compiler after the v1
+(plsw-compiler, 67 steps) and v2 (plsw-modular, 5 steps) sagas
+completed. This saga has two phases:
 
-Reference: docs/linker-design.md (authoritative — supersedes the
-literal text of issue #28, which predates the FIXUP design and still
-mentions jump tables / EXTERNAL keyword / -m prefix flag; none of
-those are needed in the current design).
+## Phase 1 -- Retroactive bookkeeping
 
-## Approach
+Bind the post-modular orphan commits (Apr 7 - Apr 10 2026) to step
+records so `agentrail audit` reports a clean repo. These were
+ad-hoc commits made between sagas because the old CLAUDE.md did
+not tell agents to stop when no current step exists. The CLAUDE.md
+gap is now fixed.
 
-LIBRARY mode is activated by a `%DEFINE LIBRARY;` directive at the
-top of a module's source. When set, the compiler suppresses:
+Orphan commits to absorb:
+- 72a7111 fix(plsw): raise %DEFINE table to 512 (Apr 7 09:57)
+- 85a58f3 docs(readme): add Projects Using PL/SW section (Apr 7 17:25)
+- e43f01a feat(runtime): add _UART_GETCHAR stub for UART RX (Apr 8 20:05)
+- e7d4805 feat(select): add SELECT/WHEN/OTHERWISE control flow (Apr 10 18:29)
+- b63ab15 fix(plsw): make OTHERWISE optional in SELECT (Apr 10 20:52)
 
-1. Runtime preamble (_start, _UART_PUTCHAR, _UART_PUTS)
-2. The MAIN wrapper procedure
-3. ALL top-level DCL data emission (BASED records, globals, arrays)
+## Phase 2 -- Ongoing maintenance
 
-External symbol references are NOT marked at compile time. The
-existing meta-gen prep tool (components/linker/) scans the .s output,
-detects unresolved `la rN,_SYMBOL` references, rewrites them to
-`la rN,0` placeholders, and records FIXUPs in a .meta file. link24
-patches the placeholders at link time.
+Track future bug fixes, small features, doc updates, and any other
+work that does not warrant a dedicated saga. Each step is one
+focused change. When a coherent multi-step initiative comes along
+(e.g. another major feature like modular compilation was), archive
+this saga and start a dedicated one.
 
-## Existing state
+Open work as of saga creation:
+- GitHub issue #33: long IF/ELSE-IF chain limit -- documented as
+  known limitation, no fix planned. Tracking ticket only.
 
-- components/linker/{link24,meta-gen} already implemented (Rust)
-- components/linker/tests/demo-fixup.sh exercises the linker on
-  hand-written .s fixtures
-- Uncommitted working-tree changes in src/codegen.h and src/main.c
-  already implement LIBRARY-mode suppression — these need review,
-  testing, and commit
-- Issue #30 (DEF_MAX overflow) just fixed in commit 72a7111
+## Rules
 
-## Steps
-
-1. Review and commit the in-progress LIBRARY mode suppression in
-   src/main.c and src/codegen.h
-2. Add a PL/SW-driven end-to-end multi-module test (small fixture)
-   exercising compile -> meta-gen prep -> assemble -> meta-gen emit
-   -> layout -> reassemble -> link24 -> run on emulator
-3. Build the SNOBOL4 interpreter (sw-cor24-snobol4) modularly using
-   the new flow; verify the dating-app demo runs
-4. Update docs/usage.md with a "Modular compilation" section pointing
-   at docs/linker-design.md
-5. Close GitHub issue #28
+- Each step is one commit (or one cohesive set of commits when work
+  needs to be staged).
+- Use `agentrail add` for retroactive entries (Phase 1) since the
+  commits already exist.
+- Use the normal `next` / `begin` / `complete` flow for forward work.
+- Stop and ask the user before doing any code work if `agentrail
+  next` reports no current step.

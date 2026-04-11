@@ -1,0 +1,12 @@
+number = 3
+slug = "select-when-otherwise"
+status = "completed"
+description = "Implement SELECT/WHEN/OTHERWISE control flow construct in the PL/SW parser an..."
+role = "production"
+context_files = []
+created_at = "2026-04-11T11:59:55"
+completed_at = "2026-04-11T11:59:55"
+commits = [
+    "e7d4805cb54aec9fbb7297e108cd28d89670ee15",
+    "af4a10ae30bd377b1af28e1df11632ecd60e8219",
+]

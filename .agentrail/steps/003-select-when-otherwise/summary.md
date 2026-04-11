@@ -1,0 +1,1 @@
+Added SELECT/WHEN/OTHERWISE construct to PL/SW. Parser builds NODE_SELECT with WHEN children and optional OTHERWISE; codegen iterates WHEN children in a single frame (no per-branch recursion). Includes select_demo.plsw and select_nested.plsw examples.

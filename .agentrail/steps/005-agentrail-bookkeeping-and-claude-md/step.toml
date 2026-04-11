@@ -1,0 +1,9 @@
+number = 5
+slug = "agentrail-bookkeeping-and-claude-md"
+status = "completed"
+description = "Reconcile saga state with git: commit the long-pending v1->v2 archive transit..."
+role = "production"
+context_files = []
+created_at = "2026-04-11T12:00:19"
+completed_at = "2026-04-11T12:00:19"
+commits = ["af4a10ae30bd377b1af28e1df11632ecd60e8219"]
