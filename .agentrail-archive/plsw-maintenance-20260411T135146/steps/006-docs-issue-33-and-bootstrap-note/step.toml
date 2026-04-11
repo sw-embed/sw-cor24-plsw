@@ -1,8 +1,8 @@
-number = 7
+number = 6
 slug = "docs-issue-33-and-bootstrap-note"
-status = "in-progress"
+status = "pending"
 description = "Bundle two cleanups: (1) commit the 'Known Limitations' section in docs/usage..."
 role = "production"
 context_files = []
-created_at = "2026-04-11T13:19:24"
-commits = ["3160803a26238ed7336a1ce460dfd89b0fe09584"]
+created_at = "2026-04-11T13:19:17"
+commits = []

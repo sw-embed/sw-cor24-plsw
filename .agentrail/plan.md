@@ -1,42 +1,62 @@
-# PL/SW Maintenance Saga
+# PL/SW Vendor Toolchain Saga
 
-Ongoing maintenance saga for the PL/SW compiler after the v1
-(plsw-compiler, 67 steps) and v2 (plsw-modular, 5 steps) sagas
-completed. This saga has two phases:
+Vendor the COR24 cross-toolchain (sw-cx24, sw-asx24, sw-em24)
+under `./vendor/` so PL/SW pins specific versions of each tool
+and adoption of upstream changes is deliberate.
 
-## Phase 1 -- Retroactive bookkeeping
+Architectural design lives in `docs/vendor-plan.md` -- read it
+first. This plan.md is the saga arc; the design doc is the
+authoritative reference.
 
-Bind the post-modular orphan commits (Apr 7 - Apr 10 2026) to step
-records so `agentrail audit` reports a clean repo. These were
-ad-hoc commits made between sagas because the old CLAUDE.md did
-not tell agents to stop when no current step exists. The CLAUDE.md
-gap is now fixed.
+## Goal
 
-Orphan commits to absorb:
-- 72a7111 fix(plsw): raise %DEFINE table to 512 (Apr 7 09:57)
-- 85a58f3 docs(readme): add Projects Using PL/SW section (Apr 7 17:25)
-- e43f01a feat(runtime): add _UART_GETCHAR stub for UART RX (Apr 8 20:05)
-- e7d4805 feat(select): add SELECT/WHEN/OTHERWISE control flow (Apr 10 18:29)
-- b63ab15 fix(plsw): make OTHERWISE optional in SELECT (Apr 10 20:52)
+After this saga: a fresh `git clone` of sw-cor24-plsw + one run
+of `./scripts/vendor-fetch.sh` rebuilds the exact toolchain
+binaries pinned by version.json manifests, with SHA-256
+verification, and `just build` works without referencing any
+sibling working directory or anything in `~/.local/`.
 
-## Phase 2 -- Ongoing maintenance
+## Steps
 
-Track future bug fixes, small features, doc updates, and any other
-work that does not warrant a dedicated saga. Each step is one
-focused change. When a coherent multi-step initiative comes along
-(e.g. another major feature like modular compilation was), archive
-this saga and start a dedicated one.
+1. **Skeleton + script**. Pure scaffolding, no real binaries:
+   - `vendor/.gitignore` (ignores `*/v*/bin/*`)
+   - `vendor/active.env` (committed, version pins)
+   - `scripts/vendor-fetch.sh` (verify + `--record` modes)
+   - `vendor/sw-cx24/v0.1.0/version.json` skeleton with TBD sha256
+   - The `docs/vendor-plan.md` design doc gets folded into this
+     step's commit (it was drafted at saga-init time)
+   - No vendored binaries yet; script untested end-to-end
 
-Open work as of saga creation:
-- GitHub issue #33: long IF/ELSE-IF chain limit -- documented as
-  known limitation, no fix planned. Tracking ticket only.
+2. **Vendor sw-cx24**. Pin a stable upstream commit, run
+   `vendor-fetch.sh --record sw-cx24`, copy `includes/` and
+   `docs/`, verify the resulting binary builds PL/SW
+   byte-identical to the current `tc24r`-built version.
+   Possibly involves an upstream rename of the C compiler repo.
+
+3. **Vendor sw-asx24**. Same workflow for the cross-assembler.
+   Likely needs upstream split from `sw-cor24-emulator`, since
+   assembler and emulator are currently one binary.
+
+4. **Vendor sw-em24**. Same workflow for the emulator.
+
+5. **Cut over justfile + CLAUDE.md**. Switch all build paths to
+   the vendor tree; rewrite "Stable toolchain references" in
+   CLAUDE.md to point at `vendor/`. Verify `just build`,
+   `just test`, `just pipeline examples/select_demo.plsw` all
+   green.
+
+6. **Bootstrap docs + cold-clone test**. README "First-time
+   setup" section. Test the cold-clone scenario by removing
+   `vendor/*/*/bin/*` and rerunning `vendor-fetch.sh; just build`.
+   Document the upgrade workflow.
+
+After this saga is archived, start a timestamped maintenance
+saga (e.g. `plsw-maint-20260411Thhmm`) for ongoing fixes.
 
 ## Rules
 
-- Each step is one commit (or one cohesive set of commits when work
-  needs to be staged).
-- Use `agentrail add` for retroactive entries (Phase 1) since the
-  commits already exist.
-- Use the normal `next` / `begin` / `complete` flow for forward work.
-- Stop and ask the user before doing any code work if `agentrail
-  next` reports no current step.
+- Each step is one focused commit (or a small bundle).
+- Steps 2-4 may also produce upstream commits in the toolchain
+  repos -- note that explicitly in the step prompt.
+- Don't expand scope. If a step uncovers something else broken,
+  log it for a future maintenance step.

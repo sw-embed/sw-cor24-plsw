@@ -1,0 +1,1 @@
+Committed the issue #33 limitation docs that were left uncommitted in a prior session, and added a CLAUDE.md note that saga-init self-orphans are expected artifacts not bugs to chase. Step also retroactively binds the saga-init chore commit 3160803.
