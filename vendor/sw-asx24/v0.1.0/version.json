@@ -1,0 +1,21 @@
+{
+  "name": "sw-asx24",
+  "version": "v0.1.0",
+  "description": "COR24 cross-assembler (formerly the assembler half of cor24-run)",
+  "repo": "TBD",
+  "repo_path_local": "../sw-asx24",
+  "commit": "TBD",
+  "tag": "TBD",
+  "build_cmd": "TBD",
+  "binary_src": "TBD",
+  "headers_src": "include",
+  "docs_src": "docs",
+  "platforms": {
+    "darwin-arm64": {
+      "sha256": "TBD",
+      "size": 0
+    }
+  },
+  "recorded_at": "TBD",
+  "recorded_by": "TBD"
+}

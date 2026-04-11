@@ -1,0 +1,8 @@
+# Vendor binaries are built locally from the upstream commit
+# pinned in version.json. They are SHA-256-verified by
+# scripts/vendor-fetch.sh, never checked in.
+*/v*/bin/*
+
+# Keep the bin/ directory itself so vendor-fetch.sh has a place
+# to put binaries on a fresh clone.
+!*/v*/bin/.gitkeep
