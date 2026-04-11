@@ -804,6 +804,7 @@ int parse_stmt(void) {
 
         n = nd_alloc(NODE_SELECT);
         if (n == NODE_NULL) return NODE_NULL;
+        nd_ival[n] = NODE_NULL;  /* OTHERWISE body defaults to none */
 
         while (!parse_err && cur_type == TOK_WHEN) {
             parse_advance();
