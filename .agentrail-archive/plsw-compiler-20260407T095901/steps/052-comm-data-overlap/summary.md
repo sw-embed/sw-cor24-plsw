@@ -1,0 +1,1 @@
+Replaced .comm with explicit .byte 0 zero-fill entries in cg_emit_one_static (GitHub #12). The COR24 assembler's single address counter caused .comm symbols to overlap with .data labels. Now all uninitialized arrays get a proper label + .byte 0,0,... ensuring unique addresses.

@@ -1,0 +1,1 @@
+Changed all BYTE loads from lb (sign-extending) to lbu (zero-extending) in codegen.h (GitHub #8). Affected cg_load_var, cg_load_simple_into, cg_field_load, cg_deref_load, cg_array_load. Updated 3 test assertions to match. sb (store byte) was already correct.

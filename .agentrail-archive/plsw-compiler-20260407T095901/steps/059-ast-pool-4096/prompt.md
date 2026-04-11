@@ -1,0 +1,1 @@
+Increase AST node pool from 1024 to 4096 (GitHub issue #19). NODE_POOL_MAX in ast.h. Also update the error message string that says '1024 nodes'. Simple constant change.

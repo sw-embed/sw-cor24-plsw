@@ -1,1 +1,0 @@
-Implement DO I = start TO end code generation. Lower to equivalent while loop: assign start to loop var, emit header, compare to end, branch if past, emit body, increment, branch back. Test: DO I = 1 TO 10; CALL PRINT_INT(I); END;

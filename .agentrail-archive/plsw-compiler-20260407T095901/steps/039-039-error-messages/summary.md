@@ -1,0 +1,1 @@
+Added line numbers to error messages. parse_error now prints 'SYNTAX ERROR line N: message' using lex_line. cg_error prints 'CODEGEN ERROR: message' (first error only, no duplicates). compile_program defers error reporting to subsystems. parse_expect shows 'expected X, got Y' context. Verified with test cases: missing expression, missing semicolon, undefined variable.

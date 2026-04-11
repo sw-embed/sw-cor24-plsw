@@ -1,0 +1,1 @@
+Reviewed and verified %DEFINE LIBRARY suppression in src/main.c and src/codegen.h: suppresses runtime preamble, MAIN wrapper, and top-level DCL emission. Built compiler, confirmed normal mode (hello-macro) still works, and tested LIBRARY mode on a small ADD proc producing only the bare _ADD procedure (no _start, _UART_*, _MAIN). Committed as c5e7e5a referencing #28.

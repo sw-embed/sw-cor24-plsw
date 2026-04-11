@@ -1,0 +1,8 @@
+number = 55
+slug = "define-from-includes"
+status = "completed"
+description = "Fix %DEFINE value substitution not working from included .msw files (GitHub i..."
+role = "production"
+context_files = []
+created_at = "2026-04-05T21:59:43"
+completed_at = "2026-04-05T22:00:54"

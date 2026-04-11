@@ -1,0 +1,1 @@
+Implemented array element access code generation: cg_array_addr (base + index * elem_size), cg_array_load/store with sized access (lw/sw for INT, lb/sb for CHAR), dispatch in cg_expr and cg_assign. Added test suite: INT array store/load, CHAR byte access, DO loop fill with readback. All tests pass. Integrated test_array_codegen into main test runner.

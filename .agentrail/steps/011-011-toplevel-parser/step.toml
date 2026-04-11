@@ -1,8 +1,0 @@
-number = 11
-slug = "011-toplevel-parser"
-status = "completed"
-description = "Implement the top-level parser. Parse a sequence of top-level DCL declaration..."
-role = "production"
-context_files = []
-created_at = "2026-03-30T13:05:07"
-completed_at = "2026-03-30T20:41:52"

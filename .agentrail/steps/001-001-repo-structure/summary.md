@@ -1,1 +1,0 @@
-Created project directory structure (src/, test/, examples/, build/). Added justfile with tc24r + cor24-run build pipeline. Created minimal src/main.c entry point that prints compiler banner via UART. Verified end-to-end toolchain: tc24r compiles to 1436 bytes of COR24 assembly, cor24-run executes it successfully in 1155 instructions. Added .gitignore for build artifacts.

@@ -1,1 +1,0 @@
-Increased NODE_POOL_MAX from 256 to 1024 and added clear 'AST node pool exhausted' error message with suppression flag to prevent cascading misleading parse errors (GitHub #6).

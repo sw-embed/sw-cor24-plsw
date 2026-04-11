@@ -1,8 +1,0 @@
-number = 62
-slug = "multiline-strings"
-status = "completed"
-description = "Support multi-line string literals in CHAR INIT (GitHub issue #22). Currently..."
-role = "production"
-context_files = []
-created_at = "2026-04-06T00:26:14"
-completed_at = "2026-04-06T00:28:02"

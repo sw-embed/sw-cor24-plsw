@@ -1,8 +1,0 @@
-number = 8
-slug = "008-expr-parser"
-status = "completed"
-description = "Implement the expression parser with operator precedence. Precedence levels (..."
-role = "production"
-context_files = []
-created_at = "2026-03-30T13:05:07"
-completed_at = "2026-03-30T19:16:33"

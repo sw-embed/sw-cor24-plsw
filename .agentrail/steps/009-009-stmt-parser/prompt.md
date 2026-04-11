@@ -1,1 +1,0 @@
-Implement the statement parser. Parse: assignment (var = expr;), IF (cond) THEN stmt ELSE stmt, DO WHILE (cond); ... END;, DO I = start TO end; ... END;, CALL proc(args);, RETURN(expr);, DO; ... END; blocks. Statements are semicolon-terminated. Test: parse compound statement sequences and dump AST.

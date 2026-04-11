@@ -1,1 +1,0 @@
-Implement conditional compilation directives. %IF / %THEN / %ELSE / %ENDIF based on defined symbols. %DEFINE NAME and %DEFINE NAME value for compile-time constants. Evaluate simple conditions (defined, equals). Skip tokens in false branches. Test: conditionally include/exclude code blocks based on target flags.

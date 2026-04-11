@@ -1,1 +1,0 @@
-Increase the emit buffer from 32KB to 64KB (GitHub issue #13). EMIT_BUF_SIZE in emit.h is 32768, too small for programs with large static data. Find EMIT_BUF_SIZE in emit.h and increase to 65536. Simple constant change. Verify build and examples.

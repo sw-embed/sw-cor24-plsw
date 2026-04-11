@@ -1,0 +1,1 @@
+Added counted loop demo (examples/loop.plsw) with DO I = 1 TO 10 printing numbers via PRINT_INT procedure using software division for digit extraction. Added test suite 33 (test_counted_loop) with 6 verification checks -- all passing. Bumped SUITE_COUNT to 34.

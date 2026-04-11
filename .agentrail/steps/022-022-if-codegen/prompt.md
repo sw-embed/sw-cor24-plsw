@@ -1,1 +1,0 @@
-Implement IF/THEN/ELSE code generation. Evaluate condition expression. Emit conditional branch (beq/bne) to else label or end label. Emit then-block code. If ELSE present, emit jump over else-block, else label, else-block code. End label. Test: if/then and if/then/else both work correctly.

@@ -1,1 +1,0 @@
-Implement mixed listing output. Add a compiler flag (-l or --listing) that produces interleaved output: each PL/SW source line as a comment followed by the generated assembly instructions. Write to a separate .lst file or to UART. Test: compile hello.plsw with listing, verify source lines appear before their generated code.

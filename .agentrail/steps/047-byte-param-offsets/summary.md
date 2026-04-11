@@ -1,1 +1,0 @@
-Fixed BYTE parameter stack offsets in layout_params (GitHub #7). Changed offset advancement from type_width (1 for BYTE) to always 3 bytes, matching the push calling convention. Added test verifying correct offsets: T at 12(fp), S at 15(fp), V at 18(fp).

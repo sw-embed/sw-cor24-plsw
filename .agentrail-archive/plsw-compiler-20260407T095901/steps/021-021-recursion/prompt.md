@@ -1,0 +1,1 @@
+Implement nested calls and recursion support. Verify correct frame management: each call gets its own frame, register saves are correct across call boundaries. Test: recursive factorial function -- PROC FACT(N INT(24)) RETURNS(INT(24)); compile and run, verify FACT(6) = 720.

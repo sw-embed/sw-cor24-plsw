@@ -1,1 +1,0 @@
-Procedure parser already implemented and committed (f9dba0b). All 15 test cases pass: minimal proc, typed params, OPTIONS (FREESTANDING/NAKED/LEAF), RETURNS clause, bodies with DCL+stmts, IF/DO WHILE control flow, END with name, and realistic UART_PUTS procedure. Verified with extended emulator timeout (--speed 0 --time 60).

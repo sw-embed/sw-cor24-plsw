@@ -1,0 +1,8 @@
+number = 67
+slug = "ast-pool-8192"
+status = "completed"
+description = "Increase NODE_POOL_MAX from 4096 to 8192 (GitHub issue #27). Also update the ..."
+role = "production"
+context_files = []
+created_at = "2026-04-06T12:19:54"
+completed_at = "2026-04-06T12:31:26"

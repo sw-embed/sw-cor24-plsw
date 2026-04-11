@@ -1,1 +1,0 @@
-Fixed AND/OR logical operators in cg_binop (GitHub #5). Root cause: cg_binop only handled TOK_AMP/TOK_PIPE (bitwise) but not TOK_AND/TOK_OR (logical keywords). Since comparisons produce 0/1, bitwise ops give correct logical results. Added test for AND/OR with ptr->field comparisons.

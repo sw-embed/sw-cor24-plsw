@@ -1,1 +1,0 @@
-Implement record field access code generation. Dot notation: rec.field computes base_address + field_offset. Nested records: rec.sub.field chains offsets. Field assignment: store value at computed address. Field read: load from computed address. Test: declare a record with multiple fields, assign each field, read back and verify.

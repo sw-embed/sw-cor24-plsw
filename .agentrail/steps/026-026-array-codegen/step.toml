@@ -1,8 +1,0 @@
-number = 26
-slug = "026-array-codegen"
-status = "completed"
-description = "Implement array access code generation. Index expression: arr(i) computes bas..."
-role = "production"
-context_files = []
-created_at = "2026-03-30T13:16:12"
-completed_at = "2026-04-01T10:13:15"

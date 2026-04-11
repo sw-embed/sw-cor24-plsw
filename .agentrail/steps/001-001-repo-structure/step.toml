@@ -1,8 +1,0 @@
-number = 1
-slug = "001-repo-structure"
-status = "completed"
-description = "Create the project directory structure and build system. Create src/ for comp..."
-role = "production"
-context_files = []
-created_at = "2026-03-30T12:50:18"
-completed_at = "2026-03-30T13:43:39"

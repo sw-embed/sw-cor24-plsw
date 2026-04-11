@@ -1,1 +1,0 @@
-Implemented DO WHILE loop code generation. Added cg_do_while() that emits: loop header label, condition evaluation, conditional branch to end on false, loop body, unconditional jump back to header, end label. Added NODE_DO_WHILE dispatch in cg_stmt(). Tests cover simple countdown, loop with procedure call, and nested loops -- all pass.

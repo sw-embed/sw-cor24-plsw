@@ -1,0 +1,1 @@
+Final documentation pass. Update README.md with project overview, build instructions, and example session. Update docs/usage.md with final syntax reference reflecting any changes during implementation. Add a CHANGELOG or release notes for v1. Verify all docs are accurate against the implemented compiler. Add example session transcript showing compilation and execution.

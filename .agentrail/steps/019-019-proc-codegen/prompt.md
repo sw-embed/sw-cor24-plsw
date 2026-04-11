@@ -1,1 +1,0 @@
-Implement procedure prologue/epilogue code generation. Prologue: push fp, push r2, push r1, mov fp,sp, sub sp for locals. Epilogue: mov sp,fp, pop r1, pop r2, pop fp, ret. Emit procedure label. Handle RETURNS -- move result to r0 before epilogue. Test: empty procedure call and return works on emulator.

@@ -1,0 +1,8 @@
+number = 64
+slug = "emit-buf-256k"
+status = "completed"
+description = "Increase EMIT_BUF_SIZE from 128KB to 256KB (GitHub issue #24). Simple constan..."
+role = "production"
+context_files = []
+created_at = "2026-04-06T00:31:10"
+completed_at = "2026-04-06T00:31:46"

@@ -1,0 +1,8 @@
+number = 57
+slug = "long-branches"
+status = "completed"
+description = "Fix branch target too far in large procedures (GitHub issue #17). The compile..."
+role = "production"
+context_files = []
+created_at = "2026-04-05T22:07:03"
+completed_at = "2026-04-05T22:09:28"

@@ -1,8 +1,0 @@
-number = 54
-slug = "bitwise-and-codegen"
-status = "completed"
-description = "Fix bitwise AND (&) causing 'undefined variable' in codegen (GitHub issue #14..."
-role = "production"
-context_files = []
-created_at = "2026-04-05T21:53:18"
-completed_at = "2026-04-05T21:55:05"

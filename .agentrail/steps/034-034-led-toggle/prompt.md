@@ -1,1 +1,0 @@
-Build LED toggle demo. Write examples/led.plsw that uses inline ASM to write to the LED MMIO address (0xFF0000). Toggle LED on/off in a loop with a delay. Demonstrates: inline ASM blocks, MMIO access, DO WHILE loop, integration of high-level control flow with low-level hardware access. Test on emulator.

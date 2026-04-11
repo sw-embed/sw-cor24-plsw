@@ -1,0 +1,1 @@
+Build counted loop demo. Write examples/loop.plsw that uses DO I = 1 TO 10 to print numbers. Demonstrates: DO count syntax, procedure calls, arithmetic, integer output. Verify output shows numbers 1 through 10.

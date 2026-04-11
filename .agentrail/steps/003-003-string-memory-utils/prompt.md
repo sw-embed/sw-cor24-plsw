@@ -1,1 +1,0 @@
-Write string and memory utility functions: strcmp, strcpy, strlen, memset, memcpy. Implement a simple arena allocator for compiler tables (fixed-size pool, bump allocation). These are freestanding -- no libc. Test: basic string operations work on COR24 emulator.

@@ -1,1 +1,0 @@
-Added 10-test assignment codegen suite (test_assign_codegen) validating auto/static variable stores, byte-width stores, complex expressions, assign+load-back, multi-assignment sequences, large offsets, and negation. cg_assign/cg_store_var were already implemented in step 016. All tests pass with 0 errors on COR24 emulator.

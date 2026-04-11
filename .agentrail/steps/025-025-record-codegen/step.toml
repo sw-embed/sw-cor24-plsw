@@ -1,8 +1,0 @@
-number = 25
-slug = "025-record-codegen"
-status = "completed"
-description = "Implement record field access code generation. Dot notation: rec.field comput..."
-role = "production"
-context_files = []
-created_at = "2026-03-30T13:15:56"
-completed_at = "2026-04-01T05:52:38"

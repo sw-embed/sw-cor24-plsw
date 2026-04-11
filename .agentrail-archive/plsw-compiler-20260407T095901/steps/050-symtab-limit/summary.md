@@ -1,0 +1,1 @@
+Increased SYM_SCOPE_MAX from 64 to 256 and SYM_TOTAL from 512 to 2048 in symtab.h (GitHub #10). Simple constant change.

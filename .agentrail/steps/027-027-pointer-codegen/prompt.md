@@ -1,1 +1,0 @@
-Implement pointer and address code generation. ADDR(var) -- compute address of variable (stack base + offset, or static label). PTR dereference -- load/store through pointer. Pointer arithmetic: PTR + offset adds bytes. Pointer to record field access. Test: take address of a record, access fields through pointer, verify values.

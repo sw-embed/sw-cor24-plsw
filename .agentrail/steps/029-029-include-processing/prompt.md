@@ -1,1 +1,0 @@
-Implement %INCLUDE directive processing. When lexer encounters %INCLUDE NAME;, search the include path (-I directories) for NAME.msw. Read the file contents and insert tokens into the token stream. Support nested includes (with depth limit). Test: create a .msw file with declarations, include it from .plsw, verify declarations are available.

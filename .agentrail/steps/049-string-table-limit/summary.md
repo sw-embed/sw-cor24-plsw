@@ -1,1 +1,0 @@
-Increased CG_STR_MAX from 32 to 128 in codegen.h (GitHub #9). Simple constant change.

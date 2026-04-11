@@ -1,1 +1,0 @@
-Build record and pointer demo. Write examples/record.plsw that declares a multi-level record (e.g., POINT with X,Y fields), fills fields, takes address, accesses via pointer. Demonstrates: level-based DCL, record field access, ADDR(), pointer dereference. Verify correct values printed.

@@ -1,1 +1,0 @@
-Confirmed issue #15 (%DEFINE from includes) was caused by issue #16 (DEF_MAX overflow). %DEFINE from includes works correctly when under the limit. Increased DEF_MAX from 32 to 128 and added warning on overflow. Closes both #15 and #16.

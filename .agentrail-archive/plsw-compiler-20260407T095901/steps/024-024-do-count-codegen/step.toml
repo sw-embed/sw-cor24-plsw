@@ -1,0 +1,8 @@
+number = 24
+slug = "024-do-count-codegen"
+status = "completed"
+description = "Implement DO I = start TO end code generation. Lower to equivalent while loop..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:15:56"
+completed_at = "2026-04-01T05:13:52"

@@ -1,1 +1,0 @@
-Implement DO WHILE loop code generation. Emit loop header label. Evaluate condition, branch to end if false. Emit loop body. Emit branch back to header. End label. Test: counted loop printing numbers 1..10 via DO WHILE.

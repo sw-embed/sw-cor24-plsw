@@ -1,0 +1,1 @@
+Increased INC_BUF_SIZE from 12288 (12KB) to 32768 (32KB) in src/main.c. Simple constant change. Verified build and both chain and hello_macro examples still work.

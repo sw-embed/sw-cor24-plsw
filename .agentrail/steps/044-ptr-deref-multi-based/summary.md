@@ -1,1 +1,0 @@
-Fixed ptr->field resolution with multiple BASED records (GitHub #4). Root cause: layout_last_tdesc was a single global overwritten by each record, so PTR variables got the last record's descriptor. Fix: cg_deref_addr now falls back to td_field_search() which scans all record type descriptors. Added test suite #35 with two BASED records and cross-record field derefs.

@@ -1,1 +1,0 @@
-Implement assignment code generation. Simple variable assignment (evaluate expr, store to variable's stack slot or static address). Test: assign values and read them back, print via UART to verify.

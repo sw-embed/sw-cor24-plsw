@@ -1,1 +1,0 @@
-Implement MACRODEF parsing. Parse MACRODEF name; ... END; in .msw files. Parse REQUIRED and OPTIONAL clauses with parameter names and types (expr, lvalue, label). Store macro definitions in a macro table (name -> definition). Parse GEN DO; ... END; blocks within macro bodies as template strings. Test: parse a GETMAIN macro definition, verify it is stored correctly.

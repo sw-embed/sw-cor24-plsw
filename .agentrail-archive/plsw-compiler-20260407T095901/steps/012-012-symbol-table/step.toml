@@ -1,0 +1,8 @@
+number = 12
+slug = "012-symbol-table"
+status = "completed"
+description = "Implement the scoped symbol table. Support global scope and per-procedure sco..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:05:42"
+completed_at = "2026-03-30T21:14:15"

@@ -1,1 +1,0 @@
-Increase the string literal table limit from 32 to 128 (GitHub issue #9). CG_STR_MAX in codegen.h limits string literals to 32 per compilation unit. Programs with >32 CHAR INIT declarations silently drop strings, causing undefined label errors at assembly time. Find CG_STR_MAX in codegen.h and increase it to 128. Verify the compiler still builds and existing examples work.

@@ -1,0 +1,1 @@
+Increased NODE_POOL_MAX from 4096 to 8192 and updated error message (GitHub #27).

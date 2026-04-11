@@ -1,1 +1,0 @@
-Increase SRC_BUF_SIZE from 32KB to 64KB (GitHub issue #26). Simple constant change in main.c.

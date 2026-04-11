@@ -1,1 +1,0 @@
-Implement static data emission. String literals emitted in .data section with labels. STATIC variables with INIT values. Static arrays with initial values. Emit .data directives (db, dw as appropriate for COR24 assembler). Test: declare static data, access at runtime, verify values.

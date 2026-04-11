@@ -1,1 +1,0 @@
-Increase NODE_POOL_MAX from 4096 to 8192 (GitHub issue #27). Also update the error message string. Simple constant change in ast.h.

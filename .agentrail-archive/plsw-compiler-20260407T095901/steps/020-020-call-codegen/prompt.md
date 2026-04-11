@@ -1,0 +1,1 @@
+Implement procedure call code generation. Evaluate arguments left-to-right but push right-to-left onto stack. Emit call instruction. Clean up stack after return (add sp, arg_count*3). Capture return value from r0. Handle CALL as statement and as expression (for RETURNS procedures). Test: call procedures with arguments, verify return values.

@@ -1,1 +1,0 @@
-Final documentation pass. Updated README.md with complete v1 status, quick start, example table, pipeline diagram, and COR24 target reference. Rewrote docs/usage.md as comprehensive language reference matching implemented compiler: correct syntax, SIZEOF, string assignment, BASED records, pipeline protocol, compiler modes, error format, and session transcripts.

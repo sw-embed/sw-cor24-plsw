@@ -1,1 +1,0 @@
-Fixed multi-line string issue (GitHub #22) — root cause was TOK_TEXT_MAX of 64 truncating strings, not a multi-line bug. Increased to 256. Also fixed in this commit.

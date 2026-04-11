@@ -1,0 +1,1 @@
+Added LED toggle demo (examples/led.plsw) demonstrating inline ASM blocks for MMIO access to LED at 0xFF0000, DO WHILE delay loop, IF/THEN/ELSE toggle logic, and procedure calls. Added test suite 32 (test_led_toggle) with 8 verification checks -- all passing. Bumped SUITE_COUNT to 33.

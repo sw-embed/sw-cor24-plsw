@@ -1,1 +1,0 @@
-Increased EMIT_BUF_SIZE from 65536 to 131072 in emit.h (GitHub #20).

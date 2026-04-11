@@ -1,1 +1,0 @@
-Implemented inline assembly support. Parser handles ASM DO; 'instr'; ... END; blocks, collecting string literals as LITERAL child nodes on ASM_BLOCK. Codegen emits each string verbatim as an indented instruction. NAKED procedures (already supported) skip prologue/epilogue for raw asm. Three tests: LED MMIO write, NAKED interrupt handler stub, ASM block in regular proc. All pass.

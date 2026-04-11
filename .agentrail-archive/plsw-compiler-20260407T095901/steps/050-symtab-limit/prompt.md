@@ -1,0 +1,1 @@
+Increase global symbol table limits (GitHub issue #10). SYM_SCOPE_MAX is 64 per scope and SYM_TOTAL is 512 (8*64). Programs with multiple includes easily exceed 64 global symbols. Find SYM_SCOPE_MAX and SYM_TOTAL in symtab.h and increase SYM_SCOPE_MAX to 256 and SYM_TOTAL to 2048 (8*256). Simple constant change. Verify the compiler still builds and existing examples work.

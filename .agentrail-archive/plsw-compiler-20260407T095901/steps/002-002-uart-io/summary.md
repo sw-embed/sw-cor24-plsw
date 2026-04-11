@@ -1,0 +1,1 @@
+Implemented UART I/O bootstrap: uart_putchar, uart_getchar, uart_puts, uart_putstr, uart_getline (with backspace/DEL), print_int, parse_int in src/io.h. Main.c now runs interactive REPL that echoes input and parses integers. Fixed justfile run-file to run-input. All functions tested end-to-end on COR24 emulator.

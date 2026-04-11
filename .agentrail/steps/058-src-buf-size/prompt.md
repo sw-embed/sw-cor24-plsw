@@ -1,1 +1,0 @@
-Increase source buffer from 8KB to 32KB (GitHub issue #18). SRC_BUF_SIZE in main.c is 8192. Find it and increase to 32768. Simple constant change.

@@ -1,1 +1,0 @@
-Replaced all control flow branches (cg_if, cg_do_while, cg_do_count) with long-branch helpers (la+jmp) for unlimited range (GitHub #17). Added emit_branch, emit_branch_true, emit_branch_false to emit.h. Division routine retains short branches. Also increased SRC_BUF_SIZE 8KB->32KB (GitHub #18).

@@ -1,0 +1,8 @@
+number = 22
+slug = "022-if-codegen"
+status = "completed"
+description = "Implement IF/THEN/ELSE code generation. Evaluate condition expression. Emit c..."
+role = "production"
+context_files = []
+created_at = "2026-03-30T13:15:56"
+completed_at = "2026-04-01T04:25:41"

@@ -1,0 +1,8 @@
+number = 2
+slug = "e2e-multimodule-test"
+status = "completed"
+description = "Add an end-to-end PL/SW-driven multi-module test fixture under components/lin..."
+role = "production"
+context_files = []
+created_at = "2026-04-07T10:00:03"
+completed_at = "2026-04-07T14:34:49"

@@ -1,0 +1,8 @@
+number = 5
+slug = "005-fix-r1-corruption"
+status = "completed"
+description = "Investigate and fix GitHub issue #31: function epilogue pops r1=0 causing jmp..."
+role = "production"
+context_files = []
+created_at = "2026-04-07T14:31:41"
+completed_at = "2026-04-07T15:29:38"

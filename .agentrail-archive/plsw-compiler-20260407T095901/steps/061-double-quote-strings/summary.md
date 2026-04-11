@@ -1,0 +1,1 @@
+Added double-quoted string literals and delimiter-doubling escape to the lexer (GitHub #21). Both '...' and "..." now work as string delimiters. The non-active quote is ordinary data. Doubled delimiters produce a literal character. Updated lexer string scanning, false-branch skipper, added 4 tests, updated docs/usage.md.

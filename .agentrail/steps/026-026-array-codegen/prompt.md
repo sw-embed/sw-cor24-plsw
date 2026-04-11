@@ -1,1 +1,0 @@
-Implement array access code generation. Index expression: arr(i) computes base + i * element_size. Array element store and load. Handle CHAR arrays (1-byte elements) and INT arrays (3-byte elements). Test: declare an array, fill with values in a loop, read back and print.
