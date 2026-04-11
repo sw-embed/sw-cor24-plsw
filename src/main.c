@@ -6213,6 +6213,190 @@ void test_multi_based(void) {
     uart_putchar(10);
 }
 
+void test_select_codegen(void) {
+    int errs;
+    int prog;
+    char *out;
+
+    errs = 0;
+
+    /* Test 1: SELECT with two WHEN and OTHERWISE */
+    uart_puts("--- select: two WHEN + OTHERWISE ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC F(X INT(24)); SELECT; WHEN (X = 1) X = 1; WHEN (X = 2) X = 2; OTHERWISE X = 0; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_F:")) {
+            uart_puts("  FAIL: missing proc label _F");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "brf     ")) {
+            uart_puts("  FAIL: missing conditional branch");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "L0:")) {
+            uart_puts("  FAIL: missing label L0");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "L3:")) {
+            uart_puts("  FAIL: missing label L3 (end label)");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 2: SELECT with no OTHERWISE */
+    uart_puts("--- select: WHEN only, no OTHERWISE ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC M(X INT(24)); SELECT; WHEN (X = 0) X = 1; WHEN (X = 5) X = 2; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_M:")) {
+            uart_puts("  FAIL: missing proc label _M");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "L2:")) {
+            uart_puts("  FAIL: missing end label L2");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 3: SELECT with single WHEN */
+    uart_puts("--- select: single WHEN ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC Z(X INT(24)); SELECT; WHEN (X = 0) X = 1; OTHERWISE X = 0; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_Z:")) {
+            uart_puts("  FAIL: missing proc label _Z");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 4: Nested SELECT inside WHEN body */
+    uart_puts("--- select: nested SELECT ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC N(X INT(24)); SELECT; WHEN (X = 1) DO; SELECT; WHEN (X = 1) X = 100; OTHERWISE X = 1; END; END; WHEN (X = 2) X = 2; OTHERWISE X = 0; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_N:")) {
+            uart_puts("  FAIL: missing proc label _N");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 5: SELECT with complex expressions */
+    uart_puts("--- select: complex expressions ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("PROC R(X INT(24)); SELECT; WHEN (X < 0) X = -1; WHEN (X = 0) X = 0; WHEN (X > 0) X = 1; END; END;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        cg_program_procs(prog);
+        out = emit_output();
+        uart_putstr(out);
+
+        if (!str_find(out, "_R:")) {
+            uart_puts("  FAIL: missing proc label _R");
+            errs = errs + 1;
+        }
+        if (!str_find(out, "ceq     r0,z")) {
+            uart_puts("  FAIL: missing condition branch");
+            errs = errs + 1;
+        }
+    }
+
+    uart_putstr("select codegen errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -6251,12 +6435,13 @@ int run_suite(int n) {
     else if (n == 33) { uart_puts("=== Counted Loop Compile ==="); test_counted_loop(); }
     else if (n == 34) { uart_puts("=== Record Pointer Compile ==="); test_record_pointer(); }
     else if (n == 35) { uart_puts("=== Multi-BASED Pointer Tests ==="); test_multi_based(); }
+    else if (n == 36) { uart_puts("=== SELECT/WHEN Codegen Tests ==="); test_select_codegen(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 36
+#define SUITE_COUNT 37
 
 /* Source buffer for compile mode -- 64KB */
 #define SRC_BUF_SIZE 65536

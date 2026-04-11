@@ -542,6 +542,20 @@ int parse_block(void) {
     return blk;
 }
 
+/* Parse a block of statements that stops at WHEN, OTHERWISE, END, or EOF.
+ * Used for SELECT/WHEN bodies where these tokens delimit branches. */
+int parse_select_block(void) {
+    int blk = nd_alloc(NODE_BLOCK);
+    while (!parse_err && cur_type != TOK_WHEN && cur_type != TOK_OTHERWISE
+           && cur_type != TOK_END && cur_type != TOK_EOF) {
+        int s = parse_stmt();
+        if (s != NODE_NULL) {
+            nd_append(blk, s);
+        }
+    }
+    return blk;
+}
+
 /* Parse a single statement.
    Handles: assignment, IF, DO (WHILE/count/block), CALL,
    RETURN, DCL, and expression statements. */
@@ -776,6 +790,46 @@ int parse_stmt(void) {
     /* DCL / DECLARE */
     if (cur_type == TOK_DCL || cur_type == TOK_DECLARE) {
         return parse_dcl();
+    }
+
+    /* SELECT/WHEN/OTHERWISE */
+    if (cur_type == TOK_SELECT) {
+        int wcond;
+        int wbody;
+        int w;
+        int obody;
+
+        parse_advance();
+        parse_expect(TOK_SEMI);
+
+        n = nd_alloc(NODE_SELECT);
+        if (n == NODE_NULL) return NODE_NULL;
+
+        while (!parse_err && cur_type == TOK_WHEN) {
+            parse_advance();
+            parse_expect(TOK_LPAREN);
+            wcond = parse_expr();
+            parse_expect(TOK_RPAREN);
+            wbody = parse_select_block();
+
+            w = nd_alloc(NODE_DO_WHILE);
+            if (w != NODE_NULL) {
+                nd_left[w] = wcond;
+                nd_right[w] = wbody;
+                nd_append(n, w);
+            }
+        }
+
+        obody = NODE_NULL;
+        if (cur_type == TOK_OTHERWISE) {
+            parse_advance();
+            obody = parse_select_block();
+            nd_ival[n] = obody;
+        }
+
+        parse_expect(TOK_END);
+        parse_expect(TOK_SEMI);
+        return n;
     }
 
     /* Assignment or expression statement.

@@ -1413,6 +1413,45 @@ void cg_if(int node) {
     }
 }
 
+/* SELECT/WHEN/OTHERWISE codegen.
+ * AST: nd_left = first WHEN child (sibling chain via nd_next),
+ *       each WHEN: nd_left = condition, nd_right = body,
+ *       nd_ival = OTHERWISE body (or NODE_NULL) */
+void cg_select(int node) {
+    int lbl_end;
+    int when;
+
+    lbl_end = emit_new_label();
+    when = nd_left[node];
+
+    while (when != NODE_NULL) {
+        int lbl_next = emit_new_label();
+
+        /* Evaluate condition into r0 */
+        cg_expr(nd_left[when]);
+
+        /* Branch to next WHEN if r0 == 0 (condition false) */
+        emit_instr("ceq     r0,z");
+        emit_branch_true(lbl_next);
+
+        /* WHEN body */
+        cg_stmt(nd_right[when]);
+        emit_branch(lbl_end);
+
+        /* Next WHEN label */
+        emit_label(lbl_next);
+
+        when = nd_next[when];
+    }
+
+    /* OTHERWISE body */
+    if (nd_ival[node] != NODE_NULL) {
+        cg_stmt(nd_ival[node]);
+    }
+
+    emit_label(lbl_end);
+}
+
 /* DO WHILE loop codegen.
  * AST: nd_left = condition, nd_right = body (BLOCK) */
 void cg_do_while(int node) {
@@ -1515,6 +1554,8 @@ void cg_stmt(int node) {
 
     if (nd_kind[node] == NODE_ASSIGN) {
         cg_assign(node);
+    } else if (nd_kind[node] == NODE_SELECT) {
+        cg_select(node);
     } else if (nd_kind[node] == NODE_RETURN) {
         /* Evaluate return expression into r0 (if present) */
         if (nd_left[node] != NODE_NULL) {
@@ -1537,6 +1578,9 @@ void cg_stmt(int node) {
     } else if (nd_kind[node] == NODE_DO_COUNT) {
         /* DO I = start TO end: counted loop */
         cg_do_count(node);
+    } else if (nd_kind[node] == NODE_SELECT) {
+        /* SELECT/WHEN/OTHERWISE: linear compare-and-branch chain */
+        cg_select(node);
     } else if (nd_kind[node] == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
     } else if (nd_kind[node] == NODE_ASM_BLOCK) {

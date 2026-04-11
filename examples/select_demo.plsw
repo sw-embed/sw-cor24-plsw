@@ -1,0 +1,16 @@
+/* SELECT/WHEN demo -- token classifier */
+
+MAIN: PROC;
+    DCL X INT(24);
+
+    X = 2;
+
+    SELECT;
+        WHEN (X = 1) CALL UART_PUTCHAR(65);
+        WHEN (X = 2) CALL UART_PUTCHAR(66);
+        WHEN (X = 3) CALL UART_PUTCHAR(67);
+        OTHERWISE CALL UART_PUTCHAR(63);
+    END;
+
+    CALL UART_PUTCHAR(10);
+END;

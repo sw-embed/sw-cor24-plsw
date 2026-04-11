@@ -1,0 +1,526 @@
+
+
+
+
+My Fortran-ish compiler written in SNOBOL4 which is written in PL/SW is having issues (with PL/SW).  sno_xxx.plsw is using 94 nested if/else which may be exceeding a PL/SW compiler limit.  Does PL/I have a CASE or SWITCH statement that would scale better?  Can nested IF/ELSEs be replaced with a chain of handlers using a command design pattern?
+
+I’m mapping this to two separate concerns: language-level control flow in PL/I-family languages, and architecture-level ways to avoid giant decision trees in your compiler. Then I’ll compare them in terms of compiler stress, readability, and how well they fit a SNOBOL4-in-PL/SW codebase.
+
+Thought for 5s
+Yes. In PL/I, the construct you want is SELECT with WHEN clauses, and in some cases SELECT (expr)-style usage depending on the dialect/compiler. Conceptually, it fills the role of CASE / SWITCH and scales much better than a very deep nest of IF ... ELSE IF ... ELSE ....
+
+Restating the problem
+You have a Fortran-ish compiler implemented in SNOBOL4, itself hosted in PL/SW, and one module has around 94 nested if/else levels. That raises three distinct risks:
+
+Compiler recursion / nesting limits in the PL/SW compiler.
+
+Parser ambiguity or stack depth problems in the generated/hosted code.
+
+Maintenance pain, because deeply nested conditionals are hard to reason about and easy to break.
+
+So the real question is not only “does PL/I have a better syntax?” but also “what structure reduces pressure on the PL/SW compiler and makes the compiler itself easier to evolve?”
+
+1. Does PL/I have a CASE or SWITCH?
+Yes: SELECT
+Classic PL/I has a SELECT statement with one or more WHEN branches and an optional OTHERWISE.
+
+Typical shape:
+
+SELECT;
+   WHEN (token = TOK_IF)       CALL HANDLE_IF;
+   WHEN (token = TOK_DO)       CALL HANDLE_DO;
+   WHEN (token = TOK_RETURN)   CALL HANDLE_RETURN;
+   OTHERWISE                   CALL HANDLE_UNKNOWN;
+END;
+There is also a more expression-oriented form in many PL/I implementations:
+
+SELECT (token);
+   WHEN (TOK_IF)       CALL HANDLE_IF;
+   WHEN (TOK_DO)       CALL HANDLE_DO;
+   WHEN (TOK_RETURN)   CALL HANDLE_RETURN;
+   OTHERWISE           CALL HANDLE_UNKNOWN;
+END;
+The exact syntax supported by your PL/SW compiler matters, because PL/SW is PL/I-inspired, not necessarily full PL/I. But from a design standpoint, yes, PL/I absolutely has the notion you want.
+
+Why this scales better
+A SELECT / WHEN tree is better than 94 nested IFs for several reasons:
+
+It is usually parsed as one structured statement rather than a long recursive right-branching nest.
+
+It is easier for the compiler to transform into:
+
+a linear compare-and-branch chain,
+
+a jump table,
+
+or grouped decision code.
+
+It is easier for humans to verify that all cases are covered.
+
+Even if PL/SW does not currently implement SELECT, that is still a strong signal for how you might refactor the source structure.
+
+2. Is 94 nested IF/ELSE likely a real limit problem?
+Very possibly, yes.
+
+Even if PL/SW does not have a documented hard nesting limit, several internal implementation choices can break at that depth:
+
+Possible failure modes
+Parser recursion depth
+If the compiler parses IF ... ELSE ... recursively, 94 levels may be enough to overflow:
+
+compiler call stack,
+
+parser stack,
+
+internal AST nesting structures,
+
+macro expansion depth if macros are involved.
+
+Code generation recursion
+Even if parsing succeeds, codegen may recursively emit branches and labels.
+
+Statement-block bookkeeping limits
+A small compiler often keeps block nesting in fixed-size arrays, such as:
+
+active block stack,
+
+pending ELSE labels,
+
+symbol scope stack.
+
+A depth around 94 is exactly the kind of thing that exposes “I assumed no one would ever do this.”
+
+3. Best direct replacement: flatten to a dispatch chain
+If your nested IFs are really a disguised “one of many token/opcode/keyword cases,” then the cleanest replacement is:
+
+Option A: SELECT / WHEN
+Best if PL/SW has it, or if you are willing to add it.
+
+Good for
+token dispatch,
+
+statement parsing dispatch,
+
+opcode interpretation,
+
+character-class dispatch.
+
+Example
+SELECT (tok_kind);
+   WHEN (TOK_PROGRAM) CALL PARSE_PROGRAM;
+   WHEN (TOK_SUBROUTINE) CALL PARSE_SUBROUTINE;
+   WHEN (TOK_FUNCTION) CALL PARSE_FUNCTION;
+   WHEN (TOK_IF) CALL PARSE_IF;
+   WHEN (TOK_DO) CALL PARSE_DO;
+   OTHERWISE CALL PARSE_ERROR;
+END;
+This reduces nesting depth to 1.
+
+4. If PL/SW lacks SELECT: use a handler chain
+Yes, you can replace nested IF/ELSE with a chain of handlers, and that is often better in a compiler than a giant branch nest.
+
+This is close to the Command pattern, but more precisely it is often one of these:
+
+dispatcher table
+
+chain of responsibility
+
+token-handler registry
+
+opcode dispatch table
+
+Architecture viewpoint
+Instead of this:
+
+if token=A then ...
+else if token=B then ...
+else if token=C then ...
+...
+you do this:
+
+find handler for token
+call handler
+or:
+
+handler_1 tries
+if not handled, handler_2 tries
+if not handled, handler_3 tries
+...
+5. Three practical refactoring patterns
+Pattern 1: Flat ELSE-IF chain
+This is the minimal change.
+
+IF tok = TOK_A THEN CALL HANDLE_A;
+ELSE IF tok = TOK_B THEN CALL HANDLE_B;
+ELSE IF tok = TOK_C THEN CALL HANDLE_C;
+ELSE CALL HANDLE_UNKNOWN;
+Pros
+Easy mechanical rewrite.
+
+Much less nesting than deeply nested blocks.
+
+Likely avoids parser nesting limits.
+
+Cons
+Still one giant statement.
+
+Still ugly at 94 cases.
+
+Still recompiles as a long compare chain.
+
+This is the first thing I would try if you want the smallest possible change.
+
+Pattern 2: Grouped dispatcher procedures
+Split the cases into logical families.
+
+CALL HANDLE_DECLARATION(tok, handled);
+IF handled THEN RETURN;
+
+CALL HANDLE_EXECUTABLE(tok, handled);
+IF handled THEN RETURN;
+
+CALL HANDLE_IO(tok, handled);
+IF handled THEN RETURN;
+
+CALL HANDLE_MISC(tok, handled);
+IF handled THEN RETURN;
+
+CALL ERROR_UNKNOWN_TOKEN(tok);
+Inside each handler:
+
+PROC HANDLE_DECLARATION(tok, handled);
+   handled = 1;
+   IF tok = TOK_INTEGER THEN CALL PARSE_INTEGER_DECL;
+   ELSE IF tok = TOK_REAL THEN CALL PARSE_REAL_DECL;
+   ELSE IF tok = TOK_LOGICAL THEN CALL PARSE_LOGICAL_DECL;
+   ELSE handled = 0;
+END;
+Pros
+Very compiler-friendly.
+
+Great for readability.
+
+Natural fit for a compiler front end.
+
+Cons
+Slightly more boilerplate.
+
+You need a clean calling convention.
+
+This is usually the best compromise.
+
+Pattern 3: Table-driven dispatch
+This is the most scalable.
+
+You maintain a table like:
+
+keyword -> handler_id
+handler_id -> procedure entry
+Then dispatch indirectly.
+
+Conceptual example
+DISPATCH_TABLE:
+  "IF"        -> HANDLE_IF
+  "DO"        -> HANDLE_DO
+  "FORMAT"    -> HANDLE_FORMAT
+  "INTEGER"   -> HANDLE_INTEGER
+Then:
+
+look up token text or token kind,
+
+map to handler,
+
+call or branch to handler.
+
+Pros
+Best scaling.
+
+Easiest to extend.
+
+Most compiler-like.
+
+Cons
+Requires some kind of indirect call, label dispatch, or generated dispatcher.
+
+May be hard in PL/SW if it lacks procedure variables or indirect-call support.
+
+If PL/SW cannot do indirect calls, you can still fake this by having the table map to a small integer and then use a flat SELECT/ELSE IF on the integer.
+
+6. Is this really the Command pattern?
+Partly, but I would not lead with “Command pattern” here.
+
+Better terminology for your case
+For a compiler, the more accurate names are:
+
+dispatch table
+
+handler registry
+
+chain of responsibility
+
+table-driven parser
+
+operation dispatch
+
+The classic Command pattern usually implies:
+
+encapsulating operations as objects/records,
+
+possibly queueing, undoing, or composing them.
+
+That may be overkill for PL/SW.
+
+In your environment
+A practical “command-like” design could be:
+
+record Handler {
+  name
+  can_handle(...)
+  execute(...)
+}
+But in PL/SW/SNOBOL4, that may be too object-ish. A simpler procedural variant is likely better:
+
+TRY_HANDLE_DECL
+TRY_HANDLE_EXEC
+TRY_HANDLE_IO
+TRY_HANDLE_MISC
+That gives you most of the benefit without needing OO infrastructure.
+
+7. Recommended refactoring path
+Best near-term approach
+Step 1: Convert deep nesting into flat ELSE IF
+If the current structure is literally nested blocks, flatten it first.
+
+That alone may fix the compiler-limit problem.
+
+Step 2: Split into grouped handler procedures
+Organize by semantic category:
+
+declarations
+
+executable statements
+
+expressions
+
+I/O
+
+intrinsic functions
+
+punctuation/operators
+
+error/synchronization cases
+
+Step 3: Later, move to table-driven dispatch
+Do this only if:
+
+the keyword set is growing,
+
+you want easier extension,
+
+or you want to generate parts of the dispatcher.
+
+8. Example transformation
+Suppose today you effectively have this shape:
+
+IF tok = A THEN DO;
+   ...
+END;
+ELSE DO;
+   IF tok = B THEN DO;
+      ...
+   END;
+   ELSE DO;
+      IF tok = C THEN DO;
+         ...
+      END;
+      ELSE DO;
+         ...
+      END;
+   END;
+END;
+Better immediate rewrite
+IF tok = A THEN DO;
+   ...
+END;
+ELSE IF tok = B THEN DO;
+   ...
+END;
+ELSE IF tok = C THEN DO;
+   ...
+END;
+ELSE DO;
+   ...
+END;
+Better structural rewrite
+CALL HANDLE_GROUP1(tok, handled);
+IF handled THEN RETURN;
+
+CALL HANDLE_GROUP2(tok, handled);
+IF handled THEN RETURN;
+
+CALL HANDLE_GROUP3(tok, handled);
+IF handled THEN RETURN;
+
+CALL ERROR_BAD_TOKEN(tok);
+9. For a SNOBOL4 compiler specifically
+Because this is a compiler, a giant keyword/token dispatch is common. In that setting, the usual progression is:
+
+Level 1: lexical classification
+Convert text to a token code early.
+
+Instead of comparing strings everywhere:
+
+"IF", "DO", "GOTO", "FORMAT"
+map them once to:
+
+TOK_IF, TOK_DO, TOK_GOTO, TOK_FORMAT
+Then dispatch on the integer/token enum.
+
+Benefits
+simpler comparisons,
+
+smaller generated code,
+
+more structured parser.
+
+Level 2: separate syntax families
+Fortran-ish syntax often has natural groups:
+
+statement keywords,
+
+declaration keywords,
+
+type names,
+
+operators,
+
+punctuation,
+
+intrinsics.
+
+Dispatch by family first, then by specific token.
+
+That turns 94 cases into something more like:
+
+first select family: 6 branches,
+
+then within family: 8–20 branches.
+
+That is much easier on both compiler and human.
+
+10. What if PL/SW has no CASE/SELECT and limited procedure flexibility?
+Then I would still avoid deep nesting.
+
+Safe fallback structure
+Use a sequence of simple tests and early exits:
+
+IF TRY_HANDLE_DECL(tok) THEN RETURN;
+IF TRY_HANDLE_STMT(tok) THEN RETURN;
+IF TRY_HANDLE_IO(tok) THEN RETURN;
+IF TRY_HANDLE_INTRINSIC(tok) THEN RETURN;
+
+CALL ERROR_UNKNOWN(tok);
+This is extremely robust because:
+
+no deep nesting,
+
+each procedure is small,
+
+no indirect calls required.
+
+If PL/SW lacks boolean return values, use an out parameter:
+
+handled = 0;
+CALL TRY_HANDLE_DECL(tok, handled);
+IF handled THEN RETURN;
+11. Pros and cons of each approach
+Approach	Pros	Cons	Best use
+Deep nested IF/ELSE	straightforward to write initially	fragile, unreadable, may hit compiler limits	almost never
+Flat ELSE IF chain	easy conversion, low risk	still long	quick rescue
+SELECT/WHEN	clean, structured, scalable	may require PL/SW support	keyword/token dispatch
+Grouped handlers	modular, easy to test	extra boilerplate	compiler architecture
+Table-driven dispatch	best long-term scalability	more infrastructure	mature compiler
+12. My recommendation for your situation
+Given your environment and goals:
+
+I would do this
+First
+Rewrite the 94-level nest into either:
+
+a flat ELSE IF chain, or preferably
+
+a top-level grouped handler chain.
+
+Second
+If PL/SW does not yet support SELECT, consider adding it to PL/SW itself later, because it is exactly the kind of construct that compiler-building code benefits from.
+
+Third
+Internally, move toward:
+
+token classification first,
+
+dispatch by token kind,
+
+grouped handlers by syntactic family.
+
+That will scale far better than any direct nest.
+
+13. Practical design sketch
+A good shape for your compiler front end is:
+
+read raw token
+-> classify token kind
+-> dispatch by major category
+   -> specific handler
+      -> emit/intermediate action
+Something like:
+
+CALL CLASSIFY_TOKEN(rawtok, tok_kind);
+
+IF HANDLE_DECL(tok_kind) THEN RETURN;
+IF HANDLE_STMT(tok_kind) THEN RETURN;
+IF HANDLE_IO(tok_kind) THEN RETURN;
+IF HANDLE_INTRINSIC(tok_kind) THEN RETURN;
+
+CALL SYNTAX_ERROR(tok_kind);
+That is simple, testable, and much less likely to trip PL/SW compiler limits.
+
+14. Bottom line
+Answers
+Does PL/I have CASE or SWITCH?
+Yes. The PL/I-family construct is SELECT with WHEN and OTHERWISE.
+
+Would it scale better than 94 nested IF/ELSE?
+Yes, very likely.
+
+Can nested IF/ELSE be replaced with a chain of handlers?
+Yes, and for a compiler that is often the better architectural choice.
+
+Should you think of that as Command pattern?
+You can, but dispatcher / handler chain / chain of responsibility is a more accurate description here.
+
+Best immediate move
+Refactor the 94 nested levels into:
+
+flat ELSE IF, then
+
+grouped handler procedures, then
+
+eventually table-driven dispatch.
+
+That gives you the biggest reduction in compiler stress with the least conceptual risk.
+
+If you want, I can sketch a PL/SW-style refactoring template for:
+
+flat ELSE IF,
+
+grouped handlers with handled flag,
+
+and a future SELECT/WHEN syntax design for PL/SW itself.
+
+Need to make changes?
+Try sending a follow-up while ChatGPT is thinking.
+
+
+
+

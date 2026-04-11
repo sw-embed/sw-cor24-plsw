@@ -28,6 +28,7 @@
 #define NODE_DEREF        18
 #define NODE_BLOCK        19
 #define NODE_PARAM        20
+#define NODE_SELECT       21
 
 /* Type info constants */
 #define TYPE_NONE    0
@@ -216,7 +217,8 @@ char *nd_kind_name(int kind) {
     if (kind == NODE_ADDR)          return "ADDR";
     if (kind == NODE_DEREF)         return "DEREF";
     if (kind == NODE_BLOCK)         return "BLOCK";
-    if (kind == NODE_PARAM)         return "PARAM";
+    if (kind == NODE_PARAM)        return "PARAM";
+    if (kind == NODE_SELECT)       return "SELECT";
     return "???";
 }
 
@@ -331,6 +333,18 @@ void nd_dump(int n, int depth) {
         while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
         uart_puts("(TO)");
         nd_dump(nd_ival[n], depth + 1);
+    }
+    /* SELECT: dump WHEN children via nd_left sibling chain,
+       OTHERWISE body stored in nd_ival */
+    if (nd_kind[n] == NODE_SELECT) {
+        if (nd_ival[n] != NODE_NULL) {
+            d = 0;
+            while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
+            uart_puts("(OTHERWISE)");
+            nd_dump(nd_ival[n], depth + 1);
+        }
+        nd_dump(nd_next[n], depth);
+        return;
     }
     nd_dump(nd_next[n], depth);
 }

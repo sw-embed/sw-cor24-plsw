@@ -1,0 +1,61 @@
+/* SELECT/WHEN demo -- nested handler chains for token dispatch */
+
+DCL S1(10) CHAR INIT('keyword');
+DCL S2(10) CHAR INIT('number');
+DCL S3(10) CHAR INIT('string');
+DCL S4(10) CHAR INIT('unknown');
+DCL S5(10) CHAR INIT('operator');
+DCL SP(10) CHAR INIT('operator: ');
+DCL NL(2) CHAR INIT('
+');
+DCL T1(10) CHAR INIT('Test 1: ');
+DCL T2(10) CHAR INIT('Test 2: ');
+DCL T3(10) CHAR INIT('Test 3: nested');
+DCL PA(2) CHAR INIT('+');
+DCL MI(2) CHAR INIT('-');
+DCL ST(2) CHAR INIT('*');
+DCL QU(2) CHAR INIT('?');
+
+MAIN: PROC;
+    DCL X INT(24);
+    DCL Y INT(24);
+
+    CALL UART_PUTS(ADDR(T1));
+    X = 1;
+    SELECT;
+        WHEN (X = 1) CALL UART_PUTS(ADDR(S1));
+        WHEN (X = 2) CALL UART_PUTS(ADDR(S2));
+        WHEN (X = 3) CALL UART_PUTS(ADDR(S3));
+        OTHERWISE CALL UART_PUTS(ADDR(S4));
+    END;
+    CALL UART_PUTS(ADDR(NL));
+
+    CALL UART_PUTS(ADDR(T2));
+    X = 4;
+    SELECT;
+        WHEN (X = 1) CALL UART_PUTS(ADDR(S1));
+        WHEN (X = 2) CALL UART_PUTS(ADDR(S2));
+        WHEN (X = 3) CALL UART_PUTS(ADDR(S3));
+        OTHERWISE CALL UART_PUTS(ADDR(S4));
+    END;
+    CALL UART_PUTS(ADDR(NL));
+
+    CALL UART_PUTS(ADDR(T3));
+    CALL UART_PUTS(ADDR(NL));
+    X = 4;
+    Y = 2;
+    SELECT;
+        WHEN (X = 1) CALL UART_PUTS(ADDR(S1));
+        WHEN (X = 4) DO;
+            CALL UART_PUTS(ADDR(SP));
+            SELECT;
+                WHEN (Y = 1) CALL UART_PUTS(ADDR(PA));
+                WHEN (Y = 2) CALL UART_PUTS(ADDR(MI));
+                WHEN (Y = 3) CALL UART_PUTS(ADDR(ST));
+                OTHERWISE CALL UART_PUTS(ADDR(QU));
+            END;
+        END;
+        OTHERWISE CALL UART_PUTS(ADDR(S4));
+    END;
+    CALL UART_PUTS(ADDR(NL));
+END;

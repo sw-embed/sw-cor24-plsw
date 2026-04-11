@@ -159,6 +159,17 @@ void layout_locals(int body_node) {
             layout_locals(nd_right[body_node]);
         return;
     }
+    if (nd_kind[body_node] == NODE_SELECT) {
+        int wh = nd_left[body_node];
+        while (wh != NODE_NULL) {
+            if (nd_right[wh] != NODE_NULL)
+                layout_locals(nd_right[wh]);
+            wh = nd_next[wh];
+        }
+        if (nd_ival[body_node] != NODE_NULL)
+            layout_locals(nd_ival[body_node]);
+        return;
+    }
 
     /* Walk statements in the body block */
     stmt = nd_left[body_node];
@@ -208,6 +219,15 @@ void layout_locals(int body_node) {
         } else if (nd_kind[stmt] == NODE_DO_COUNT) {
             if (nd_right[stmt] != NODE_NULL)
                 layout_locals(nd_right[stmt]);
+        } else if (nd_kind[stmt] == NODE_SELECT) {
+            int wh = nd_left[stmt];
+            while (wh != NODE_NULL) {
+                if (nd_right[wh] != NODE_NULL)
+                    layout_locals(nd_right[wh]);
+                wh = nd_next[wh];
+            }
+            if (nd_ival[stmt] != NODE_NULL)
+                layout_locals(nd_ival[stmt]);
         }
         stmt = nd_next[stmt];
     }
