@@ -6,8 +6,8 @@
 
 #include "str.h"
 
-/* Arena size in bytes -- 16KB for compiler tables */
-#define ARENA_SIZE 16384
+/* Arena size in bytes -- 24KB for compiler tables */
+#define ARENA_SIZE 24576
 
 char arena_buf[ARENA_SIZE];
 int arena_top;
