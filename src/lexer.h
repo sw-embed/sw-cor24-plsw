@@ -524,6 +524,26 @@ int lex_try_directive(void) {
 
 /* Scan the next token. Result stored in cur_type/cur_ival/cur_text. */
 int lex_scan(void) {
+    int c;
+    int scan_iter;
+
+    /* Loop replaces tail recursion -- %DEFINE, %INCLUDE, %IF directives
+     * and conditional-skip all restart scanning without growing the stack.
+     * Without this, 70+ %DEFINE macros overflow the 8KB EBR stack (#40). */
+    scan_iter = 0;
+    while (1) {
+
+    if (scan_iter >= 10000) {
+        uart_putstr("ERROR: lex_scan loop limit exceeded at line ");
+        print_int(lex_line);
+        uart_puts("");
+        lex_fatal = 1;
+        cur_type = TOK_EOF;
+        str_copy(cur_text, "EOF");
+        return TOK_EOF;
+    }
+    scan_iter = scan_iter + 1;
+
     lex_skip();
 
     cur_ival = 0;
@@ -533,20 +553,20 @@ int lex_scan(void) {
     if (lex_pos >= lex_len) {
         if (inc_pop()) {
             /* Resumed parent -- continue scanning */
-            return lex_scan();
+            continue;
         }
         cur_type = TOK_EOF;
         str_copy(cur_text, "EOF");
         return TOK_EOF;
     }
 
-    int c = lex_peek();
+    c = lex_peek();
 
     /* Check for % directives (%INCLUDE, %DEFINE, %IF, %ELSE, %ENDIF) */
     if (c == 37) { /* % */
         if (lex_try_directive()) {
             /* Directive consumed -- scan next real token */
-            return lex_scan();
+            continue;
         }
     }
 
@@ -564,8 +584,11 @@ int lex_scan(void) {
         } else {
             lex_advance();
         }
-        return lex_scan();
+        continue;
     }
+
+    break;  /* No directive/skip -- fall through to token parsing */
+    } /* end while(1) */
 
     /* Identifier or keyword */
     if (is_alpha(c)) {
