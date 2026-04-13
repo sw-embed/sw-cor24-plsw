@@ -1203,6 +1203,62 @@ void cg_emit_static_var(int sym_idx, int init_node) {
     }
 }
 
+/* Emit .data for STATIC DCLs inside a procedure body.
+ * Walks the block recursively to find NODE_DCL with STOR_STATIC. */
+void cg_emit_proc_static_data(int body_node) {
+    int stmt;
+    int idx;
+
+    if (body_node == NODE_NULL) return;
+
+    /* Handle non-block statement nodes */
+    if (nd_kind[body_node] == NODE_IF) {
+        while (body_node != NODE_NULL && nd_kind[body_node] == NODE_IF) {
+            cg_emit_proc_static_data(nd_right[body_node]);
+            if (nd_ival[body_node] != NODE_NULL && nd_kind[nd_ival[body_node]] == NODE_IF) {
+                body_node = nd_ival[body_node];
+            } else {
+                cg_emit_proc_static_data(nd_ival[body_node]);
+                break;
+            }
+        }
+        return;
+    }
+    if (nd_kind[body_node] == NODE_DO_WHILE || nd_kind[body_node] == NODE_DO_COUNT) {
+        cg_emit_proc_static_data(nd_right[body_node]);
+        return;
+    }
+    if (nd_kind[body_node] == NODE_SELECT) {
+        int wh = nd_left[body_node];
+        while (wh != NODE_NULL) {
+            cg_emit_proc_static_data(nd_right[wh]);
+            wh = nd_next[wh];
+        }
+        cg_emit_proc_static_data(nd_ival[body_node]);
+        return;
+    }
+
+    /* Walk block children */
+    stmt = nd_left[body_node];
+    while (stmt != NODE_NULL) {
+        if (nd_kind[stmt] == NODE_DCL && nd_stor[stmt] == STOR_STATIC) {
+            idx = sym_lookup(nd_name[stmt]);
+            if (idx >= 0) {
+                cg_emit_static_var(idx, nd_right[stmt]);
+            }
+        } else if (nd_kind[stmt] == NODE_BLOCK) {
+            cg_emit_proc_static_data(stmt);
+        } else if (nd_kind[stmt] == NODE_IF) {
+            cg_emit_proc_static_data(stmt);
+        } else if (nd_kind[stmt] == NODE_DO_WHILE || nd_kind[stmt] == NODE_DO_COUNT) {
+            cg_emit_proc_static_data(stmt);
+        } else if (nd_kind[stmt] == NODE_SELECT) {
+            cg_emit_proc_static_data(stmt);
+        }
+        stmt = nd_next[stmt];
+    }
+}
+
 /* Walk a program AST and emit .data section for all static/global DCLs.
  * Assumes layout_globals() has already been called to assign addresses. */
 
@@ -1662,6 +1718,9 @@ void cg_proc(int proc_node) {
 
     /* Standard epilogue: mov sp,fp, pop r1, pop r2, pop fp, jmp (r1) */
     emit_epilogue();
+
+    /* Emit .data for any STATIC locals (e.g. CHAR arrays with INIT) */
+    cg_emit_proc_static_data(body);
 }
 
 /* Emit code for all procedures in a program AST.
