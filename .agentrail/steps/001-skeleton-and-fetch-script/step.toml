@@ -1,8 +1,9 @@
 number = 1
 slug = "skeleton-and-fetch-script"
-status = "in-progress"
+status = "completed"
 description = "Pure scaffolding for vendor toolchain support. Deliverables: docs/vendor-plan..."
 role = "production"
 context_files = []
 created_at = "2026-04-11T13:52:50"
-commits = []
+completed_at = "2026-04-11T15:27:45"
+commits = ["8512a07dbd5c3f75ee71d3a08a3252f3750bc0d7"]

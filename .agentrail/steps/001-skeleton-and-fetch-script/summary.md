@@ -1,0 +1,1 @@
+Scaffolded the vendor toolchain layout, architectural design doc (docs/vendor-plan.md), vendor-fetch.sh script with verify + --record modes, vendor/active.env pin file, and TBD-placeholder version.json manifests for sw-cx24, sw-asx24, sw-em24. Script smoke-tested end-to-end (help, verify, record, unknown-tool rejection); PL/SW still builds normally against the existing tc24r.
