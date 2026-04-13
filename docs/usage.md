@@ -141,6 +141,10 @@ END;
 /* Call as expression (without CALL keyword) */
 RESULT = ADD(3, 4);
 
+/* No-argument function call -- parentheses required (PL/I rule) */
+COUNT = GET_COUNT();      /* correct: function call */
+COUNT = GET_COUNT;        /* WRONG: treated as variable reference */
+
 /* Call as statement */
 CALL UART_PUTS(ADDR(MSG));
 
