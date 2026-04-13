@@ -14,7 +14,7 @@
 #define MACRO_BODY_MAX  256
 #define MACRO_GEN_MAX   4
 #define MACRO_GEN_LINE  64
-#define MACRO_GEN_LINES 8
+#define MACRO_GEN_LINES 16
 
 char  mac_name_buf[256];
 int   mac_count;
@@ -22,7 +22,7 @@ char  mac_cl_name_buf[2048];
 int   mac_cl_types[64];
 int   mac_cl_req[64];
 int   mac_cl_count[8];
-char  mac_gen_buf[16384];
+char  mac_gen_buf[32768];
 int   mac_gen_lcount[32];
 int   mac_gen_count[8];
 char  mac_body_buf[2048];
