@@ -418,6 +418,61 @@ void mac_exp_appendc(int c) {
     }
 }
 
+/* Resolve ADDR(var) to assembly label _var for GEN substitution.
+ * Argument text arrives as "ADDR ( VARNAME )" (tokens with spaces).
+ * Returns 1 if resolved (appends _VARNAME to expansion buffer), 0 if not ADDR. */
+int mac_resolve_addr(char *val) {
+    int i = 0;
+    int ni;
+    char name[MACRO_NAME_MAX];
+
+    /* Skip leading whitespace */
+    while (val[i] == 32) i = i + 1;
+
+    /* Check for ADDR (case-insensitive) */
+    if ((val[i] == 'A' || val[i] == 'a') &&
+        (val[i+1] == 'D' || val[i+1] == 'd') &&
+        (val[i+2] == 'D' || val[i+2] == 'd') &&
+        (val[i+3] == 'R' || val[i+3] == 'r') &&
+        !is_alnum(val[i+4])) {
+        i = i + 4;
+    } else {
+        return 0;
+    }
+
+    /* Skip whitespace and expect '(' */
+    while (val[i] == 32) i = i + 1;
+    if (val[i] != 40) return 0; /* '(' */
+    i = i + 1;
+
+    /* Skip whitespace, extract identifier */
+    while (val[i] == 32) i = i + 1;
+    ni = 0;
+    while (is_alnum(val[i]) || val[i] == 95) { /* alnum or '_' */
+        if (ni < MACRO_NAME_MAX - 1) {
+            name[ni] = val[i];
+            ni = ni + 1;
+        }
+        i = i + 1;
+    }
+    name[ni] = 0;
+    if (ni == 0) return 0;
+
+    /* Skip whitespace and expect ')' */
+    while (val[i] == 32) i = i + 1;
+    if (val[i] != 41) return 0; /* ')' */
+    i = i + 1;
+
+    /* Should be end of string (maybe trailing whitespace) */
+    while (val[i] == 32) i = i + 1;
+    if (val[i] != 0) return 0;
+
+    /* Emit assembly label: _VARNAME */
+    mac_exp_appendc(95); /* '_' */
+    mac_exp_append(name);
+    return 1;
+}
+
 /* Substitute {CLAUSE_NAME} in a GEN line template with argument values.
  * Result appended to expansion buffer as inline ASM. */
 void mac_gen_substitute(int mi, char *tmpl) {
@@ -449,7 +504,10 @@ void mac_gen_substitute(int mi, char *tmpl) {
             while (ci < mac_cl_count[mi]) {
                 if (str_eq_nocase(pname, mac_cl_name(mi, ci))) {
                     if (mac_arg_set[ci]) {
-                        mac_exp_append(mac_arg_val(ci));
+                        /* In GEN context, resolve ADDR(var) to _var */
+                        if (!mac_resolve_addr(mac_arg_val(ci))) {
+                            mac_exp_append(mac_arg_val(ci));
+                        }
                     }
                     found = 1;
                     break;
