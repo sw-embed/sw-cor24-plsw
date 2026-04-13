@@ -357,52 +357,26 @@ int cg_div_emitted;  /* flag: have we emitted the div routine? */
 void cg_emit_div_routine(void) {
     int lloop;
     int ldone;
-    int lneg;
-    int lfix;
 
     if (cg_div_emitted) return;
     cg_div_emitted = 1;
 
     emit_nl();
-    emit_comment("Software division: r0/r1 -> r0=quotient, r1=remainder");
+    emit_comment("Software division: args on stack, r0=quotient on return");
     emit_line("__plsw_div:");
     emit_prologue();
 
-    /* Load dividend and divisor from arguments (already in r0, r1) */
-    /* Save sign info: we'll work with positive values */
-    /* r2 = sign flag (0=positive result, 1=negative) */
-    emit_instr("lc      r2,0");
+    /* Load dividend and divisor from stack args (COR24 calling convention).
+     * Prologue pushes fp, r2, r1 (3 regs x 3 bytes = 9).
+     * fp+9 = first arg (dividend), fp+12 = second arg (divisor). */
+    emit_instr("lw      r0,9(fp)");
+    emit_instr("lw      r1,12(fp)");
 
-    /* Check if dividend is negative */
-    lneg = emit_new_label();
-    lfix = emit_new_label();
-    emit_instr("ceq     r0,z");
-    emit_str(EMIT_INDENT);
-    emit_str("brt     ");
-    emit_label_ref(lfix);
-    emit_nl();
-    emit_instr("cls     r0,z");
-    emit_str(EMIT_INDENT);
-    emit_str("brf     ");
-    emit_label_ref(lneg);
-    emit_nl();
-    /* dividend is negative: negate it, flip sign flag */
-    emit_instr("sub     r0,r0");
-    emit_instr("sub     r0,r0");
-    /* Actually: 0 - r0. Use: push r0, lc r0,0, pop and sub */
-    /* Simpler: just note this is tricky without a neg instruction */
-
-    /* Simplified approach: unsigned division only for now.
-     * Signed division handled by: abs both operands, divide, fix sign */
-    emit_label(lneg);
-    emit_label(lfix);
-
-    /* Division by repeated subtraction */
+    /* Division by repeated subtraction: r0 = dividend, r1 = divisor */
     lloop = emit_new_label();
     ldone = emit_new_label();
 
-    /* r0 = dividend (remainder), r2 = quotient (reuse r2) */
-    emit_instr("push    r2");
+    /* r2 = quotient counter */
     emit_instr("lc      r2,0");
     emit_label(lloop);
     emit_instr("cls     r0,r1");
@@ -417,10 +391,8 @@ void cg_emit_div_routine(void) {
     emit_label_ref(lloop);
     emit_nl();
     emit_label(ldone);
-    /* r0 = remainder, r2 = quotient */
-    emit_instr("mov     r1,r0");
+    /* r0 = quotient */
     emit_instr("mov     r0,r2");
-    emit_instr("pop     r2");
     emit_epilogue();
 }
 
@@ -458,13 +430,14 @@ void cg_binop(int node) {
     } else if (op == TOK_STAR) {
         emit_instr("mul     r0,r1");
     } else if (op == TOK_SLASH) {
-        /* Division via software routine */
+        /* Division via software routine (standard calling convention) */
         emit_instr1("push", "r1");
         emit_instr1("push", "r0");
         emit_str(EMIT_INDENT);
         emit_str("la      r2,__plsw_div");
         emit_nl();
         emit_instr("jal     r1,(r2)");
+        emit_instr("add     sp,6");
         /* Result in r0 (quotient) */
     } else if (op == TOK_AMP || op == TOK_AND) {
         /* Bitwise/logical AND */
@@ -1366,51 +1339,59 @@ void cg_call(int node) {
 void cg_stmt(int node);
 void cg_block(int block_node);
 
-/* IF/THEN/ELSE codegen.
+/* IF/THEN/ELSE codegen -- iterative for ELSE IF chains (#33).
  * AST: nd_left = condition, nd_right = then body, nd_ival = else body (or NODE_NULL) */
 void cg_if(int node) {
     int lbl_else;
     int lbl_end;
     int else_body;
 
-    else_body = nd_ival[node];
+    lbl_end = emit_new_label();
 
-    /* Evaluate condition into r0 */
-    cg_expr(nd_left[node]);
+    while (1) {
+        else_body = nd_ival[node];
 
-    if (else_body != NODE_NULL) {
-        /* IF/THEN/ELSE */
-        lbl_else = emit_new_label();
-        lbl_end = emit_new_label();
+        /* Evaluate condition into r0 */
+        cg_expr(nd_left[node]);
 
-        /* Branch to else if r0 == 0 (condition false) */
-        emit_instr("ceq     r0,z");
-        emit_branch_true(lbl_else);
+        if (else_body != NODE_NULL) {
+            /* IF/THEN/ELSE */
+            lbl_else = emit_new_label();
 
-        /* Then body */
-        cg_stmt(nd_right[node]);
-        emit_branch(lbl_end);
+            /* Branch to else if r0 == 0 (condition false) */
+            emit_instr("ceq     r0,z");
+            emit_branch_true(lbl_else);
 
-        /* Else label and body */
-        emit_label(lbl_else);
-        cg_stmt(else_body);
+            /* Then body */
+            cg_stmt(nd_right[node]);
+            emit_branch(lbl_end);
 
-        /* End label */
-        emit_label(lbl_end);
-    } else {
-        /* IF/THEN (no else) */
-        lbl_end = emit_new_label();
+            /* Else label */
+            emit_label(lbl_else);
 
-        /* Branch to end if r0 == 0 (condition false) */
-        emit_instr("ceq     r0,z");
-        emit_branch_true(lbl_end);
+            /* ELSE IF chain: iterate instead of recursing */
+            if (nd_kind[else_body] == NODE_IF) {
+                node = else_body;
+                continue;
+            }
 
-        /* Then body */
-        cg_stmt(nd_right[node]);
+            /* Plain ELSE body */
+            cg_stmt(else_body);
+        } else {
+            /* IF/THEN (no else) */
 
-        /* End label */
-        emit_label(lbl_end);
+            /* Branch to end if r0 == 0 (condition false) */
+            emit_instr("ceq     r0,z");
+            emit_branch_true(lbl_end);
+
+            /* Then body */
+            cg_stmt(nd_right[node]);
+        }
+        break;
     }
+
+    /* End label */
+    emit_label(lbl_end);
 }
 
 /* SELECT/WHEN/OTHERWISE codegen.

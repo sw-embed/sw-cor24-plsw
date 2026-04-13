@@ -148,10 +148,18 @@ void layout_locals(int body_node) {
 
     /* If this node is itself a statement (not a BLOCK), handle it directly */
     if (nd_kind[body_node] == NODE_IF) {
-        if (nd_right[body_node] != NODE_NULL)
-            layout_locals(nd_right[body_node]);
-        if (nd_ival[body_node] != NODE_NULL)
-            layout_locals(nd_ival[body_node]);
+        /* Iterate through ELSE IF chain instead of recursing (#33) */
+        while (body_node != NODE_NULL && nd_kind[body_node] == NODE_IF) {
+            if (nd_right[body_node] != NODE_NULL)
+                layout_locals(nd_right[body_node]);
+            if (nd_ival[body_node] != NODE_NULL && nd_kind[nd_ival[body_node]] == NODE_IF) {
+                body_node = nd_ival[body_node];
+            } else {
+                if (nd_ival[body_node] != NODE_NULL)
+                    layout_locals(nd_ival[body_node]);
+                break;
+            }
+        }
         return;
     }
     if (nd_kind[body_node] == NODE_DO_WHILE || nd_kind[body_node] == NODE_DO_COUNT) {
@@ -208,11 +216,21 @@ void layout_locals(int body_node) {
         if (nd_kind[stmt] == NODE_BLOCK) {
             layout_locals(stmt);
         } else if (nd_kind[stmt] == NODE_IF) {
-            /* then-body is nd_right, else-body is nd_ival */
-            if (nd_right[stmt] != NODE_NULL)
-                layout_locals(nd_right[stmt]);
-            if (nd_ival[stmt] != NODE_NULL)
-                layout_locals(nd_ival[stmt]);
+            /* Iterate through ELSE IF chain instead of recursing (#33) */
+            {
+                int ifn = stmt;
+                while (ifn != NODE_NULL && nd_kind[ifn] == NODE_IF) {
+                    if (nd_right[ifn] != NODE_NULL)
+                        layout_locals(nd_right[ifn]);
+                    if (nd_ival[ifn] != NODE_NULL && nd_kind[nd_ival[ifn]] == NODE_IF) {
+                        ifn = nd_ival[ifn];
+                    } else {
+                        if (nd_ival[ifn] != NODE_NULL)
+                            layout_locals(nd_ival[ifn]);
+                        break;
+                    }
+                }
+            }
         } else if (nd_kind[stmt] == NODE_DO_WHILE) {
             if (nd_right[stmt] != NODE_NULL)
                 layout_locals(nd_right[stmt]);

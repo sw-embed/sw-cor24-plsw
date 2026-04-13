@@ -594,27 +594,49 @@ int parse_stmt(void) {
         return NODE_NULL;
     }
 
-    /* IF (cond) THEN stmt ELSE stmt */
+    /* IF (cond) THEN stmt ELSE stmt -- iterative for ELSE IF chains (#33) */
     if (cur_type == TOK_IF) {
-        parse_advance();
-        cond = parse_expr();
-        parse_expect(TOK_THEN);
+        int first_if;
+        int prev_if;
 
-        /* Then branch: DO;...END; block or single statement */
-        if (cur_type == TOK_DO) {
-            parse_advance();
-            parse_expect(TOK_SEMI);
-            then_body = parse_block();
-            parse_expect(TOK_END);
-            parse_expect(TOK_SEMI);
-        } else {
-            then_body = parse_stmt();
-        }
+        first_if = NODE_NULL;
+        prev_if = NODE_NULL;
 
-        /* Optional ELSE */
-        else_body = NODE_NULL;
-        if (cur_type == TOK_ELSE) {
+        while (1) {
             parse_advance();
+            cond = parse_expr();
+            parse_expect(TOK_THEN);
+
+            /* Then branch: DO;...END; block or single statement */
+            if (cur_type == TOK_DO) {
+                parse_advance();
+                parse_expect(TOK_SEMI);
+                then_body = parse_block();
+                parse_expect(TOK_END);
+                parse_expect(TOK_SEMI);
+            } else {
+                then_body = parse_stmt();
+            }
+
+            n = nd_alloc(NODE_IF);
+            if (n != NODE_NULL) {
+                nd_left[n] = cond;
+                nd_right[n] = then_body;
+                nd_ival[n] = NODE_NULL;
+            }
+
+            if (first_if == NODE_NULL) first_if = n;
+            if (prev_if != NODE_NULL) nd_ival[prev_if] = n;
+            prev_if = n;
+
+            /* Optional ELSE */
+            if (cur_type != TOK_ELSE) break;
+            parse_advance();
+
+            /* ELSE IF -> continue loop */
+            if (cur_type == TOK_IF) continue;
+
+            /* Plain ELSE body */
             if (cur_type == TOK_DO) {
                 parse_advance();
                 parse_expect(TOK_SEMI);
@@ -624,15 +646,11 @@ int parse_stmt(void) {
             } else {
                 else_body = parse_stmt();
             }
+            nd_ival[prev_if] = else_body;
+            break;
         }
 
-        n = nd_alloc(NODE_IF);
-        if (n != NODE_NULL) {
-            nd_left[n] = cond;
-            nd_right[n] = then_body;
-            nd_ival[n] = else_body;  /* else branch index, or NODE_NULL */
-        }
-        return n;
+        return first_if;
     }
 
     /* DO variants */

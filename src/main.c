@@ -5564,6 +5564,9 @@ char *compile_program(char *source) {
         return 0;
     }
 
+    /* Emit software division routine if any procedure used '/' */
+    cg_emit_div_routine();
+
     /* Emit static data */
     cg_emit_static_data(prog);
 
