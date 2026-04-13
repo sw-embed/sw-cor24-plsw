@@ -17,6 +17,7 @@
 #define SYM_TOTAL 2048
 
 char *sym_name[SYM_TOTAL];    /* symbol name (arena-allocated) */
+char *sym_asm_name[SYM_TOTAL]; /* assembly label (mangled), or 0 = use sym_name */
 int   sym_type[SYM_TOTAL];    /* type tag (TYPE_INT8, TYPE_PTR, etc.) */
 int   sym_width[SYM_TOTAL];   /* width in bytes */
 int   sym_stor[SYM_TOTAL];    /* storage class (STOR_AUTO, STOR_STATIC, ...) */
@@ -123,6 +124,7 @@ int sym_insert(char *name, int type, int width, int stor) {
         str_copy(s, name);
     }
     sym_name[idx] = s;
+    sym_asm_name[idx] = 0;
     sym_type[idx] = type;
     sym_width[idx] = width;
     sym_stor[idx] = stor;

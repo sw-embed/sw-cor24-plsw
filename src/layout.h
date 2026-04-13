@@ -27,12 +27,17 @@ int layout_last_tdesc;
 int layout_err;
 char *layout_errmsg;
 
+/* Current procedure name for mangling PROC-local STATIC labels.
+ * Set by layout_proc(), cleared after. NULL at global scope. */
+char *layout_current_proc;
+
 void layout_init(void) {
     layout_static_next = STATIC_BASE;
     layout_frame_size = 0;
     layout_last_tdesc = -1;
     layout_err = 0;
     layout_errmsg = 0;
+    layout_current_proc = 0;
 }
 
 void layout_error(char *msg) {
@@ -192,6 +197,18 @@ void layout_locals(int body_node) {
                     /* Static: assign address from static area */
                     sym_offset[idx] = layout_static_next;
                     layout_static_next = layout_static_next + w;
+                    /* Mangle assembly label for PROC-local STATICs to
+                     * avoid collisions across modules (PROC__VAR) (#43) */
+                    if (layout_current_proc) {
+                        int plen = str_len(layout_current_proc);
+                        int nlen = str_len(nd_name[stmt]);
+                        char *mangled = arena_alloc(plen + 2 + nlen + 1);
+                        str_copy(mangled, layout_current_proc);
+                        mangled[plen] = '_';
+                        mangled[plen + 1] = '_';
+                        str_copy(mangled + plen + 2, nd_name[stmt]);
+                        sym_asm_name[idx] = mangled;
+                    }
                 } else {
                     /* Automatic: negative offset from fp */
                     layout_frame_size = layout_frame_size + w;
@@ -260,6 +277,7 @@ int layout_proc(int proc_node) {
     if (proc_node == NODE_NULL) return 0;
 
     layout_frame_size = 0;
+    layout_current_proc = nd_name[proc_node];
     sym_enter_scope();
 
     /* Lay out parameters */
@@ -268,6 +286,7 @@ int layout_proc(int proc_node) {
     /* Lay out local declarations in body */
     layout_locals(nd_right[proc_node]);
 
+    layout_current_proc = 0;
     return layout_frame_size;
 }
 

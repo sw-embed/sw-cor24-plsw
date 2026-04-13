@@ -31,6 +31,12 @@ void cg_init_regs(void) {
     reg_name[2] = "r2";
 }
 
+/* Get the assembly-level name for a symbol (mangled or original) */
+char *sym_label(int idx) {
+    if (sym_asm_name[idx]) return sym_asm_name[idx];
+    return sym_name[idx];
+}
+
 /* --- Codegen error state --- */
 
 int cg_err;
@@ -150,7 +156,7 @@ void cg_load_var(int node) {
         /* Static/external: load address via label, then dereference */
         emit_str(EMIT_INDENT);
         emit_str("la      r2,_");
-        emit_str(sym_name[idx]);
+        emit_str(sym_label(idx));
         emit_nl();
         if (w == 1) {
             emit_instr("lbu     r0,0(r2)");
@@ -208,7 +214,7 @@ void cg_store_var(int node) {
     if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
         emit_str(EMIT_INDENT);
         emit_str("la      r2,_");
-        emit_str(sym_name[idx]);
+        emit_str(sym_label(idx));
         emit_nl();
         if (w == 1) {
             emit_instr("sb      r0,0(r2)");
@@ -293,7 +299,7 @@ void cg_load_simple_into(int node, char *reg) {
         if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
             emit_str(EMIT_INDENT);
             emit_str("la      r2,_");
-            emit_str(sym_name[idx]);
+            emit_str(sym_label(idx));
             emit_nl();
             if (w == 1) {
                 emit_str(EMIT_INDENT);
@@ -587,7 +593,7 @@ int cg_field_addr(int node) {
         /* Static: la r2, _VARNAME + field_offset */
         emit_str(EMIT_INDENT);
         emit_str("la      r2,_");
-        emit_str(sym_name[sym_idx]);
+        emit_str(sym_label(sym_idx));
         if (foff > 0) {
             emit_char(43); /* '+' */
             emit_int(foff);
@@ -697,7 +703,7 @@ int cg_array_addr(int node) {
         /* Static: r2 = r2 + label address */
         emit_str(EMIT_INDENT);
         emit_str("la      r0,_");
-        emit_str(sym_name[sym_idx]);
+        emit_str(sym_label(sym_idx));
         emit_nl();
         emit_instr("add     r2,r0");
     } else {
@@ -782,7 +788,7 @@ void cg_addr(int node) {
         if (sym_stor[idx] == STOR_STATIC || sym_stor[idx] == STOR_EXTERNAL) {
             emit_str(EMIT_INDENT);
             emit_str("la      r0,_");
-            emit_str(sym_name[idx]);
+            emit_str(sym_label(idx));
             emit_nl();
         } else {
             /* Automatic: address = fp + offset */
@@ -1140,8 +1146,8 @@ void cg_emit_static_var(int sym_idx, int init_node) {
     /* Zero-fill without initializer: emit explicit .byte 0 entries
        (.comm overlaps with .data on COR24 assembler) */
     if (init_node == NODE_NULL && w > 3) {
-        emit_comment(sym_name[sym_idx]);
-        emit_named_label(sym_name[sym_idx]);
+        emit_comment(sym_label(sym_idx));
+        emit_named_label(sym_label(sym_idx));
         emit_str(EMIT_INDENT);
         emit_str(".byte   ");
         i = 0;
@@ -1155,8 +1161,8 @@ void cg_emit_static_var(int sym_idx, int init_node) {
     }
 
     /* Emit label at the static address */
-    emit_comment(sym_name[sym_idx]);
-    emit_named_label(sym_name[sym_idx]);
+    emit_comment(sym_label(sym_idx));
+    emit_named_label(sym_label(sym_idx));
 
     if (init_node != NODE_NULL && nd_kind[init_node] == NODE_LITERAL) {
         if (nd_type[init_node] == TYPE_CHAR && nd_name[init_node]) {
