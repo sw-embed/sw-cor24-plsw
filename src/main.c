@@ -5564,8 +5564,12 @@ char *compile_program(char *source) {
         return 0;
     }
 
-    /* Emit software division routine if any procedure used '/' */
-    cg_emit_div_routine();
+    /* Emit software division routine if any procedure used '/'.
+     * Suppressed in LIBRARY mode -- library modules reference __plsw_div
+     * as an external symbol resolved by the linker from the entry module. */
+    if (!def_defined("LIBRARY")) {
+        cg_emit_div_routine();
+    }
 
     /* Emit static data */
     cg_emit_static_data(prog);
