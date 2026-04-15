@@ -102,7 +102,10 @@ struct LaMatch {
 }
 
 fn parse_la_external(line: &str, defined: &HashSet<String>) -> Option<LaMatch> {
-    // Match "la rN,_SYMBOL" where _SYMBOL is not defined locally
+    // Match "la rN,_SYMBOL" where _SYMBOL is not defined locally.
+    // Accepts both user externals (e.g. _UART_PUTS) and PL/SW runtime
+    // helpers (e.g. __plsw_div) -- the second character may be an
+    // underscore as well as a letter (issue #44).
     let line = line.trim();
     if !line.starts_with("la ") {
         return None;
@@ -112,13 +115,15 @@ fn parse_la_external(line: &str, defined: &HashSet<String>) -> Option<LaMatch> {
     let comma = rest.find(',')?;
     let target = rest[comma + 1..].trim();
 
-    // Only external symbols: must start with _ and be uppercase
+    // Symbol names start with '_'; numeric immediates never do.
     if !target.starts_with('_') {
         return None;
     }
-    // Must be a symbol name (not a number)
-    if target.chars().nth(1).map_or(true, |c| !c.is_ascii_alphabetic()) {
-        return None;
+    // Require an identifier-continue char after the leading '_' so we
+    // do not match stray underscores; accepts letters, digits, and '_'.
+    match target.chars().nth(1) {
+        Some(c) if c.is_ascii_alphanumeric() || c == '_' => {}
+        _ => return None,
     }
 
     let symbol = target.to_string();
@@ -127,6 +132,85 @@ fn parse_la_external(line: &str, defined: &HashSet<String>) -> Option<LaMatch> {
     }
 
     Some(LaMatch { symbol })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn defined_set(labels: &[&str]) -> HashSet<String> {
+        labels.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn user_external_is_detected() {
+        let d = defined_set(&[]);
+        let m = parse_la_external("la r2,_UART_PUTS", &d).expect("should match");
+        assert_eq!(m.symbol, "_UART_PUTS");
+    }
+
+    #[test]
+    fn plsw_runtime_helper_is_detected() {
+        // Regression test for issue #44: __plsw_div has '_' as the
+        // second character and used to be skipped by the detector.
+        let d = defined_set(&[]);
+        let m = parse_la_external("la r2,__plsw_div", &d).expect("should match");
+        assert_eq!(m.symbol, "__plsw_div");
+    }
+
+    #[test]
+    fn locally_defined_symbol_is_not_external() {
+        let d = defined_set(&["_ENTRY"]);
+        assert!(parse_la_external("la r0,_ENTRY", &d).is_none());
+    }
+
+    #[test]
+    fn numeric_immediate_is_not_matched() {
+        let d = defined_set(&[]);
+        assert!(parse_la_external("la r2,16711937", &d).is_none());
+        assert!(parse_la_external("la r2,0", &d).is_none());
+    }
+
+    #[test]
+    fn prep_rewrites_plsw_div_reference() {
+        // End-to-end prep pass: feed a module that uses __plsw_div and
+        // check the rewritten source + .syms REF entries.
+        let tmp = std::env::temp_dir().join("meta_gen_test_issue44");
+        let _ = fs::create_dir_all(&tmp);
+        let input = tmp.join("mod.s");
+        let output = tmp.join("mod_prep.s");
+        let syms = tmp.join("mod.syms");
+
+        fs::write(
+            &input,
+            "        .text\n\
+             _CALLER:\n\
+            \x20       la      r2,__plsw_div\n\
+            \x20       jal     r1,(r2)\n",
+        )
+        .unwrap();
+
+        cmd_prep(
+            input.to_str().unwrap(),
+            output.to_str().unwrap(),
+            syms.to_str().unwrap(),
+        );
+
+        let prepped = fs::read_to_string(&output).unwrap();
+        assert!(
+            prepped.contains("la      r2,0"),
+            "prep should rewrite la r2,__plsw_div to la r2,0; got:\n{}",
+            prepped
+        );
+        assert!(!prepped.contains("__plsw_div"));
+
+        let syms_text = fs::read_to_string(&syms).unwrap();
+        assert!(
+            syms_text.contains("REF ") && syms_text.contains("__plsw_div"),
+            ".syms should list __plsw_div as a REF; got:\n{}",
+            syms_text
+        );
+    }
 }
 
 // --- Phase 2: emit ---
