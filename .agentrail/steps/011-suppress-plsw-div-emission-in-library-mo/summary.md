@@ -1,0 +1,1 @@
+Retroactively recorded: fix(codegen): suppress __plsw_div emission in LIBRARY mode (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

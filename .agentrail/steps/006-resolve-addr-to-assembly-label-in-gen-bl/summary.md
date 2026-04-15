@@ -1,0 +1,1 @@
+Retroactively recorded: fix(macro): resolve ADDR() to assembly label in GEN block substitution (#36) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

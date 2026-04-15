@@ -1,0 +1,1 @@
+Retroactively recorded: perf(compiler): increase AST node pool to 12288 and arena to 24KB (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

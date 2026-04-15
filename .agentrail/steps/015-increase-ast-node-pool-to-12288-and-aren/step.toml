@@ -1,8 +1,12 @@
 number = 15
 slug = "increase-ast-node-pool-to-12288-and-aren"
-status = "pending"
+status = "completed"
 description = "perf(compiler): increase AST node pool to 12288 and arena to 24KB"
 role = "production"
 context_files = []
 created_at = "2026-04-15T11:58:28"
-commits = ["e8e2a40970134cc5342d23cad0e014fcfe60e1dc"]
+completed_at = "2026-04-15T12:12:13"
+commits = [
+    "e8e2a40970134cc5342d23cad0e014fcfe60e1dc",
+    "cddafd26df5074d0439e434471f1faf8b7112ca1",
+]

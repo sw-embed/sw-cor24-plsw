@@ -1,0 +1,1 @@
+Retroactively recorded: docs(usage): document parentheses requirement for no-arg function calls (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

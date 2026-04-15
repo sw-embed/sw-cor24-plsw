@@ -1,0 +1,1 @@
+Commit the bookkeeping artifacts from bulk-completing retroactive steps 004-015 in the same session as step 003. Each 'agentrail complete' wrote a step.toml mutation (status, completed_at, commits HEAD-append) and a summary.md, plus updated saga.toml and the session jsonl. Pure agentrail housekeeping; no code changes.

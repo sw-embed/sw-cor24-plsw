@@ -1,0 +1,1 @@
+Retroactively recorded: fix(meta-gen): only export labels in .syms DEF list (#41) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

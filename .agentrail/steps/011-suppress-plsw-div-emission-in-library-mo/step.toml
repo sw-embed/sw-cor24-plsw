@@ -1,8 +1,12 @@
 number = 11
 slug = "suppress-plsw-div-emission-in-library-mo"
-status = "pending"
+status = "completed"
 description = "fix(codegen): suppress __plsw_div emission in LIBRARY mode"
 role = "production"
 context_files = []
 created_at = "2026-04-15T11:58:28"
-commits = ["d42044786fc7a63e07b8376d7ebdba26cc3b411a"]
+completed_at = "2026-04-15T12:12:13"
+commits = [
+    "d42044786fc7a63e07b8376d7ebdba26cc3b411a",
+    "cddafd26df5074d0439e434471f1faf8b7112ca1",
+]

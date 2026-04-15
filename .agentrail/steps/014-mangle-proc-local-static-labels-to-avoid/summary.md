@@ -1,0 +1,1 @@
+Retroactively recorded: fix(codegen): mangle PROC-local STATIC labels to avoid link collisions (#43) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

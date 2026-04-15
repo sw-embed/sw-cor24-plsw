@@ -1,0 +1,1 @@
+Retroactively recorded: fix(lexer): convert lex_scan tail recursion to loop (#40) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

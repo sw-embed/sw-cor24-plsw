@@ -1,0 +1,1 @@
+Retroactively recorded: fix(codegen): emit .data for PROC-local STATIC DCLs (#42) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

@@ -1,0 +1,1 @@
+Retroactively recorded: fix(macro): increase GEN block line limit from 8 to 16 (#37) (commit commits). No new code work in this step -- registered via 'agentrail audit --emit-commands' in step 003.

@@ -1,8 +1,12 @@
 number = 8
 slug = "document-parentheses-requirement-for-no"
-status = "pending"
+status = "completed"
 description = "docs(usage): document parentheses requirement for no-arg function calls"
 role = "production"
 context_files = []
 created_at = "2026-04-15T11:58:28"
-commits = ["0911cb69dff17bc636bf7ef858f91f0d5df831e4"]
+completed_at = "2026-04-15T12:12:13"
+commits = [
+    "0911cb69dff17bc636bf7ef858f91f0d5df831e4",
+    "cddafd26df5074d0439e434471f1faf8b7112ca1",
+]
