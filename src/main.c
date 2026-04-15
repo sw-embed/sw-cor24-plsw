@@ -5124,6 +5124,102 @@ void test_macro_expand(void) {
         }
     }
 
+    /* Test 8: 18-line GEN block (regression for issue #45).
+       Previously MACRO_GEN_LINES was 16 and trailing lines were
+       silently dropped. All 18 lines must be emitted. */
+    uart_puts("--- expand: 18-line GEN block (issue #45) ---");
+    mac_init();
+
+    src = "MACRODEF INST_DECODE;"
+        "   REQUIRED SRC(expr);"
+        "   GEN DO;"
+        "      'la r0,{SRC}';"
+        "      'lw r0,0(r0)';"
+        "      'mov r1,r0';"
+        "      'la r2,255';"
+        "      'and r1,r2';"
+        "      'la r2,_G_OP2';"
+        "      'sw r1,0(r2)';"
+        "      'mov r1,r0';"
+        "      'lc r2,8';"
+        "      'srl r1,r2';"
+        "      'la r2,255';"
+        "      'and r1,r2';"
+        "      'la r2,_G_OP1';"
+        "      'sw r1,0(r2)';"
+        "      'lc r1,16';"
+        "      'srl r0,r1';"
+        "      'la r1,_G_OP';"
+        "      'sw r0,0(r1)';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+
+    if (mac_parse_err) {
+        uart_putstr("  FAIL parse: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        src = "?INST_DECODE(SRC(PC))";
+        lex_init(src, str_len(src));
+        lex_scan();
+        result = mac_invoke();
+        if (!result) {
+            uart_putstr("  FAIL: mac_invoke returned null: ");
+            uart_puts(mac_expand_errmsg);
+            errs = errs + 1;
+        } else {
+            /* Trailing lines must be present */
+            if (!str_find(result, "la r1,_G_OP")) {
+                uart_puts("  FAIL: trailing 'la r1,_G_OP' dropped");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: 'la r1,_G_OP' emitted");
+            }
+            if (!str_find(result, "sw r0,0(r1)")) {
+                uart_puts("  FAIL: trailing 'sw r0,0(r1)' dropped");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: 'sw r0,0(r1)' emitted");
+            }
+        }
+    }
+
+    /* Test 9: overflow past MACRO_GEN_LINES must error, not silently
+       drop (issue #45 guardrail). Build a GEN block with 33 lines. */
+    uart_puts("--- expand: GEN overflow -> loud error ---");
+    mac_init();
+
+    src = "MACRODEF OVERFLOW;"
+        "   REQUIRED X(expr);"
+        "   GEN DO;"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop'; 'nop'; 'nop';"
+        "     'nop'; 'nop'; 'nop';"
+        "   END;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+    if (!mac_parse_err) {
+        uart_puts("  FAIL: overflow silently accepted");
+        errs = errs + 1;
+    } else if (!str_find(mac_parse_errmsg, "too many lines")) {
+        uart_putstr("  FAIL: wrong error msg: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        uart_puts("  OK: overflow rejected with 'too many lines' error");
+    }
+
     /* Summary */
     uart_putstr("macro expansion errors: ");
     print_int(errs);

@@ -1,0 +1,8 @@
+number = 18
+slug = "fix-issue-45-gen-do-drops-trailing"
+status = "in-progress"
+description = "Fix GitHub issue #45: MACRODEF/GEN DO block drops trailing instructions after..."
+role = "production"
+context_files = []
+created_at = "2026-04-15T14:55:30"
+commits = []
