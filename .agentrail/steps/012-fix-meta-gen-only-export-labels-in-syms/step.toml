@@ -1,0 +1,8 @@
+number = 12
+slug = "fix-meta-gen-only-export-labels-in-syms"
+status = "pending"
+description = "fix(meta-gen): only export labels in .syms DEF list (#41)"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["6b59132d778647797dfdea9e1a40df925deb07c8"]

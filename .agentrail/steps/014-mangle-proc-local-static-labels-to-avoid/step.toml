@@ -1,0 +1,8 @@
+number = 14
+slug = "mangle-proc-local-static-labels-to-avoid"
+status = "pending"
+description = "fix(codegen): mangle PROC-local STATIC labels to avoid link collisions (#43)"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["8c6618944c4f3b8c8e737054f9704c3abe8beacd"]

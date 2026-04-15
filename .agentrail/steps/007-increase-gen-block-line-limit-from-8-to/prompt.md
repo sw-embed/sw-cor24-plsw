@@ -1,0 +1,1 @@
+fix(macro): increase GEN block line limit from 8 to 16 (#37)

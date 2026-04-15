@@ -1,0 +1,8 @@
+number = 9
+slug = "convert-lex-scan-tail-recursion-to-loop"
+status = "pending"
+description = "fix(lexer): convert lex_scan tail recursion to loop (#40)"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["90dad12cbe95b132afd2982092dd619dcebaef38"]

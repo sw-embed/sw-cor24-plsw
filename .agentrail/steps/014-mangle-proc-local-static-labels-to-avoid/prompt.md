@@ -1,0 +1,1 @@
+fix(codegen): mangle PROC-local STATIC labels to avoid link collisions (#43)

@@ -1,0 +1,13 @@
+[package]
+name = "link24"
+version = "0.2.0"
+edition = "2021"
+description = "COR24 module linker and meta-gen tool for separate compilation"
+
+[[bin]]
+name = "link24"
+path = "src/main.rs"
+
+[[bin]]
+name = "meta-gen"
+path = "src/meta_gen.rs"

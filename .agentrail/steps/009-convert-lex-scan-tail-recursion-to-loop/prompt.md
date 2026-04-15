@@ -1,0 +1,1 @@
+fix(lexer): convert lex_scan tail recursion to loop (#40)

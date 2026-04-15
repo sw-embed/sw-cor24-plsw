@@ -1,0 +1,2009 @@
+
+
+
+
+I am using my own PL/SW programming langage as a SIL for SNOBOL4.  I'm trying to make the intepreter modular, and split out parsing, lexing, utlitiles, from the main loop.  My language transpiles to COR24 .s; I do not have a linker at the binary level.  I can combine .s files, but then labels like L1 get duplicated  leading to issues.  I want to compile .plsw (and 0-to-n .msw files) to one .s for each module and then link them into one library.  What is the simplest way to do this?  no need for anything fancy like Linux does.   I just need a way for a main to be pointed at a table at load/run time to find procedure entry points (and libraries to find externs in other libraries).  What changes/features do I need from the compiler to be able to link .bin (.o) files?  The plsw->.s, .s->as24->.bin (.o) with the entry point at 0.
+
+You want a simple, modular object and library model for PL/SW on COR24, without ELF/Linux complexity, and with these constraints:
+
+PL/SW currently goes plsw -> .s -> as24 -> .bin
+
+there is no true binary linker yet
+
+you can concatenate .s files, but local labels collide
+
+you want to split SNOBOL4 into modules like lexer, parser, utils, runtime, main loop
+
+you want a main program to find procedure entry points from a table at load/run time
+
+later, one library may need to find externs in another library
+
+you want something closer to a small embedded/static linking model than a full OS toolchain
+
+The cleanest path is:
+
+Recommendation
+Build a very small static linker around a relocatable object format, and make the compiler/assembler emit:
+
+module-local labels
+
+exported symbols
+
+imported symbols
+
+relocation records
+
+optional library export table metadata
+
+That gives you:
+
+separate compilation
+
+static linking of modules into one executable
+
+optional runtime lookup tables for plugin-ish dispatch
+
+no need for ELF, COFF, dynamic loader, GOT/PLT, etc.
+
+High-level architecture
+Use a pipeline like this:
+
+.plsw + .msw
+   ↓
+plswc
+   ↓
+module.s
+   ↓
+as24
+   ↓
+module.o24     (relocatable object, not final absolute binary)
+   ↓
+ln24
+   ↓
+program.bin    (absolute image)
+Where:
+
+plswc emits assembly with explicit symbol names
+
+as24 produces a relocatable object, not an address-0 final image
+
+ln24 assigns section base addresses, resolves externals, applies relocations, and emits final absolute .bin or final .s
+
+Simplest viable design
+Do not start with dynamic loading.
+
+Start with these features only:
+
+Object file contains
+text section bytes
+
+data section bytes
+
+bss size
+
+symbol table
+
+relocation table
+
+Symbols are one of
+local
+
+global/exported
+
+undefined/imported
+
+Relocations are one of
+absolute 24-bit address
+
+PC-relative branch offset
+
+maybe low/high parts later if needed
+
+That is enough for modular SNOBOL4.
+
+The core problem: label collisions
+Your immediate .s concatenation problem is not really a linker problem first — it is also a label namespace problem.
+
+Minimum compiler/assembler change
+Every label that is not exported should be made module-unique.
+
+For example, instead of:
+
+L1:
+L2:
+emit:
+
+$mod_parser$L1:
+$mod_parser$L2:
+or
+
+parser__L1:
+parser__L2:
+This alone will let you concatenate .s files more safely.
+
+But it is not enough for real modularity, because you still need:
+
+calls across modules
+
+data references across modules
+
+a way to resolve addresses after layout
+
+So namespacing fixes duplication, but you still need relocations for a real solution.
+
+Two implementation approaches
+Approach A — “Poor man’s linker” at assembly level
+Idea
+Keep everything as text assembly longer.
+
+Each module compiles to .s
+
+exports and imports are represented with directives
+
+a simple ln24 tool reads all .s files
+
+renames locals
+
+collects exports
+
+resolves imports
+
+concatenates sections
+
+patches symbolic references
+
+emits one final .s
+
+as24 then converts that to final .bin
+
+Pros
+easiest to debug
+
+leverages your existing assembler
+
+human-readable
+
+good for bring-up
+
+Cons
+linker must understand enough assembly syntax to patch references
+
+brittle if assembly syntax evolves
+
+harder to support arbitrary expressions cleanly
+
+less future-proof
+
+This is a good first milestone.
+
+Approach B — true relocatable .o24 + tiny linker
+Idea
+Teach as24 to emit a compact relocatable object format.
+
+compiler still emits .s
+
+assembler emits .o24
+
+linker works on bytes + symbols + relocations
+
+final output is absolute .bin
+
+Pros
+cleaner long-term
+
+easier to add archives/libraries later
+
+easier to support relocation correctly
+
+much closer to standard toolchain architecture
+
+Cons
+more work up front than assembly-text linking
+
+requires object format design
+
+This is what I recommend, even if the format is tiny and custom.
+
+Best practical path
+A staged plan:
+
+Stage 1
+Fix label collisions with module-qualified local labels.
+
+Stage 2
+Add explicit exports/imports in assembly.
+
+Stage 3
+Teach assembler to emit relocatable .o24.
+
+Stage 4
+Write tiny ln24 static linker.
+
+Stage 5
+Add simple library archive format.
+
+That gives you usable progress quickly.
+
+What compiler changes are needed?
+Your compiler needs to distinguish several symbol classes.
+
+1. Local/internal procedures and labels
+These must not be visible outside the module.
+
+Compiler should emit them with unique names, for example:
+
+parser__scan_token
+parser__L1
+parser__L2
+or maintain a module id in metadata.
+
+2. Exported procedures/data
+The compiler needs syntax or conventions for “public” symbols.
+
+For example in PL/SW you may want something like:
+
+EXPORT PROC SCAN_TOKEN;
+EXPORT DCL TOKEN_TABLE PTR;
+This should result in symbol table entries marked global/exported.
+
+3. Imported procedures/data
+The compiler must know that some references are external:
+
+EXTERN PROC EMIT_ERROR;
+EXTERN DCL GLOBAL_FLAGS PTR;
+These become undefined symbols in the object file.
+
+4. Section awareness
+Compiler/assembler must separate:
+
+code / text
+
+initialized data
+
+uninitialized data
+
+Even if your runtime image is flat, linker needs logical sections.
+
+5. Relocatable expressions only
+The compiler should avoid baking in absolute addresses too early.
+
+For example, instead of forcing a fixed address for:
+
+LOAD R0, SOME_EXTERN
+the assembler should emit:
+
+placeholder value 0
+
+relocation record: patch this word with absolute address of SOME_EXTERN
+
+What assembler changes are needed?
+This is the key.
+
+Your assembler currently sounds like it emits an absolute image with origin 0.
+To support linking, it must support relocatable output.
+
+Minimal features for as24
+1. Symbol table output
+For every symbol:
+
+name
+
+section
+
+offset within section
+
+binding: local/global/undefined
+
+2. Relocation table output
+For every place that references a symbol whose final address is unknown:
+
+section containing patch site
+
+offset of patch site
+
+relocation type
+
+referenced symbol
+
+addend if needed
+
+3. Sectioned output
+Instead of one flat image, assembler should emit:
+
+.text bytes
+
+.data bytes
+
+.bss size only
+
+4. Undefined symbol support
+Assembler must allow this:
+
+.extern emit_error
+call emit_error
+and not fail immediately; instead it emits relocation against undefined symbol.
+
+5. Optional export/import directives
+For example:
+
+.global scan_token
+.extern emit_error
+.section .text
+What relocation types do you need?
+Keep this very small.
+
+Probably enough for COR24 v1:
+R_COR24_ABS24
+Patch a full 24-bit absolute address into an instruction/data word.
+
+Use for:
+
+function pointers
+
+direct absolute calls/jumps if your ISA uses them
+
+addresses of global data
+
+R_COR24_PCREL
+Patch a PC-relative displacement.
+
+Use for:
+
+relative branch instructions
+
+R_COR24_DATA24
+Same practical idea as ABS24 but for raw data initializers like:
+
+DC24 some_symbol
+You may end up implementing ABS24 and DATA24 the same way.
+
+That is enough for an MVP.
+
+Simplest object format
+You do not need ELF.
+
+A tiny format like this is fine.
+
+o24 file layout example
+Header
+Text bytes
+Data bytes
+Symbol table
+Relocation table
+String table
+Header fields
+magic: "O24\0"
+
+version
+
+text_size
+
+data_size
+
+bss_size
+
+symbol_count
+
+reloc_count
+
+offsets to symbol/reloc/string tables
+
+Symbol entry
+name_offset
+
+section: UNDEF/TEXT/DATA/BSS
+
+value: offset within section
+
+binding: LOCAL/GLOBAL/WEAK maybe later
+
+type: FUNC/OBJECT/NOTYPE optional
+
+Relocation entry
+section containing relocation
+
+offset within section
+
+type
+
+symbol index
+
+addend
+
+This is plenty.
+
+What should the linker do?
+Your tiny linker ln24 should:
+
+1. Read all .o24 files
+and maybe archive files later.
+
+2. Build a global symbol table
+every exported symbol inserted
+
+duplicates are an error unless you later support weak/common
+
+undefineds must be resolved by some export
+
+3. Lay out sections
+For example:
+
+all .text modules concatenated
+
+then all .data
+
+then .bss assigned after that
+
+You can keep this dead simple.
+
+4. Compute final addresses
+For each symbol:
+
+final_addr = section_base + symbol_offset
+5. Apply relocations
+For every relocation record:
+
+find target symbol final address
+
+compute relocated value
+
+patch bytes
+
+6. Emit final flat binary
+with entry point at chosen symbol, maybe _start or main.
+
+How should libraries work?
+For your use case, the simplest library model is not a runtime shared library.
+
+Do this instead:
+
+Static library = archive of .o24
+Example:
+
+lexer.o24
+parser.o24
+runtime.o24
+string.o24
+packed into:
+
+libsnobol.a24
+The linker then:
+
+scans main objects first
+
+notes unresolved externs
+
+pulls in only needed objects from archive
+
+repeats until fixed point
+
+That is optional for phase 1.
+You can initially just pass all .o24 files directly to the linker.
+
+Runtime procedure tables vs linker symbol resolution
+You mentioned:
+
+I just need a way for a main to be pointed at a table at load/run time to find procedure entry points
+
+That is a different layer from linking.
+
+You likely want both:
+
+1. Link-time symbol resolution
+Needed so compiled modules can call each other and refer to data.
+
+2. Runtime export tables
+Useful for:
+
+interpreter builtins
+
+dispatch by name/opcode
+
+optional library registration
+
+modular initialization
+
+Example runtime table:
+
+struct proc_entry {
+  char *name;
+  void *entry;
+}
+In COR24-ish layout terms:
+
+snolib_exports:
+  dc24 name_scan_token
+  dc24 scan_token
+  dc24 name_match
+  dc24 match
+  dc24 0
+  dc24 0
+Then main can be passed pointer to this table.
+
+This does not replace a linker. It complements it.
+
+Recommended minimal feature set for PL/SW
+I would add the following source-level features.
+
+Module declaration
+MODULE PARSER;
+Used for mangling/internal naming.
+
+Export declaration
+EXPORT PROC PARSE;
+EXPORT PROC NEXT_TOKEN;
+EXPORT DCL PARSER_STATE PTR;
+External declaration
+EXTERN PROC LEX_NEXT;
+EXTERN PROC RUNTIME_ERROR;
+EXTERN DCL GLOBAL_FLAGS FIXED BIN(24);
+Optional init routine
+EXPORT PROC PARSER_INIT;
+Useful if a runtime/library registry wants initialization.
+
+Name mangling strategy
+Keep it boring and deterministic.
+
+Exported symbols
+Emit plain stable names:
+
+PARSER_PARSE
+PARSER_NEXT_TOKEN
+or
+
+parser.parse
+if assembler permits.
+
+Internal symbols
+Emit unique private names:
+
+$PARSER$L1
+$PARSER$L2
+$PARSER$parse_loop
+That solves duplicate labels and preserves readable debugging.
+
+Section model
+Even if COR24 uses one flat address space, use logical sections.
+
+Suggested sections
+.text — code
+
+.rodata — optional later
+
+.data — initialized writable data
+
+.bss — zero-init writable data
+
+If you want to stay minimal, you can start with just:
+
+.text
+
+.data
+
+.bss
+
+Calling convention considerations
+Before linking, make sure your ABI is stable across modules.
+
+You need firm rules for:
+
+argument passing
+
+return values
+
+caller-saved vs callee-saved registers
+
+stack frame layout
+
+who cleans stack
+
+function pointer call format
+
+If ABI is not nailed down, linking separate modules becomes painful because bugs look like linker problems when they are really calling convention mismatches.
+
+How extern calls should look
+Suppose parser calls lexer.
+
+Source
+EXTERN PROC LEX_NEXT;
+...
+TOKEN = LEX_NEXT();
+Assembly-ish output
+.extern LEX_NEXT
+call LEX_NEXT
+Assembler output in .o24
+machine code bytes for call with zero placeholder
+
+relocation record against LEX_NEXT
+
+Linker output in final .bin
+patched call target with final address of LEX_NEXT
+
+Simplest bootstrap option if you do not want relocatable binary yet
+There is an even simpler transitional model.
+
+Transitional model: “single final assembly with a symbol-resolution prepass”
+Tool flow:
+
+plswc -> mod1.s
+plswc -> mod2.s
+...
+ln24s mod1.s mod2.s ... -> final.s
+as24 final.s -> final.bin
+Where ln24s:
+
+prefixes local labels by module
+
+collects .global definitions
+
+resolves .extern
+
+lays out modules in order
+
+rewrites symbol refs
+
+outputs one final .s
+
+This avoids changing as24 first.
+
+Good use
+prove modular design
+
+define symbol/relocation model
+
+test library/export ideas
+
+But
+I would still move to true .o24 after that.
+
+Library-to-library externs
+You said:
+
+and libraries to find externs in other libraries
+
+That should still be resolved at static link time, not runtime, unless you truly want dynamic libraries.
+
+Example
+libparse.a24 imports LEX_NEXT
+
+liblex.a24 exports LEX_NEXT
+
+Final program link:
+
+ln24 main.o24 libparse.a24 liblex.a24
+Linker resolves it.
+
+Do not start with runtime cross-library symbol lookup unless you truly need hot-swappable separately loaded libraries. You almost certainly do not yet.
+
+What you do not need yet
+You do not need:
+
+ELF
+
+PIC
+
+shared libraries
+
+lazy binding
+
+GOT/PLT
+
+weak symbols
+
+TLS
+
+dynamic loader
+
+section garbage collection
+
+link-time optimization
+
+debug DWARF-like format
+
+All of that can wait.
+
+Concrete MVP design
+Assembly directives
+Add support for:
+
+.module parser
+.section .text
+.global PARSER_PARSE
+.extern LEX_NEXT
+
+.section .data
+.global PARSER_STATE
+Object file capabilities
+as24 -c parser.s -o parser.o24
+
+Produces relocatable object, not final binary.
+
+Linker usage
+ln24 -o snobol.bin --entry MAIN_START \
+  main.o24 lexer.o24 parser.o24 runtime.o24 utils.o24
+or later
+
+ln24 -o snobol.bin --entry MAIN_START \
+  main.o24 libsnobolrt.a24 libsnobolparse.a24
+Suggested archive format
+Very simple:
+
+A24\0
+member_count
+for each member:
+  name_len
+  name
+  size
+  raw o24 bytes
+No symbol index needed at first; linker can just scan all members.
+
+Later you can add an archive symbol index for speed.
+
+Entry point handling
+Your final linker should choose one symbol as the program entry.
+
+Recommendation
+Require one exported symbol such as:
+
+.global _START
+The linker records its final address as entrypoint metadata, or places it at address 0 if your loader expects that.
+
+If your machine model requires the program to begin at 0, linker can place _START at 0 by layout convention.
+
+One important design choice: flat final image vs relocatable load image
+You said:
+
+The plsw->.s, .s->as24->.bin (.o) with the entry point at 0.
+
+You should split these concepts:
+
+.o24
+relocatable object, section-relative, unresolved externs allowed
+
+.bin
+final absolute load image, entry point fixed
+
+Do not call the relocatable object .bin. That will confuse everything.
+
+Use something like:
+
+.o24 for objects
+
+.a24 for static library archives
+
+.bin for final executable image
+
+Minimal compiler work list
+Here is the shortest practical compiler checklist.
+
+Compiler
+add module name awareness
+
+mangle local labels with module prefix
+
+emit export declarations
+
+emit extern declarations
+
+stop assuming every symbol address is known immediately
+
+Assembler
+support .global, .extern, .section, .module
+
+permit undefined externs
+
+emit relocatable objects with symbol + relocation tables
+
+Linker
+merge sections
+
+resolve globals/externs
+
+apply ABS24 and PCREL relocations
+
+emit final flat binary
+
+Pros and cons of this plan
+Benefits
+modular SNOBOL4 implementation becomes straightforward
+
+separate compilation speeds iteration
+
+no more label collision issues
+
+libraries become possible
+
+still simple enough for a homebrew toolchain
+
+sets you up for Pascal VM, shell, editor, debugger, etc.
+
+Risks
+assembler changes are unavoidable if you want a real linker
+
+relocation bugs can be subtle at first
+
+branch encoding/PC-relative fixups need care
+
+ABI discipline becomes more important
+
+Alternatives
+keep one huge monolithic assembly file with compiler-driven namespacing only
+
+write a source-level “assembly merger” instead of object linker
+
+interpret procedure tables only and avoid cross-module compiled calls
+
+Of those, the only serious alternative is the assembly merger as a transitional step.
+
+My strongest recommendation
+Implement this in two passes:
+
+Pass 1 — get modularity quickly
+Create an assembly-level linker/preprocessor that:
+
+prefixes internal labels by module
+
+honors .global / .extern
+
+concatenates modules
+
+rewrites symbol refs
+
+emits final .s
+
+That gets you moving fast.
+
+Pass 2 — make it real
+Upgrade as24 to emit .o24 relocatable objects and write ln24.
+
+That gives you a proper static library model without much conceptual baggage.
+
+Concrete example
+lexer.plsw
+exports LEX_NEXT
+
+parser.plsw
+imports LEX_NEXT, exports PARSE
+
+main.plsw
+imports PARSE
+
+Link steps:
+
+plswc lexer.plsw  -> lexer.s
+plswc parser.plsw -> parser.s
+plswc main.plsw   -> main.s
+
+as24 -c lexer.s  -> lexer.o24
+as24 -c parser.s -> parser.o24
+as24 -c main.s   -> main.o24
+
+ln24 main.o24 parser.o24 lexer.o24 -> snobol.bin
+At runtime, if you also want a dispatch table:
+
+.global SNOBOL_EXPORTS
+SNOBOL_EXPORTS:
+  dc24 name_parse
+  dc24 PARSE
+  dc24 name_lex_next
+  dc24 LEX_NEXT
+  dc24 0
+  dc24 0
+Then main or monitor can find exported procedures through that table.
+
+Bottom line
+The simplest sound solution is:
+
+namespace all non-exported labels per module
+
+add EXPORT/EXTERN support to PL/SW
+
+teach as24 to emit a tiny relocatable .o24
+
+write a very small static linker ln24
+
+later add .a24 archives for libraries
+
+If you want, I can next sketch:
+
+a tiny o24 binary format
+
+example assembly directives for as24
+
+or a concrete phased implementation plan for plswc, as24, and ln24 together.
+
+
+too complicated.  restrictions: cannot change as24 output.  What I could do is, preprocess each .s to prepend module_prefix to labels.   I could take as24 binary output and append metadata to it from the .s file.   Each binary should be a PIC that runs when called wherever it is loaded.  The loader could provide a map or other way to find module entry points.  Not fully worked out, but start with this and describe the tools at each stage, what there inputs and outputs are and how the finished binary works when loaded into non-contiguous memory.  I have something like this working for an emulator that loads 3 programs and a data buffer into 4 locations in memory, branches to absolute location 0, a monitor, that calls program 2, a shell, which calls program 3, an editor, which edits data in a buffer loaded elsewhere.
+
+You want a much simpler design with these hard constraints:
+
+cannot change as24 output
+
+can preprocess each .s
+
+can append metadata after the as24 binary
+
+each module should behave like PIC-ish code when invoked wherever it is loaded
+
+loader/monitor can provide a map for finding module entry points
+
+modules may be loaded into non-contiguous memory
+
+you already have a working pattern where:
+
+absolute location 0 holds monitor
+
+monitor calls shell
+
+shell calls editor
+
+data buffer is elsewhere
+
+Given those constraints, the simplest workable architecture is not a real linker.
+It is a module packager + loader + calling convention + metadata table.
+
+Restated design goal
+You do not need:
+
+binary relocation
+
+object linking
+
+ELF-like symbol resolution
+
+arbitrary extern references at machine-code level
+
+You do need:
+
+separate module compilation
+
+safe label naming per module
+
+module metadata appended to each binary
+
+a loader that places modules anywhere
+
+a call interface so one module can call another through the monitor or module table
+
+code that avoids embedding absolute addresses except for known system entry points
+
+That is much smaller and fits your environment.
+
+Recommended architecture
+Use a three-layer model:
+
+Layer 1 — module source/build
+Each PL/SW module compiles independently to one .s, then to one flat binary.
+
+Layer 2 — packaged module image
+A post-processing step turns that binary into a loadable module blob:
+
+[ raw as24 binary ][ module metadata trailer ]
+Layer 3 — runtime loader/dispatcher
+A monitor/loader loads each module into arbitrary memory locations, reads metadata, builds a module table, and offers controlled cross-module calls.
+
+Key idea: no direct cross-module machine-code references
+This is the most important simplification.
+
+If modules are loaded into non-contiguous memory and you cannot relocate binary code, then modules should not directly embed addresses of other modules.
+
+Instead:
+
+module A does not call module B by absolute address baked into code
+
+module A calls a known monitor/service entry
+
+it passes a module ID + procedure ID or similar
+
+the monitor finds B in the loaded module table and dispatches it
+
+That turns “linking” into runtime dispatch.
+
+This is exactly why your current monitor/shell/editor pattern works well as a foundation.
+
+High-level runtime picture
+At runtime, memory looks something like:
+
+000000  monitor
+001800  shell module
+004200  editor module
+007000  parser module
+00A000  lexer module
+00C000  shared data buffer
+...
+The monitor owns a table like:
+
+module  name     load_addr   entry_count   exports_ptr
+------  -------  ---------   -----------   -----------
+1       shell    0x001800    5             ...
+2       editor   0x004200    7             ...
+3       parser   0x007000    4             ...
+4       lexer    0x00A000    3             ...
+If parser wants lexer’s NEXT_TOKEN, parser asks monitor:
+
+call module "lexer" export "NEXT_TOKEN"
+
+or module id 4, proc id 1
+
+The monitor branches to the proper loaded address.
+
+Nonfunctional requirements
+Given your target, the solution should optimize for:
+
+Simplicity
+Minimal new machinery. No binary relocation engine.
+
+Determinism
+Module loading and dispatch should be transparent and debuggable.
+
+Incremental adoption
+You should be able to use this first for SNOBOL4 pieces, while reusing the same mechanism for shell/editor/monitor later.
+
+PIC discipline by convention
+Because you cannot rewrite as24, “PIC” here really means:
+
+no hardcoded addresses to other modules
+
+only:
+
+local labels within module
+
+stack/frame-relative locals
+
+monitor-known service entry addresses
+
+data pointers passed in by caller
+
+That is “PIC-enough” for your environment.
+
+The simplest finished system
+Build-time tools
+1. plswc
+Compiles one .plsw + optional .msw includes into one .s
+
+Input
+
+module.plsw
+
+0..n include .msw
+
+Output
+
+module.s
+
+2. modpp — module assembly preprocessor
+Rewrites assembly to avoid label collisions and maybe inject module info comments/directives.
+
+Input
+
+module.s
+
+module prefix, such as parser__
+
+Output
+
+module.pp.s
+
+3. as24
+Assembles preprocessed assembly into flat binary as it already does.
+
+Input
+
+module.pp.s
+
+Output
+
+module.bin
+
+4. modpkg — module packager
+Reads .bin and .s or sidecar manifest and appends metadata trailer.
+
+Input
+
+module.bin
+
+module.pp.s or module.exports
+
+module name/id/version
+
+export list
+
+flags like requires monitor ABI version
+
+Output
+
+module.modbin
+
+Runtime tools
+5. modload in the monitor
+Loads a packaged module into memory, scans trailer, validates it, registers it.
+
+Input
+
+module blob bytes
+
+chosen load address
+
+Output
+
+loaded module table entry
+
+6. modcall in the monitor
+Looks up a module export and calls it.
+
+Input
+
+module ID or module name
+
+procedure ID or export name
+
+argument block pointer or registers
+
+Output
+
+return code / returned pointer / result block
+
+Stage-by-stage design
+Stage 0 — current system, manually arranged binaries
+You already have something like:
+
+monitor at 0
+
+shell somewhere else
+
+editor somewhere else
+
+data buffer elsewhere
+
+This means you already have the seed of a runtime loader/dispatcher model.
+
+Current inputs
+separate .bin files
+
+hardcoded load addresses
+
+known call paths
+
+Current outputs
+loaded image set
+
+control transfers across loaded programs
+
+Limitation
+no general metadata
+
+no systematic export/import handling
+
+likely too much manual knowledge in the monitor
+
+Stage 1 — preprocess assembly to namespace labels
+This addresses your immediate modular build problem.
+
+Tool: modpp
+Purpose
+Rewrite labels so every module gets a unique namespace.
+
+Input
+parser.s
+
+prefix parser__
+
+Output
+parser.pp.s
+
+Rewrite rules
+For every non-public label:
+
+L1:         -> parser__L1:
+loop_top:   -> parser__loop_top:
+And every reference updates accordingly.
+
+Public entry labels
+Keep a small set unchanged or rewrite systematically.
+
+Example:
+
+internal labels: prefixed
+
+exported procedures: either left as-is or rewritten to stable names like parser__PARSE
+
+Benefit
+You can independently compile modules without concatenation collisions.
+
+Restriction
+This does not solve extern resolution. That comes from monitor-mediated calls.
+
+Stage 2 — define a module ABI
+Before packaging, define what a loadable module is.
+
+A module should have:
+
+a module name/id
+
+one module entry point for initialization
+
+zero or more exported procedures
+
+optionally required services
+
+optionally required monitor ABI version
+
+Example exported procedures
+For lexer:
+
+INIT
+
+NEXT_TOKEN
+
+RESET
+
+For parser:
+
+INIT
+
+PARSE
+
+SET_SOURCE
+
+Important rule
+A module may call:
+
+its own local procedures directly
+
+monitor/kernel services at known fixed entrypoints
+
+other modules only via monitor dispatch
+
+This rule is what makes non-contiguous loading feasible without relocation.
+
+Stage 3 — package flat binary with metadata trailer
+Because as24 output cannot change, package the binary afterward.
+
+Tool: modpkg
+Purpose
+Append metadata after the raw binary.
+
+Input
+lexer.bin
+
+sidecar export description or parsed annotations from .s
+
+Output
+lexer.modbin
+
+Suggested packaged module format
+Simplest form:
+
+[ raw module code/data bytes ]
+[ metadata trailer ]
+[ trailer footer with magic + trailer offset ]
+Using a footer helps the loader find metadata from the end without knowing code size in advance.
+
+Example layout
+raw binary bytes
+metadata block
+footer:
+  magic = "MD24"
+  metadata_offset = <24-bit or 32-bit offset>
+The loader:
+
+loads blob
+
+checks last few bytes for "MD24"
+
+jumps backward to metadata
+
+registers exports
+
+Suggested metadata contents
+Keep it tiny.
+
+Module header fields
+magic/version
+
+module name
+
+module id
+
+required monitor ABI version
+
+flags
+
+raw code size
+
+entry point offset within module
+
+export count
+
+Export entries
+Each export should contain:
+
+export name or numeric proc ID
+
+offset within module binary of entrypoint
+
+This is crucial: offset, not absolute address.
+
+Because the loader computes:
+
+absolute_entry = module_load_address + export_offset
+That is exactly what you want for non-contiguous memory loading.
+
+How modpkg discovers exports
+You have a few options.
+
+Option A — explicit sidecar manifest
+Simplest and cleanest.
+
+Example lexer.mod:
+
+module lexer
+id 4
+entry INIT
+export INIT
+export NEXT_TOKEN
+export RESET
+Pros
+very easy to implement
+
+no fragile assembly parsing
+
+Cons
+one extra source artifact
+
+Option B — compiler emits comments in assembly
+Example:
+
+;@module lexer
+;@entry INIT
+;@export INIT
+;@export NEXT_TOKEN
+Then modpkg parses comments and symbol labels.
+
+Pros
+convenient
+
+metadata close to code
+
+Cons
+more coupling between compiler text format and packager
+
+Recommendation
+Start with a sidecar manifest. It is simpler.
+
+Stage 4 — monitor builds a loaded module map
+Now the monitor becomes your “linker at runtime”.
+
+Monitor data structure
+Something like:
+
+struct loaded_module {
+  u24 module_id;
+  char *name;
+  u24 load_addr;
+  u24 image_size;
+  u24 entry_offset;
+  u24 export_count;
+  u24 exports_ptr;   // pointer to export descriptors in monitor memory
+};
+And export descriptors:
+
+struct export_desc {
+  u24 proc_id;
+  char *name;
+  u24 entry_offset;
+};
+Or even simpler:
+
+struct export_desc {
+  u24 proc_id;
+  u24 entry_offset;
+};
+For very small systems, numeric IDs are easier than names.
+
+Stage 5 — runtime dispatch
+This is the core cross-module mechanism.
+
+Option A — dispatch by numeric IDs
+Caller passes:
+
+target module ID
+
+target proc ID
+
+arg block pointer
+
+Monitor:
+
+finds loaded module by module ID
+
+finds export by proc ID
+
+computes absolute address
+
+transfers control
+
+Pros
+compact
+
+simple
+
+avoids string matching
+
+Cons
+less human-friendly
+
+Option B — dispatch by name
+Caller passes:
+
+pointer to module name
+
+pointer to proc name
+
+Monitor resolves names.
+
+Pros
+easier for early debugging
+
+more flexible
+
+Cons
+more code and string handling
+
+Recommendation
+Use numeric IDs in production, optionally names for tooling/debugging.
+
+Calling convention for cross-module calls
+Because modules are independently loaded, define a small ABI.
+
+Recommended ABI
+For cross-module calls, do not try to pass many values in registers.
+
+Instead pass an argument block pointer.
+
+Caller provides
+proc/module IDs in agreed registers or stack slots
+
+pointer to argument/result block
+
+Callee returns
+return code in one register
+
+result pointer or updated argument block
+
+This is much easier to keep stable across modules.
+
+Example arg block
+For NEXT_TOKEN:
+
+arg_block:
+  source_ptr
+  source_len
+  cursor_ptr
+  token_out_ptr
+  rc
+Monitor dispatches the callee with pointer to this block.
+
+How a finished binary works when loaded into non-contiguous memory
+Now to your most important practical question.
+
+Assume these modules:
+
+monitor at 0x000000
+
+shell at 0x002000
+
+editor at 0x005800
+
+parser at 0x009000
+
+lexer at 0x00D000
+
+Each module binary is assembled as a self-contained internal image whose internal control flow uses:
+
+local branches
+
+local procedure calls
+
+stack/frame relative accesses
+
+No instruction in parser contains “jump to lexer absolute 0x00D123”.
+
+Instead, parser does this:
+
+prepare argument block
+
+invoke monitor service CALL_EXPORT
+
+pass module id = LEXER
+
+pass proc id = NEXT_TOKEN
+
+pass argument block pointer
+
+Monitor computes:
+
+lexer_base + next_token_offset = actual entry address
+and transfers control there.
+
+So non-contiguous placement is fine because the only cross-module addresses are computed at runtime from metadata.
+
+What “PIC” means here
+Strictly speaking, this is not full machine-level PIC in the ELF sense.
+
+It is a discipline-based relocatable module model:
+
+Allowed inside module
+relative/local control flow
+
+internal symbol references that as24 already resolves within that module
+
+data accessed via pointers given at entry
+
+fixed monitor service entrypoints, if those are globally stable
+
+Forbidden inside module
+absolute addresses of other modules
+
+embedded pointers to external data buffers unless provided at runtime
+
+hard-coded assumptions about where caller/callee modules were loaded
+
+That is enough.
+
+The one special case: monitor service entrypoints
+You likely need a few fixed absolute entrypoints known to all modules.
+
+Example:
+
+MON_CALL_EXPORT
+
+MON_GET_MODULE
+
+MON_ALLOC
+
+MON_PUTS
+
+MON_RETURN
+
+Because monitor is always at 0 or otherwise fixed.
+
+This is the only acceptable absolute-address dependency in the simple design.
+
+That matches your current monitor-centered architecture.
+
+Tool chain summary
+Here is the simplest end-to-end flow.
+
+1. plswc
+Compiles PL/SW to assembly.
+
+Input
+
+parser.plsw
+
+included .msw
+
+Output
+
+parser.s
+
+2. modpp
+Prefixes labels and maybe normalizes exported symbols.
+
+Input
+
+parser.s
+
+module prefix parser__
+
+Output
+
+parser.pp.s
+
+Role
+
+avoid L1 collisions
+
+possibly generate symbol map text for exports
+
+3. as24
+Assembles as usual.
+
+Input
+
+parser.pp.s
+
+Output
+
+parser.bin
+
+Role
+
+unchanged existing assembler stage
+
+4. modpkg
+Packages flat binary plus metadata trailer.
+
+Input
+
+parser.bin
+
+parser.mod manifest
+
+Output
+
+parser.modbin
+
+Role
+
+append module metadata
+
+identify exports by offsets
+
+assign module ID
+
+5. modload / monitor loader
+Loads packaged module into arbitrary memory and registers it.
+
+Input
+
+parser.modbin
+
+chosen load address
+
+Output
+
+module table entry in monitor
+
+Role
+
+parse trailer
+
+compute absolute export addresses on demand
+
+6. modcall
+Runtime service in monitor for cross-module invocation.
+
+Input
+
+module ID
+
+proc ID
+
+arg block pointer
+
+Output
+
+rc/result
+
+Role
+
+cross-module dispatch without static linking
+
+What the compiler should change
+Since you want to stay simple, compiler changes should be minimal.
+
+Needed changes
+1. Module awareness
+Compiler should know a module name so the preprocessor can use it consistently.
+
+2. Export declarations
+Compiler should know which procedures are externally callable.
+
+Example conceptually:
+
+EXPORT PROC PARSE;
+EXPORT PROC INIT;
+3. External procedures become service calls, not direct CALLs
+This is the biggest conceptual change.
+
+Instead of:
+
+EXTERN PROC NEXT_TOKEN;
+X = NEXT_TOKEN(...);
+compile cross-module calls as something like:
+
+call monitor service CALL_EXPORT(module_id, proc_id, arg_block)
+or compile through a helper stub.
+
+4. Optional manifest generation
+Compiler could emit sidecar text listing exports.
+
+That would help modpkg.
+
+What the preprocessor should do
+modpp is now very important.
+
+It should:
+prefix internal labels
+
+prefix internal procedure names
+
+leave exported names stable or make them predictable
+
+maybe emit a label map
+
+Example
+Input:
+
+PARSE:
+L1:
+  ...
+HELPER:
+L2:
+Output:
+
+parser__PARSE:
+parser__L1:
+  ...
+parser__HELPER:
+parser__L2:
+If PARSE is exported, then manifest says:
+
+export PARSE = parser__PARSE
+So modpkg can locate that label offset.
+
+The manifest format
+Keep it dead simple.
+
+Example parser.mod:
+
+name parser
+id 3
+abi 1
+entry INIT
+export 1 INIT
+export 2 PARSE
+export 3 SET_SOURCE
+Where:
+
+1, 2, 3 are proc IDs
+
+symbolic names are for debugging/tools
+
+actual entry offsets come from symbol lookup against assembly/listing/map
+
+If as24 emits a listing or symbol table file, use that.
+If not, modpp can emit one.
+
+How to get symbol offsets without changing as24
+This matters.
+
+Since as24 output cannot change, one of these must be true:
+
+Option A — as24 already emits a listing/map
+Then modpkg reads it.
+
+Option B — preprocessor computes offsets indirectly
+Harder, not ideal.
+
+Option C — compiler/preprocessor emits a tiny “symbol inventory”
+Then modpkg combines:
+
+symbol names from inventory
+
+final addresses from assembler listing if available
+
+Best case
+Use assembler listing/map if it exists. That is the simplest.
+
+If not, the easiest fallback is to make modpp generate an assembly listing-friendly annotation and rely on parsing whatever as24 already prints.
+
+How cross-module imports should work
+With this architecture, “imports” do not mean linker externs.
+
+They mean declared runtime dependencies.
+
+For example parser depends on lexer export IDs:
+
+module LEXER = 4
+
+proc NEXT_TOKEN = 2
+
+These can live in:
+
+source declarations
+
+manifest
+
+a shared .msw constants file
+
+Then parser compiles a call to the monitor dispatcher using those IDs.
+
+That is far simpler than binary extern resolution.
+
+Shared data
+You also mentioned data buffers loaded elsewhere.
+
+That fits naturally.
+
+Rule
+Modules should access shared data through pointers passed in:
+
+at init time
+
+in arg blocks
+
+from monitor service lookup
+
+Do not bake shared buffer addresses into modules unless they are fixed by system convention.
+
+Example
+Shell calls editor with:
+
+pointer to shared edit buffer
+
+pointer to file descriptor block
+
+console I/O handles
+
+Editor then operates entirely via passed-in pointers.
+
+That is already close to what you have working.
+
+Practical example
+Suppose you split SNOBOL4 into:
+
+sn_main
+
+sn_lex
+
+sn_parse
+
+sn_match
+
+sn_util
+
+Build outputs
+sn_main.modbin
+
+sn_lex.modbin
+
+sn_parse.modbin
+
+sn_match.modbin
+
+sn_util.modbin
+
+Loader
+Monitor loads them into available holes in memory.
+
+Cross-call example
+sn_parse needs sn_lex:NEXT_TOKEN
+
+It does not call a direct address.
+It calls monitor service:
+
+CALL_EXPORT(
+  module_id = SN_LEX,
+  proc_id   = NEXT_TOKEN,
+  arg_ptr   = &token_call_block
+)
+Monitor finds where sn_lex landed and jumps there.
+
+That works even if sn_lex moved between runs.
+
+Benefits and tradeoffs
+Benefits
+works with unchanged as24
+
+avoids binary relocation
+
+handles non-contiguous memory naturally
+
+close to what you already proved with monitor/shell/editor
+
+easy to debug because monitor sees all cross-module calls
+
+module binaries are independently buildable and loadable
+
+Tradeoffs
+cross-module calls are indirect through monitor
+
+slightly slower than direct linked calls
+
+exported ABI must be explicit and stable
+
+modules cannot casually share globals by direct symbol reference
+
+For your system, these tradeoffs are probably excellent.
+
+My recommended minimum viable implementation order
+Phase 1 — label-safe modular assembly
+Build modpp to prefix internal labels.
+
+Phase 2 — package modules
+Build modpkg to append metadata trailer with:
+
+module id
+
+module name
+
+export IDs
+
+export offsets
+
+entry offset
+
+Phase 3 — monitor registry
+Extend monitor to:
+
+load module blob
+
+parse trailer
+
+register module
+
+Phase 4 — monitor dispatcher
+Add CALL_EXPORT(module_id, proc_id, arg_ptr).
+
+Phase 5 — compiler/runtime convention
+Compile inter-module calls as monitor dispatches instead of direct calls.
+
+That is enough to get a modular SNOBOL4 runtime working.
+
+Strong recommendation on IDs
+Use numeric IDs for both modules and exports.
+
+For example:
+
+Module IDs
+1 = shell
+
+2 = editor
+
+10 = sn_main
+
+11 = sn_lex
+
+12 = sn_parse
+
+Proc IDs
+Within sn_lex:
+
+1 = INIT
+
+2 = NEXT_TOKEN
+
+3 = RESET
+
+Keep names only for debugging and manifests.
+
+That makes the runtime very small.
+
+Bottom line
+Given your constraints, the simplest robust solution is:
+
+Build-time
+compile each module separately
+
+preprocess each .s to prefix local/internal labels
+
+assemble normally with unchanged as24
+
+append a metadata trailer describing module ID, entry point, and export offsets
+
+Runtime
+monitor loads each module anywhere in memory
+
+monitor builds a module/export table
+
+modules call other modules only through a monitor dispatch service
+
+shared data is passed by pointer, not by fixed absolute symbol reference
+
+That gives you a practical module system without a linker and works naturally with non-contiguous memory.
+
+If you want, next I can give you:
+
+a concrete modpkg trailer format,
+
+a sample module manifest syntax,
+
+or pseudocode for the monitor’s CALL_EXPORT dispatcher.
+
+
+
+
+

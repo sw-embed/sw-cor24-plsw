@@ -1,0 +1,1 @@
+fix(meta-gen): only export labels in .syms DEF list (#41)

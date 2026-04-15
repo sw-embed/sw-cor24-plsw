@@ -1,0 +1,1 @@
+fix(macro): resolve ADDR() to assembly label in GEN block substitution (#36)

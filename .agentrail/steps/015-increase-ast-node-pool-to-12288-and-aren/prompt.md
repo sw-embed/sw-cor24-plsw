@@ -1,0 +1,1 @@
+perf(compiler): increase AST node pool to 12288 and arena to 24KB

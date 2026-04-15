@@ -1,0 +1,1 @@
+docs(usage): document parentheses requirement for no-arg function calls

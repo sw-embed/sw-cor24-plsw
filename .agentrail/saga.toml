@@ -1,6 +1,6 @@
 name = "plsw-vendor-toolchain"
 status = "active"
-current_step = 2
+current_step = 3
 created_at = "2026-04-11T13:52:29"
 plan_file = ".agentrail/plan.md"
 retroactive = false

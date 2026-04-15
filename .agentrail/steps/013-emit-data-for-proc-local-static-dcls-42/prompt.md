@@ -1,0 +1,1 @@
+fix(codegen): emit .data for PROC-local STATIC DCLs (#42)

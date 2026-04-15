@@ -1,0 +1,8 @@
+number = 10
+slug = "track-step-toml-update-summary-and-sessi"
+status = "pending"
+description = "chore(agentrail): track step.toml update, summary, and sessions"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["be3ec8b308f1c4e8f24e2c323b3a7b4d15161186"]

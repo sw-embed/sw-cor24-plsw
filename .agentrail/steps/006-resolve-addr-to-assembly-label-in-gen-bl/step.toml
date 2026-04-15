@@ -1,0 +1,8 @@
+number = 6
+slug = "resolve-addr-to-assembly-label-in-gen-bl"
+status = "pending"
+description = "fix(macro): resolve ADDR() to assembly label in GEN block substitution (#36)"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["4115e6330bf16d8fbf00a24c468462ac8ac00fc9"]

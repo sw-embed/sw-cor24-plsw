@@ -1,0 +1,8 @@
+number = 13
+slug = "emit-data-for-proc-local-static-dcls-42"
+status = "pending"
+description = "fix(codegen): emit .data for PROC-local STATIC DCLs (#42)"
+role = "production"
+context_files = []
+created_at = "2026-04-15T11:58:28"
+commits = ["b346766acb0250e7566e9b926ee6b9343152d6a8"]
