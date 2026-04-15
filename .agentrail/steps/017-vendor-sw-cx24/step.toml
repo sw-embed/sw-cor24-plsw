@@ -1,0 +1,11 @@
+number = 17
+slug = "vendor-sw-cx24"
+status = "blocked"
+description = """
+Saga plan step 2: Vendor sw-cx24 (the C cross-compiler).
+
+Per docs/vendor-pla..."""
+role = "production"
+context_files = []
+created_at = "2026-04-15T12:17:36"
+commits = []
