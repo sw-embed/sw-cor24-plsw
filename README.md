@@ -117,6 +117,12 @@ just clean          # Remove build artifacts
 Note: SNOBOL was originally implemented in SIL (SNOBOL Implementation
 Language) which had macros, much like PL/SW does.
 
+## Links
+
+- Blog: [Software Wrighter Lab](https://software-wrighter-lab.github.io/)
+- Discord: [Join the community](https://discord.com/invite/Ctzk5uHggZ)
+- YouTube: [Software Wrighter](https://www.youtube.com/@SoftwareWrighter)
+
 ## License
 
-See [LICENSE](LICENSE).
+Copyright (c) 2026 Michael A Wright. MIT-licensed; see [LICENSE](LICENSE).
