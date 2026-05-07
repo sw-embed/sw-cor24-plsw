@@ -1,0 +1,1 @@
+Fixed issue #45: MACRODEF/GEN DO block was silently truncating at GEN_BUF_MAX. Changed to a loud assembler-time error and bumped the per-block line limit from 32 to 96.

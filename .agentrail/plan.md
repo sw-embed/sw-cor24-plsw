@@ -1,62 +1,59 @@
-# PL/SW Vendor Toolchain Saga
+# Bootstrap PL/SW Toolchain Saga
 
-Vendor the COR24 cross-toolchain (sw-cx24, sw-asx24, sw-em24)
-under `./vendor/` so PL/SW pins specific versions of each tool
-and adoption of upstream changes is deliberate.
+Make PL/SW shippable into the shared COR24 toolchain that mike's
+forthcoming `tools/build-all` orchestrator will install. After
+this saga, downstream consumers (sw-cor24-snobol4, prolog, oca,
+basic, script) can find PL/SW artifacts on a stable path instead
+of reaching into our `build/` via `$HOME` / sibling-relative paths.
 
-Architectural design lives in `docs/vendor-plan.md` -- read it
-first. This plan.md is the saga arc; the design doc is the
-authoritative reference.
+The brief is at
+`/disk1/github/softwarewrighter/devgroup/tools/briefs/dcpls-bootstrap-plsw-toolchain.md`
+-- read it first; it is the authoritative reference for migration
+mappings and verification steps. This plan is the saga arc.
 
 ## Goal
 
-After this saga: a fresh `git clone` of sw-cor24-plsw + one run
-of `./scripts/vendor-fetch.sh` rebuilds the exact toolchain
-binaries pinned by version.json manifests, with SHA-256
-verification, and `just build` works without referencing any
-sibling working directory or anything in `~/.local/`.
+After this saga: `just build-lgo` produces `build/plsw.lgo` (the
+canonical shippable artifact); every callsite of the deprecated
+`cor24-run --run` and `cor24-run --assemble` flags has been
+migrated to the new `cor24-asm` + `cor24-emu --lgo` pipeline; and
+`just install-layer1` (or equivalent) stages `link24` and
+`meta-gen` for the orchestrator to grab.
+
+## Forcing event
+
+`sw-cor24-emulator`'s `pr/remove-internal-assembler` saga landed,
+removing `--run` and `--assemble` flags from the new `cor24-emu`
+binary. Every existing build script in this repo that uses those
+flags will break the moment mike installs the new emulator. The
+new pipeline is `cor24-asm` (assemble) + `cor24-emu --lgo`
+(execute) as separate steps.
 
 ## Steps
 
-1. **Skeleton + script**. Pure scaffolding, no real binaries:
-   - `vendor/.gitignore` (ignores `*/v*/bin/*`)
-   - `vendor/active.env` (committed, version pins)
-   - `scripts/vendor-fetch.sh` (verify + `--record` modes)
-   - `vendor/sw-cx24/v0.1.0/version.json` skeleton with TBD sha256
-   - The `docs/vendor-plan.md` design doc gets folded into this
-     step's commit (it was drafted at saga-init time)
-   - No vendored binaries yet; script untested end-to-end
+1. **bootstrap-toolchain**. The full brief, landed as one PR:
+   - Add `just build-lgo` recipe producing `build/plsw.lgo`.
+   - Migrate `justfile` (`run`, `run-input`, `test`),
+     `scripts/pipeline.sh`, `scripts/pipeline-dump.sh`, and
+     `components/linker/tests/demo-fixup.sh` +
+     `demo-plsw-modular.sh` to the new pipeline.
+   - Add `just install-layer1` staging `link24` + `meta-gen` to
+     `dist/bin/` (gitignored) for the orchestrator.
+   - Fix the hardcoded `tc24r_include` path in `justfile:4` from
+     `sw-vibe-coding/tc24r/include` to
+     `sw-embed/sw-cor24-x-tinyc/include`.
+   - Update README to document the canonical artifact paths.
+   - Run the full verification gauntlet from the brief.
 
-2. **Vendor sw-cx24**. Pin a stable upstream commit, run
-   `vendor-fetch.sh --record sw-cx24`, copy `includes/` and
-   `docs/`, verify the resulting binary builds PL/SW
-   byte-identical to the current `tc24r`-built version.
-   Possibly involves an upstream rename of the C compiler repo.
-
-3. **Vendor sw-asx24**. Same workflow for the cross-assembler.
-   Likely needs upstream split from `sw-cor24-emulator`, since
-   assembler and emulator are currently one binary.
-
-4. **Vendor sw-em24**. Same workflow for the emulator.
-
-5. **Cut over justfile + CLAUDE.md**. Switch all build paths to
-   the vendor tree; rewrite "Stable toolchain references" in
-   CLAUDE.md to point at `vendor/`. Verify `just build`,
-   `just test`, `just pipeline examples/select_demo.plsw` all
-   green.
-
-6. **Bootstrap docs + cold-clone test**. README "First-time
-   setup" section. Test the cold-clone scenario by removing
-   `vendor/*/*/bin/*` and rerunning `vendor-fetch.sh; just build`.
-   Document the upgrade workflow.
-
-After this saga is archived, start a timestamped maintenance
-saga (e.g. `plsw-maint-20260411Thhmm`) for ongoing fixes.
+After this saga is archived, downstream-consumer migration sagas
+(in their own repos) can begin once mike's orchestrator installs
+the shared artifacts.
 
 ## Rules
 
-- Each step is one focused commit (or a small bundle).
-- Steps 2-4 may also produce upstream commits in the toolchain
-  repos -- note that explicitly in the step prompt.
-- Don't expand scope. If a step uncovers something else broken,
-  log it for a future maintenance step.
+- No PL/SW compiler logic changes. Build-system migration only.
+- No cross-repo updates. Document the new artifact paths so
+  downstream repos can migrate on their own schedule.
+- No installing into `work/bin/`. Mike does that post-relay.
+- `pr/bootstrap-toolchain` is the branch name expected by the
+  brief; rename `feat/bootstrap-toolchain` to that on completion.

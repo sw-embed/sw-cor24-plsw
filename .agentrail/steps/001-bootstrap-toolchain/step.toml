@@ -1,0 +1,8 @@
+number = 1
+slug = "bootstrap-toolchain"
+status = "pending"
+description = "Bootstrap PL/SW into the shared toolchain per /disk1/github/softwarewrighter/..."
+role = "production"
+context_files = []
+created_at = "2026-05-06T23:51:54"
+commits = []
