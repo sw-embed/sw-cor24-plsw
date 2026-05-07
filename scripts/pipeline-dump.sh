@@ -4,13 +4,19 @@
 # Usage: ./scripts/pipeline-dump.sh [macro.msw ...] program.plsw
 #
 # Outputs:
-#   build/out.s        -- generated assembly
-#   build/run-dump.txt -- full emulator dump (registers, SRAM, stack, I/O)
-#   stdout             -- UART output from program
+#   build/<basename>.s        -- generated assembly
+#   build/<basename>.lgo      -- assembled program (cor24-asm output)
+#   build/<basename>-dump.txt -- full emulator dump (registers, SRAM, stack, I/O)
+#   stdout                    -- UART output from program
+#
+# Requires: cor24-asm, cor24-emu, the compiler assembly at build/plsw.s
+# (`just build`), and the compiler .lgo at build/plsw.lgo (auto-built
+# below if missing).
 
 set -euo pipefail
 
 COMPILER_ASM="${COMPILER_ASM:-build/plsw.s}"
+COMPILER_LGO="${COMPILER_LGO:-build/plsw.lgo}"
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 [macro.msw ...] program.plsw" >&2
@@ -18,8 +24,11 @@ if [ $# -lt 1 ]; then
 fi
 
 if [ ! -f "$COMPILER_ASM" ]; then
-    echo "Error: compiler not built. Run 'just build' first." >&2
+    echo "Error: compiler not built ($COMPILER_ASM). Run 'just build' first." >&2
     exit 1
+fi
+if [ ! -f "$COMPILER_LGO" ] || [ "$COMPILER_ASM" -nt "$COMPILER_LGO" ]; then
+    cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"
 fi
 
 # Separate .msw and .plsw files
@@ -75,7 +84,7 @@ echo "Combined source: $OUT_COMBINED" >&2
 
 # Compile
 echo "=== Compiling $(basename "$MAIN") ===" >&2
-COMPILER_OUT=$(cor24-run --run "$COMPILER_ASM" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
+COMPILER_OUT=$(cor24-emu --lgo "$COMPILER_LGO" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
 UART_OUT=$(echo "$COMPILER_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
 
 if echo "$UART_OUT" | grep -q "compilation failed\|COMPILE ERROR\|ERROR:"; then
@@ -97,6 +106,7 @@ fi
 # Derive output names from input .plsw filename
 BASENAME=$(basename "$MAIN" .plsw)
 OUT_S="build/${BASENAME}.s"
+OUT_LGO="build/${BASENAME}.lgo"
 OUT_DUMP="build/${BASENAME}-dump.txt"
 
 # Save assembly
@@ -107,9 +117,10 @@ echo "Assembly: $ASM_LINES lines -> $OUT_S" >&2
 # Show registered includes
 echo "$UART_OUT" | grep "registered:" >&2 || true
 
-# Run with --dump
+# Assemble + run with --dump
+cor24-asm "$OUT_S" -o "$OUT_LGO"
 echo "=== Running with --dump ===" >&2
-RUN_OUT=$(cor24-run --run "$OUT_S" -n 50000000 -t 30 --speed 0 --dump 2>&1)
+RUN_OUT=$(cor24-emu --lgo "$OUT_LGO" -n 50000000 -t 30 --speed 0 --dump 2>&1)
 
 # Save full dump
 echo "$RUN_OUT" > "$OUT_DUMP"

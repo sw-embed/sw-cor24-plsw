@@ -1,6 +1,6 @@
 number = 1
 slug = "bootstrap-toolchain"
-status = "pending"
+status = "in-progress"
 description = "Bootstrap PL/SW into the shared toolchain per /disk1/github/softwarewrighter/..."
 role = "production"
 context_files = []
