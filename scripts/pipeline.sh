@@ -7,21 +7,32 @@
 # compiler's %INCLUDE mechanism resolves them by name. Without .msw files,
 # uses legacy mode (raw source + EOT).
 #
-# Requires: cor24-run, the compiler assembly at build/plsw.s
+# Pipeline (post toolchain bootstrap):
+#   .plsw  ->  cor24-emu --lgo build/plsw.lgo  ->  .s
+#         (assembled in-place to a temp .lgo)  ->  cor24-emu --lgo
+#         ->  program output
+#
+# Requires: cor24-asm, cor24-emu, the compiler assembly at build/plsw.s
+# (`just build`), and the compiler .lgo at build/plsw.lgo (auto-built
+# below if missing).
 
 set -euo pipefail
 
 COMPILER_ASM="${COMPILER_ASM:-build/plsw.s}"
+COMPILER_LGO="${COMPILER_LGO:-build/plsw.lgo}"
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 [macro.msw ...] program.plsw" >&2
     exit 1
 fi
 
-# Verify compiler exists
+# Verify compiler .s exists; (re)build .lgo if missing or stale.
 if [ ! -f "$COMPILER_ASM" ]; then
-    echo "Error: compiler not built. Run 'just build' first." >&2
+    echo "Error: compiler not built ($COMPILER_ASM). Run 'just build' first." >&2
     exit 1
+fi
+if [ ! -f "$COMPILER_LGO" ] || [ "$COMPILER_ASM" -nt "$COMPILER_LGO" ]; then
+    cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"
 fi
 
 # Separate .msw and .plsw files
@@ -40,7 +51,7 @@ if [ -z "$MAIN" ]; then
     exit 1
 fi
 
-# Build UART input string with \n escapes for cor24-run -u
+# Build UART input string with \n escapes for cor24-emu -u
 # Uses FILE:/SOURCE: protocol when .msw files present, legacy otherwise.
 build_input() {
     printf 'c\\n'
@@ -63,8 +74,8 @@ build_input() {
 
 INPUT=$(build_input)
 
-# Compile: run source through the PL/SW compiler on the emulator
-COMPILER_OUT=$(cor24-run --run "$COMPILER_ASM" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
+# Compile: feed source to the PL/SW compiler running on the emulator
+COMPILER_OUT=$(cor24-emu --lgo "$COMPILER_LGO" -u "$INPUT" -n 200000000 -t 120 --speed 0 2>&1)
 
 # Extract the UART output block (multiline: from "UART output:" to "Executed")
 UART_OUT=$(echo "$COMPILER_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')
@@ -87,9 +98,10 @@ if [ -z "$ASM" ]; then
     exit 1
 fi
 
-# Write assembly to temp file
+# Write assembly to temp file, then assemble to a temp .lgo
 TMPASM=$(mktemp /tmp/plsw-XXXXXX.s)
-trap "rm -f $TMPASM" EXIT
+TMPLGO=$(mktemp /tmp/plsw-XXXXXX.lgo)
+trap "rm -f $TMPASM $TMPLGO" EXIT
 echo "$ASM" > "$TMPASM"
 
 ASM_LINES=$(echo "$ASM" | wc -l | tr -d ' ')
@@ -98,9 +110,10 @@ echo "=== Compiled $(basename "$MAIN") ($ASM_LINES lines of assembly) ===" >&2
 # Show registered includes if any
 echo "$UART_OUT" | grep "registered:" >&2 || true
 
-# Run the generated assembly
+# Assemble + run the generated assembly
+cor24-asm "$TMPASM" -o "$TMPLGO"
 echo "=== Running ===" >&2
-RUN_OUT=$(cor24-run --run "$TMPASM" -n 10000000 -t 30 --speed 0 2>&1)
+RUN_OUT=$(cor24-emu --lgo "$TMPLGO" -n 10000000 -t 30 --speed 0 2>&1)
 
 # Extract program output (multiline UART output block)
 PROG_OUT=$(echo "$RUN_OUT" | sed -n '/^UART output:/,/^Executed /{/^Executed /d;p;}' | sed '1s/^UART output: //')

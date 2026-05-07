@@ -1,0 +1,1 @@
+Vendor toolchain saga superseded by toolchain-orchestrator approach: PL/SW now ships build/plsw.lgo to a shared toolchain rather than vendoring sw-cx24/sw-asx24/sw-em24 inputs. Step 17 (vendor-sw-cx24) was blocked; remaining vendoring steps (sw-asx24, sw-em24, justfile cutover, cold-clone test) replaced by the bootstrap-toolchain saga below.

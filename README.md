@@ -29,8 +29,9 @@ All 40 implementation steps complete across 12 phases:
 ## Quick Start
 
 ```bash
-# Build the compiler (requires tc24r and cor24-run)
-just build
+# Build the compiler (requires tc24r, cor24-asm, cor24-emu)
+just build              # produces build/plsw.s
+just build-lgo          # produces build/plsw.lgo (canonical shippable)
 
 # Compile and run hello world
 just pipeline examples/hello.plsw
@@ -38,12 +39,35 @@ just pipeline examples/hello.plsw
 
 # Compile with .msw includes and memory dump
 just chain
-# Output: build/chain.s, build/chain-dump.txt, build/chain-combined.plsw
+# Output: build/chain.s, build/chain.lgo, build/chain-dump.txt,
+#         build/chain-combined.plsw
 
 # Compile macro demo
 just hello-macro
 # Output: Hello from macros!
 ```
+
+## Toolchain Artifacts
+
+After `just build-lgo`, the canonical shippable is `build/plsw.lgo`.
+Downstream consumers run the compiler directly without re-assembling:
+
+```bash
+cor24-emu --lgo path/to/plsw.lgo --terminal --echo --speed 0
+```
+
+Layer 1 native binaries (`link24` and `meta-gen`, used for separate
+compilation and FIXUP-based linking) build with `just install-layer1`:
+
+```bash
+just install-layer1
+# -> dist/bin/link24
+# -> dist/bin/meta-gen
+```
+
+Both targets are gitignored. The shared toolchain orchestrator
+(`tools/build-all`) installs them into the canonical toolchain
+location post-relay.
 
 ## Examples
 
@@ -81,13 +105,15 @@ Output files: `build/<name>.s`, `build/<name>-dump.txt`, `build/<name>-combined.
 ## Build System
 
 ```bash
-just build          # Compile the PL/SW compiler itself
+just build          # Compile the PL/SW compiler itself (.s)
+just build-lgo      # Assemble compiler to .lgo (canonical shippable)
 just run            # Interactive mode (terminal)
 just test           # Run with instruction limit
 just pipeline <f>   # Compile and run a .plsw
 just pipeline-dump <files>  # Compile, run with memory dump
 just chain          # Control block chain demo
 just hello-macro    # Macro demo
+just install-layer1 # Stage link24 + meta-gen for the toolchain orchestrator
 just clean          # Remove build artifacts
 ```
 

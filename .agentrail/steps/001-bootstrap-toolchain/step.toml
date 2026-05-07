@@ -1,0 +1,9 @@
+number = 1
+slug = "bootstrap-toolchain"
+status = "completed"
+description = "Bootstrap PL/SW into the shared toolchain per /disk1/github/softwarewrighter/..."
+role = "production"
+context_files = []
+created_at = "2026-05-06T23:51:54"
+completed_at = "2026-05-07T16:16:36"
+commits = ["4a9775964aba1ea04f23e25b9bd5debf1e90aff9"]

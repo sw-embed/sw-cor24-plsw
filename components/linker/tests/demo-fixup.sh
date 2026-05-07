@@ -12,7 +12,18 @@
 #   4. Pass 2 assembly: reassemble with --base-addr
 #   5. meta-gen emit: parse .lst to produce .meta with EXPORT/FIXUP
 #   6. link24: produce combined binary
-#   7. cor24-run: execute
+#   7. cor24-emu: execute
+#
+# Toolchain notes (post bootstrap-toolchain saga):
+#   * Pass-1 assembly uses `cor24-asm` (the new cross-assembler).
+#   * Final execution uses `cor24-emu --load-binary --entry` (same
+#     flag spelling and semantics as the old cor24-run).
+#   * Pass-2 still uses `cor24-run --assemble --base-addr` because
+#     cor24-asm 0.1.0 has no `--base-addr` equivalent yet. dcxas has
+#     a follow-up brief to plumb the existing library-level
+#     base_address through to the CLI; once that lands, a small
+#     follow-up PR flips the remaining two lines and cor24-run can
+#     be retired from this repo.
 #
 # Expected output:
 #   main:enter
@@ -53,8 +64,8 @@ done
 # --- Phase 2: Pass 1 assembly (base 0) -> sizes + .lst for meta-gen ---
 SIZES=()
 for mod in "${MODULES[@]}"; do
-    cor24-run --assemble "$TMPDIR/${mod}.s" \
-        "$TMPDIR/${mod}.bin" "$TMPDIR/${mod}.lst" >/dev/null
+    cor24-asm "$TMPDIR/${mod}.s" \
+        --bin "$TMPDIR/${mod}.bin" --listing "$TMPDIR/${mod}.lst" >/dev/null
     SIZES+=($(stat -f%z "$TMPDIR/${mod}.bin"))
 done
 
@@ -87,6 +98,6 @@ done
     main liba libb util -o "$TMPDIR/program.bin" >/dev/null
 
 # --- Phase 7: Run (entry module is at address 0, _start is at +0) ---
-cor24-run --load-binary "$TMPDIR/program.bin@0" \
+cor24-emu --load-binary "$TMPDIR/program.bin@0" \
     --entry 0 --speed 0 -n 10000000 -t 10 \
     | awk '/^UART output:/{sub(/^UART output: /,"");f=1} f{if(/^$/)exit;print}'
