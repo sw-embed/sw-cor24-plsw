@@ -27,8 +27,33 @@ run: build-lgo
 run-input input: build-lgo
     cor24-emu --lgo {{plsw_lgo}} --speed 0 -u "{{input}}"
 
-# Build and run with cycle limit (for testing)
-test: build-lgo
+# Run the PL/SW reg-rs regression suite. Tests live under
+# reg-rs/plsw_*.{rgt,out}; driver is tests/driver.sh. If reg-rs
+# reports "no tests matched", run `just test-bootstrap-goldens`
+# once to create the baseline (requires a working build-lgo).
+test:
+    ./scripts/test.sh
+
+# (Re)create reg-rs goldens from the current toolchain output.
+# Run once when first establishing the baseline, or after an
+# intentional behavior change lands. Commit the resulting
+# reg-rs/plsw_*.rgt and reg-rs/plsw_*.out files.
+test-bootstrap-goldens: build-lgo
+    ./scripts/bootstrap-goldens.sh
+
+# Run the linker integration demos (assemble -> meta-gen -> link24
+# -> cor24-emu). Separate from `test` because they exercise
+# components/linker/ end-to-end and currently surface a
+# pre-existing garbled-output regression unrelated to this saga;
+# see docs/testing.md.
+test-linker:
+    ./components/linker/tests/demo-fixup.sh
+    ./components/linker/tests/demo-plsw-modular.sh
+
+# Smoke-run the compiler binary interactively (no specific input,
+# 100M cycle ceiling). Useful for "does the compiler still run at
+# all?", not for regression. The real regression is `just test`.
+smoke: build-lgo
     cor24-emu --lgo {{plsw_lgo}} --terminal --speed 0 -n 100000000
 
 # Compile and run a .plsw program end-to-end
