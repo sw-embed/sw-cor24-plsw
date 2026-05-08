@@ -108,7 +108,7 @@ SIZES=()
 for mod in "${MODULES[@]}"; do
     cor24-asm "$TMPDIR/${mod}.s" \
         --bin "$TMPDIR/${mod}.bin" --listing "$TMPDIR/${mod}.lst" >/dev/null
-    SIZES+=($(stat -f%z "$TMPDIR/${mod}.bin"))
+    SIZES+=($(wc -c < "$TMPDIR/${mod}.bin"))
 done
 
 # --- Phase 3: meta-gen emit (.meta from pass-1 .lst) ---

@@ -105,17 +105,22 @@ Output files: `build/<name>.s`, `build/<name>-dump.txt`, `build/<name>-combined.
 ## Build System
 
 ```bash
-just build          # Compile the PL/SW compiler itself (.s)
-just build-lgo      # Assemble compiler to .lgo (canonical shippable)
-just run            # Interactive mode (terminal)
-just test           # Run with instruction limit
-just pipeline <f>   # Compile and run a .plsw
-just pipeline-dump <files>  # Compile, run with memory dump
-just chain          # Control block chain demo
-just hello-macro    # Macro demo
-just install-layer1 # Stage link24 + meta-gen for the toolchain orchestrator
-just clean          # Remove build artifacts
+just build                   # Compile the PL/SW compiler itself (.s)
+just build-lgo               # Assemble compiler to .lgo (canonical shippable)
+just run                     # Interactive mode (terminal)
+just smoke                   # Run compiler with cycle limit (binary smoke)
+just pipeline <f>            # Compile and run a .plsw
+just pipeline-dump <files>   # Compile, run with memory dump
+just chain                   # Control block chain demo
+just hello-macro             # Macro demo
+just install-layer1          # Stage link24 + meta-gen for the toolchain orchestrator
+just test                    # Run the reg-rs regression suite
+just test-bootstrap-goldens  # (Re)create reg-rs goldens; commit the result
+just test-linker             # Run the components/linker integration demos
+just clean                   # Remove build artifacts
 ```
+
+Regression testing details: see [docs/testing.md](docs/testing.md).
 
 ## Documentation
 
@@ -126,6 +131,7 @@ just clean          # Remove build artifacts
 - [Implementation Plan](docs/plan.md)
 - [Research Notes](docs/research.txt)
 - [Assembler Directive Report](docs/byte-comm.md)
+- [Testing & Regression Suite](docs/testing.md)
 
 ## COR24 Target
 
