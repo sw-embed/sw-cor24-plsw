@@ -1,8 +1,9 @@
 number = 1
 slug = "plsw-test-harness"
-status = "in-progress"
+status = "completed"
 description = "Implement the PL/SW automated test harness. Deliverables: (1) Fix stat -f%z p..."
 role = "production"
 context_files = []
 created_at = "2026-05-07T17:29:33"
-commits = []
+completed_at = "2026-05-07T18:59:45"
+commits = ["cf3cc801445d9331fa1ccf798cdde8ecd787817e"]
