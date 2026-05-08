@@ -1,0 +1,8 @@
+number = 1
+slug = "bootstrap-goldens"
+status = "in-progress"
+description = "Bootstrap reg-rs goldens for the PL/SW regression suite per tools/briefs/dcpl..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T08:41:47"
+commits = []

@@ -10,6 +10,7 @@ dist_bin := "dist/bin"
 
 # Build the compiler assembly (.s)
 build:
+    mkdir -p build
     tc24r {{main_c}} -o {{main_s}} -I {{tc24r_include}} -I src
 
 # Assemble the compiler to a shippable .lgo artifact for the

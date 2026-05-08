@@ -1,0 +1,2 @@
+command = "./tests/driver.sh chain"
+exit_code = 0

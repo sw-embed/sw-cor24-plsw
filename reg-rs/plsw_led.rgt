@@ -1,0 +1,2 @@
+command = "./tests/driver.sh led"
+exit_code = 0

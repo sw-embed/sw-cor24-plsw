@@ -1,0 +1,2 @@
+command = "./tests/driver.sh select_nested"
+exit_code = 0
