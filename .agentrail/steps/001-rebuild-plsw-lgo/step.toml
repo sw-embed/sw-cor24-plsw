@@ -1,8 +1,9 @@
 number = 1
 slug = "rebuild-plsw-lgo"
-status = "in-progress"
+status = "completed"
 description = "Per tools/briefs/dcpls-rebuild-plsw-lgo.md. Verify c7e1262 (.zero N codegen) ..."
 role = "production"
 context_files = []
 created_at = "2026-05-09T13:35:11"
-commits = []
+completed_at = "2026-05-09T13:36:36"
+commits = ["d348bafc85f0882d4e469be4956fcb63ec685b08"]
