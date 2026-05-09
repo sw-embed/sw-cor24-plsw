@@ -1,0 +1,9 @@
+number = 1
+slug = "test-build-dep"
+status = "completed"
+description = "Make just test work from a fresh clone. Add build-lgo dependency to the test ..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T21:48:56"
+completed_at = "2026-05-08T21:50:06"
+commits = ["49b004bb112b17046270534cda98344d57ed9191"]

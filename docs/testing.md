@@ -56,9 +56,14 @@ just smoke                   # interactive compiler smoke (was the old `just tes
 ```
 
 `just test` is the regression gate -- if it's green, no observable
-behavior of any `.plsw` example changed. `just test-linker` is
-separate because it currently surfaces a pre-existing failure
-(see Blockers below) that's unrelated to ordinary PL/SW changes.
+behavior of any `.plsw` example changed. It depends on
+`just build-lgo` so a fresh clone produces `build/plsw.lgo` before
+any test fixture invokes `pipeline.sh`; running `just test`
+end-to-end on a clean tree is the supported "is everything wired
+up" check. `just test-linker` is separate because it currently
+surfaces a pre-existing failure (see Blockers below) that's
+unrelated to ordinary PL/SW changes; it depends on `build-lgo`
+too because `demo-plsw-modular.sh` needs the compiler artifact.
 `just smoke` is a manual sanity check that just runs the compiler
 binary interactively for 100M cycles.
 
