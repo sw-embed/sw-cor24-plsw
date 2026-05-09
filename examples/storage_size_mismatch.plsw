@@ -8,20 +8,21 @@
 %INCLUDE _plsw_storage;
 
 DCL P INT;
+DCL RC INT;
 DCL RC_BAD INT;
 DCL RC_OK INT;
 
 MAIN: PROC;
-    P = _PLSW_GETMAIN(12);
+    ?GETMAIN(LENGTH(12), ADDRESS(P), RC(RC));
 
-    RC_BAD = _PLSW_FREEMAIN(P, 11);
+    ?FREEMAIN(LENGTH(11), ADDRESS(P), RC(RC_BAD));
     IF (RC_BAD = 2) THEN
         CALL UART_PUTS(ADDR(MSG_MISMATCH));
     ELSE
         CALL UART_PUTS(ADDR(MSG_NO_MISMATCH));
 
     /* Block must still be allocated; correct length frees it */
-    RC_OK = _PLSW_FREEMAIN(P, 12);
+    ?FREEMAIN(LENGTH(12), ADDRESS(P), RC(RC_OK));
     IF (RC_OK = 0) THEN
         CALL UART_PUTS(ADDR(MSG_FREED));
     ELSE

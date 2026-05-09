@@ -1,6 +1,6 @@
 number = 2
 slug = "getmain-freemain-macros"
-status = "pending"
+status = "in-progress"
 description = "Step 002 of getmain-freemain-macros (gated on step 001). Define ?GETMAIN(LENG..."
 role = "production"
 context_files = []

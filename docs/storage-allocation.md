@@ -1,12 +1,13 @@
 # PL/SW Storage Allocation Design
 
-**Status:** v1 implemented as `include/_plsw_storage.msw`.
-Procedures `_PLSW_GETMAIN` / `_PLSW_FREEMAIN` are functional;
-the PL/X-style `?GETMAIN` / `?FREEMAIN` macros are deferred (see
-"Macro layer" below). Reg-rs cases `plsw_storage_basic`,
-`plsw_storage_coalesce`, `plsw_storage_oom`,
-`plsw_storage_double_free`, `plsw_storage_size_mismatch` cover
-the implementation.
+**Status:** v1 + macros shipped via `include/_plsw_storage.msw`.
+Procedures `_PLSW_GETMAIN` / `_PLSW_FREEMAIN` are functional, and
+the PL/X-style `?GETMAIN` / `?FREEMAIN` macros wrap them as
+source-template MACRODEFs (`{KEY}` placeholders, body re-fed to
+the lexer/parser at expansion). Reg-rs cases
+`plsw_storage_basic`, `plsw_storage_coalesce`, `plsw_storage_oom`,
+`plsw_storage_double_free`, `plsw_storage_size_mismatch` exercise
+the macros.
 
 ## Background
 
@@ -93,29 +94,80 @@ stored in the in-band header — mismatch returns `RC=2`. (See
 the returned address is valid and `_PLSW_FREEMAIN(addr, 0)`
 frees it. No special case.
 
-## Macro layer (deferred)
-
-The PL/X-style spelling
+## Macro contract (shipped in v1)
 
 ```pl/i
-?GETMAIN(LENGTH(expr), ADDRESS(lvalue), RC(lvalue));
-?FREEMAIN(ADDRESS(expr), LENGTH(expr), RC(lvalue));
+?GETMAIN(LENGTH(<expr>), ADDRESS(<lvalue>), RC(<lvalue>));
+?FREEMAIN(LENGTH(<expr>), ADDRESS(<lvalue>), RC(<lvalue>));
 ```
 
-is **not implemented in v1.** PL/SW's `MACRODEF`/`GEN DO` system
-emits assembly directly — it does not expand to PL/SW source —
-and `GEN` substitution is textual rather than AST-aware. That
-makes it impossible to synthesize the right code for
-arbitrary-expression `LENGTH` (literal works, runtime variable
-doesn't) or arbitrary-lvalue `ADDRESS` (global label works,
-stack-frame local doesn't).
+| Clause | Type | Semantics |
+|---|---|---|
+| `LENGTH(expr)` | INT (bytes) | size of the block to allocate / free |
+| `ADDRESS(lvalue)` | PTR | `?GETMAIN` writes the allocated address to its lvalue; `?FREEMAIN` reads the address to free |
+| `RC(lvalue)` | INT | return code, written by both macros: `?GETMAIN` 0=ok / 4=OOM (PL/X-style); `?FREEMAIN` passes through `_PLSW_FREEMAIN`'s return (0/1/2) |
 
-For now, callers use the procedures directly. A future saga can
-add `?GETMAIN`/`?FREEMAIN` once PL/SW's macro system supports
-AST-level expansion (or AT MINIMUM once it can emit a procedure
-call to a runtime symbol with a typed expression argument). The
-intended spelling above is the contract that future macro layer
-will implement.
+`RC` is **required** in v1. PL/SW's macro system doesn't yet
+support `%IF DEFINED(RC)` inside source-template bodies, which
+is what an OPTIONAL clause would need to gate its emission.
+Future enhancement: relax to OPTIONAL once that lands.
+
+### How the expansion works
+
+PL/SW's macro system supports two body forms inside `MACRODEF`:
+
+- `GEN DO; '<asm-line>'; ...; END;` — assembly emission, the
+  existing pattern used by `?LED_SET`, `?GREET`, `?NOP`.
+- A bare body of PL/SW source statements (no `GEN` wrapper) —
+  source emission. `{KEY}` placeholders are substituted with
+  the caller's argument values; the result is re-fed to the
+  lexer/parser at the call site, so the rest of the compiler
+  handles type-checking and codegen normally.
+
+`?GETMAIN` and `?FREEMAIN` use the source-emission form.
+Concretely (from `include/_plsw_storage.msw`):
+
+```pl/i
+MACRODEF GETMAIN;
+    REQUIRED LENGTH(expr);
+    REQUIRED ADDRESS(lvalue);
+    REQUIRED RC(lvalue);
+    {ADDRESS} = _PLSW_GETMAIN({LENGTH});
+    IF ({ADDRESS} = 0) THEN {RC} = 4;
+    ELSE {RC} = 0;
+END;
+
+MACRODEF FREEMAIN;
+    REQUIRED LENGTH(expr);
+    REQUIRED ADDRESS(lvalue);
+    REQUIRED RC(lvalue);
+    {RC} = _PLSW_FREEMAIN({ADDRESS}, {LENGTH});
+END;
+```
+
+`?GETMAIN(LENGTH(12), ADDRESS(P), RC(rc))` expands (textually)
+to:
+
+```pl/i
+P = _PLSW_GETMAIN(12);
+IF (P = 0) THEN rc = 4;
+ELSE rc = 0;
+```
+
+…which the parser handles exactly as if the user had written it
+by hand.
+
+### Procedure form (still available)
+
+For callers that want raw control over RC handling or that
+benefit from explicit return-value inspection:
+
+```pl/i
+P  = _PLSW_GETMAIN(SIZE);            /* P = address or 0 on OOM */
+RC = _PLSW_FREEMAIN(P, LEN);         /* RC = 0/1/2 */
+```
+
+Same semantics as the macros; the macros are convenience wrappers.
 
 ## Single-file opt-in pattern
 
@@ -285,22 +337,27 @@ The following are *not* PL/SW concerns and will not be added to
 ## Implementation roadmap
 
 1. **dcpls/`pr/storage-macros`** ✅ — shipped: `include/_plsw_storage.msw`
-   with the free-list backend. Reg-rs cases `plsw_storage_basic`,
-   `plsw_storage_coalesce`, `plsw_storage_oom`,
-   `plsw_storage_double_free`, `plsw_storage_size_mismatch` cover
-   the implementation.
-2. **dcsno/`pr/storage-allocation-runtime`** — SNOBOL4 builds its
-   region/mark/reclaim runtime over PL/SW's primitives.
-   See `tools/briefs/dcsno-storage-allocation-runtime.md`.
-3. **dcpls/`pr/storage-?macros` (future)** — once PL/SW's macro
-   system supports AST-level expansion, add `?GETMAIN` /
-   `?FREEMAIN` macros so callers can use the PL/X-style spelling
-   instead of the procedure-call form. Procedures stay; macros
-   become the preferred surface.
-4. **dcpls/`pr/storage-backward-coalesce` (future, only if
+   with the free-list backend + `_PLSW_GETMAIN`/`_PLSW_FREEMAIN`
+   procedures. Reg-rs cases `plsw_storage_*` cover the
+   implementation.
+2. **dcpls/`pr/getmain-freemain-macros`** ✅ — shipped: PL/X-style
+   `?GETMAIN`/`?FREEMAIN` macros wrapping the procedures, plus
+   the source-template MACRODEF mechanism (`{KEY}` placeholders
+   in the body, body re-fed to the lexer/parser at expansion).
+3. **dcsno/`pr/storage-allocation-runtime`** — SNOBOL4 builds its
+   region/mark/reclaim runtime over PL/SW's primitives. See
+   `tools/briefs/dcsno-storage-allocation-runtime.md`.
+4. **dcpls/`pr/macro-preprocessor` (future, when needed)** —
+   extend the source-template mechanism with `%IF`/`%ELSE`
+   inside templates (so `RC` can become OPTIONAL on `?GETMAIN`),
+   `%DO` loops, and nested `?MACRO` calls with finite recursion
+   depth (PL/X has 255 levels by default; we'd cap at 32).
+   Implementation choices in step 001 of the macros saga were
+   structured to leave this path open.
+5. **dcpls/`pr/storage-backward-coalesce` (future, only if
    profiled need)** — extend the free-list to coalesce with the
    immediate-previous free block on free, in addition to forward.
-5. (Future) Other consumers (Prolog, etc.) layer their policy
+6. (Future) Other consumers (Prolog, etc.) layer their policy
    the same way.
 
 ## IBM heritage
