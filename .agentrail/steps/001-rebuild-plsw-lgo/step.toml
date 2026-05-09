@@ -1,0 +1,8 @@
+number = 1
+slug = "rebuild-plsw-lgo"
+status = "in-progress"
+description = "Per tools/briefs/dcpls-rebuild-plsw-lgo.md. Verify c7e1262 (.zero N codegen) ..."
+role = "production"
+context_files = []
+created_at = "2026-05-09T13:35:11"
+commits = []
