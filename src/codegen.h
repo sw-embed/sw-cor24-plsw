@@ -1133,40 +1133,27 @@ void cg_emit_string_table(void) {
 
 void cg_emit_static_var(int sym_idx, int init_node) {
     int w;
-    int addr;
     int val;
     int i;
     char *sval;
 
     w = sym_width[sym_idx];
-    addr = sym_offset[sym_idx];
 
     emit_data_section();
-
-    /* Zero-fill without initializer: emit explicit .byte 0 entries
-       (.comm overlaps with .data on COR24 assembler) */
-    if (init_node == NODE_NULL && w > 3) {
-        emit_comment(sym_label(sym_idx));
-        emit_named_label(sym_label(sym_idx));
-        emit_str(EMIT_INDENT);
-        emit_str(".byte   ");
-        i = 0;
-        while (i < w) {
-            if (i > 0) emit_str(",");
-            emit_str("0");
-            i = i + 1;
-        }
-        emit_nl();
-        return;
-    }
-
-    /* Emit label at the static address */
     emit_comment(sym_label(sym_idx));
     emit_named_label(sym_label(sym_idx));
 
+    /* Three emission cases. Anything that resolves to "all bytes
+     * are zero" (no INIT, INIT(0), INIT('')) falls through to the
+     * .zero <w> fast path -- single directive instead of one
+     * .byte per byte. cor24-asm assembles ".zero N" to N zero
+     * bytes, byte-identical to the previous spelled-out forms. */
+
     if (init_node != NODE_NULL && nd_kind[init_node] == NODE_LITERAL) {
-        if (nd_type[init_node] == TYPE_CHAR && nd_name[init_node]) {
-            /* String initializer: emit as comma-separated .byte */
+        /* (1) Non-empty string init: emit chars + zero-pad to width. */
+        if (nd_type[init_node] == TYPE_CHAR
+            && nd_name[init_node]
+            && nd_name[init_node][0]) {
             sval = nd_name[init_node];
             emit_str(EMIT_INDENT);
             emit_str(".byte   ");
@@ -1176,37 +1163,36 @@ void cg_emit_static_var(int sym_idx, int init_node) {
                 emit_int(sval[i]);
                 i = i + 1;
             }
-            /* Pad remaining with zeros up to declared width */
             while (i < w) {
                 emit_str(",0");
                 i = i + 1;
             }
             emit_nl();
-        } else {
-            /* Numeric initializer */
-            val = nd_ival[init_node];
-            if (w == 1) {
-                emit_str(EMIT_INDENT);
-                emit_str(".byte   ");
-                emit_int(val);
-                emit_nl();
-            } else {
-                emit_str(EMIT_INDENT);
-                emit_str(".word   ");
-                emit_int(val);
-                emit_nl();
-            }
+            return;
         }
-    } else {
-        /* No initializer: zero-fill (small vars only, large handled above) */
-        if (w == 1) {
+        /* (2) Non-zero numeric init. (Note: this still only emits
+         * the size of one element -- a non-zero INIT on an array
+         * doesn't fan out to fill the array. Pre-existing
+         * behavior; out of scope for this saga.) */
+        if (nd_type[init_node] != TYPE_CHAR && nd_ival[init_node] != 0) {
+            val = nd_ival[init_node];
             emit_str(EMIT_INDENT);
-            emit_line(".byte   0");
-        } else {
-            emit_str(EMIT_INDENT);
-            emit_line(".word   0");
+            if (w == 1) emit_str(".byte   ");
+            else        emit_str(".word   ");
+            emit_int(val);
+            emit_nl();
+            return;
         }
     }
+
+    /* (3) All-zero: no INIT, INIT(0) (any width -- this also
+     * fixes the pre-existing bug where INIT(0) on an N-byte
+     * array emitted only ".word 0" reserving 3 bytes), or
+     * INIT('') empty-string. */
+    emit_str(EMIT_INDENT);
+    emit_str(".zero   ");
+    emit_int(w);
+    emit_nl();
 }
 
 /* Emit .data for STATIC DCLs inside a procedure body.
