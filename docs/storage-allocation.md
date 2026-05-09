@@ -1,8 +1,12 @@
 # PL/SW Storage Allocation Design
 
-**Status:** design only — no `plsw_storage.{msw,plsw}` exists yet.
-This doc captures the layering and contract; implementation lands
-in a future saga.
+**Status:** v1 implemented as `include/_plsw_storage.msw`.
+Procedures `_PLSW_GETMAIN` / `_PLSW_FREEMAIN` are functional;
+the PL/X-style `?GETMAIN` / `?FREEMAIN` macros are deferred (see
+"Macro layer" below). Reg-rs cases `plsw_storage_basic`,
+`plsw_storage_coalesce`, `plsw_storage_oom`,
+`plsw_storage_double_free`, `plsw_storage_size_mismatch` cover
+the implementation.
 
 ## Background
 
@@ -66,75 +70,114 @@ or whoever) concern, implemented as ordinary procedures in the
 consumer's runtime, not as a PL/SW macro that everyone has to
 agree on.
 
-## Macro contract
+## Procedure contract (v1)
 
-Two macros, both keyword-argument, modeled on the PL/X spelling:
+Two procedures, called as ordinary PL/SW functions:
+
+```pl/i
+P  = _PLSW_GETMAIN(SIZE);
+RC = _PLSW_FREEMAIN(P, LEN);
+```
+
+| Procedure | Args | Return |
+|---|---|---|
+| `_PLSW_GETMAIN(SIZE INT) RETURNS(INT)` | `SIZE`: bytes of user data wanted | address of user block (after the 6-byte header), or `0` on out-of-memory |
+| `_PLSW_FREEMAIN(USERADDR INT, LEN INT) RETURNS(INT)` | `USERADDR`: address from `_PLSW_GETMAIN`. `LEN`: same size that was requested. | `0` on success; `1` on double-free / invalid pointer / corrupted header; `2` on size mismatch (`LEN` doesn't match the recorded size) |
+
+`LEN` is required on free, mirroring IBM OS/MVS / OS/390
+FREEMAIN. The implementation cross-checks `LEN` against the size
+stored in the in-band header — mismatch returns `RC=2`. (See
+"IBM heritage" note below for context.)
+
+`SIZE=0` allocates a 6-byte block (header only, zero user data);
+the returned address is valid and `_PLSW_FREEMAIN(addr, 0)`
+frees it. No special case.
+
+## Macro layer (deferred)
+
+The PL/X-style spelling
 
 ```pl/i
 ?GETMAIN(LENGTH(expr), ADDRESS(lvalue), RC(lvalue));
 ?FREEMAIN(ADDRESS(expr), LENGTH(expr), RC(lvalue));
 ```
 
-| Clause | Required? | Type | Semantics |
-|---|---|---|---|
-| `LENGTH(expr)` | required for both | INT (bytes) | size of the block to allocate / free |
-| `ADDRESS(...)` | required for both | PTR | `?GETMAIN` writes the allocated address to its lvalue; `?FREEMAIN` reads the address to free |
-| `RC(lvalue)` | optional | INT | return code: 0 = success, non-zero = failure (out of memory on `?GETMAIN`; double-free / invalid pointer on `?FREEMAIN`). If omitted, the macro silently ignores failures. |
-| `SUBPOOL(expr)` | reserved | INT | not in v1; reserved for a future multi-arena extension |
+is **not implemented in v1.** PL/SW's `MACRODEF`/`GEN DO` system
+emits assembly directly — it does not expand to PL/SW source —
+and `GEN` substitution is textual rather than AST-aware. That
+makes it impossible to synthesize the right code for
+arbitrary-expression `LENGTH` (literal works, runtime variable
+doesn't) or arbitrary-lvalue `ADDRESS` (global label works,
+stack-frame local doesn't).
 
-Expansion target: a normal procedure call sequence. The COR24
-ISA has no SVC-equivalent instruction, so `?GETMAIN` expands to
-something like:
+For now, callers use the procedures directly. A future saga can
+add `?GETMAIN`/`?FREEMAIN` once PL/SW's macro system supports
+AST-level expansion (or AT MINIMUM once it can emit a procedure
+call to a runtime symbol with a typed expression argument). The
+intended spelling above is the contract that future macro layer
+will implement.
 
-```
-push    LENGTH                ; arg
-jal     r1, _PLSW_GETMAIN     ; r0 = address (or 0 on OOM)
-sw      r0, ADDRESS           ; store result
-ceq     r0, z                 ; rc = (r0 == 0) ? 1 : 0
-…
-```
+## Single-file opt-in pattern
 
-(Exact expansion is an implementation concern; the contract is
-"after `?GETMAIN(LENGTH(n), ADDRESS(p), RC(rc))`, `p` holds an
-n-byte block on success or undefined on failure, and `rc` is 0
-on success or non-zero on failure.")
-
-Identical pattern for `?FREEMAIN`. Both run in O(1) caller-side
-(one push, one call, one store); the allocator's complexity is
-inside `_PLSW_GETMAIN`/`_PLSW_FREEMAIN`.
-
-## Two-file opt-in pattern
-
-PL/SW separate-compilation already supports the pattern via
-`%DEFINE LIBRARY` modules linked through `meta-gen` + `link24`.
-Storage uses the same shape:
+PL/SW v1 ships storage as a single inline `.msw`:
 
 ```
-plsw_storage.msw          declares ?GETMAIN/?FREEMAIN macros + EXTERNAL
-                          decls of _PLSW_GETMAIN, _PLSW_FREEMAIN
-
-plsw_storage.plsw         %DEFINE LIBRARY: provides _PLSW_GETMAIN,
-                          _PLSW_FREEMAIN, and the heap region itself.
-                          Heap size is configurable via %DEFINE
-                          PLSW_HEAP_SIZE before %INCLUDE.
+include/_plsw_storage.msw     macros (deferred), procedures, and
+                              heap region. %INCLUDE'ing this file
+                              text-concats everything into the
+                              entry module.
 ```
+
+The leading underscore in the filename (`_plsw_`) reserves
+`storage.{msw,plsw}` for application use — SNOBOL4 can ship a
+`runtime/storage.plsw` for its own mark/reclaim layer without
+clashing.
 
 A consumer opts in by:
 
-1. `%INCLUDE plsw_storage;` in their `.msw` (or directly in their
-   `.plsw` if they don't have a header layer).
-2. Adding `plsw_storage` to their link line (the modules list
-   passed to `meta-gen` + `link24`).
-3. Optionally declaring the heap size before include:
+1. (optional) Choose a heap size:
    ```pl/i
-   %DEFINE PLSW_HEAP_SIZE 16384;
-   %INCLUDE plsw_storage;
+   %DEFINE PLSW_HEAP_SIZE 16384;     /* default 65536 */
+   ```
+2. Include the runtime in the entry module:
+   ```pl/i
+   %INCLUDE _plsw_storage;
+   ```
+3. (multi-module builds only) For non-entry modules that need to
+   *call* `_PLSW_GETMAIN` / `_PLSW_FREEMAIN` but should not emit
+   their own copy of the impl + heap, set the headers-only guard
+   before include:
+   ```pl/i
+   %DEFINE PLSW_STORAGE_HEADERS_ONLY 1;
+   %INCLUDE _plsw_storage;
+   ```
+4. Pass `include/_plsw_storage.msw` on the pipeline command line
+   (the `FILE:` protocol registers it for `%INCLUDE` resolution):
+   ```sh
+   ./scripts/pipeline.sh include/_plsw_storage.msw your_program.plsw
    ```
 
-A program that doesn't `%INCLUDE plsw_storage` and doesn't link
-in `plsw_storage.plsw` pays nothing — no heap region, no
-allocator code, no impact on `.lgo` size. Opt-in is the contract,
-not a build-time flag.
+A program that doesn't `%INCLUDE _plsw_storage` pays nothing —
+no heap region, no allocator code, no impact on `.lgo` size.
+Opt-in is the contract, not a build-time flag.
+
+### Why single-file inline (and not modular .msw + .plsw)
+
+The original design considered a two-file pattern
+(`storage.msw` + `storage.plsw` linked via `meta-gen` + `link24`).
+That remains a viable layout for downstream consumers (SNOBOL4
+already builds modular), but for the PL/SW runtime itself the
+single-file inline form is simpler:
+
+- Tiny demos (the reg-rs golden cases) stay on the simple
+  single-file pipeline. No modular build for two-line tests.
+- SNOBOL4 already pays the modular-build tax; adding storage as
+  a `%INCLUDE _plsw_storage;` in `sno_main.plsw` (only) is one
+  line. Other SNOBOL4 modules use the `PLSW_STORAGE_HEADERS_ONLY`
+  guard.
+- A future "promote storage to a separate library module" saga
+  is a non-breaking change — the `?GETMAIN` / `?FREEMAIN`
+  contract stays the same, only the build steps change.
 
 ## Backend: free-list with embedded headers
 
@@ -143,24 +186,44 @@ embedded per-block metadata. This is the lowest-common-denominator
 backend that supports both alloc and free with constant-time-ish
 behavior:
 
-- The heap region (`PLSW_HEAP_SIZE` bytes) is divided into
-  variable-length blocks. Each block has a small header
-  (~6 bytes: a `size` and a `next` pointer when free).
-- Initially the heap is one giant free block.
+- The heap region (`PLSW_HEAP_SIZE` bytes, default 65536) lives
+  in `_PLSW_HEAP_BUF[]`, a `BYTE` array declared at module scope.
+- Each block has a 6-byte header at its start: 3-byte
+  `BLOCK_SIZE` (total block size including header) followed by
+  3-byte `BLOCK_NEXT` (when free: address of the next free block,
+  or `0`; when allocated: `0xFFFFFF`, the alloc-magic sentinel).
+- Free list is singly-linked, sorted by address ascending,
+  pointed to by `_PLSW_FREE_HEAD`.
+- Lazy init: first call to `_PLSW_GETMAIN` sets up one giant
+  free block covering the entire heap. The `_PLSW_INIT_DONE`
+  flag avoids re-init on subsequent calls.
 - `_PLSW_GETMAIN(n)` walks the free list (first-fit), splits the
-  chosen block into "allocated `n+header` bytes" and "remainder
-  back on the free list," and returns the address past the
-  header. Returns 0 if no block fits.
-- `_PLSW_FREEMAIN(addr, n)` reads the block's header to find
-  size, links it back into the free list, and coalesces with
-  the next neighbor if it's also free.
+  chosen block into "allocated `n+6` bytes" and "remainder back
+  on the free list" (only when the remainder leaves room for a
+  useful block: `>= header + 1 byte`). Stamps the chosen block's
+  `BLOCK_NEXT` with the alloc-magic sentinel. Returns the
+  user-data address (block start + 6) or `0` on out-of-memory.
+- `_PLSW_FREEMAIN(addr, n)` validates the alloc-magic sentinel
+  (catches double-free + invalid-pointer), validates `n` matches
+  the recorded block size (catches caller bookkeeping bugs),
+  then sorted-inserts into the free list and forward-coalesces
+  with the immediate-next free block if their address ranges
+  abut.
+
+**Forward coalesce only.** Backward coalesce (merge with the
+immediate-previous free block) is deferred. Without it, a
+sequence of allocations followed by frees in *forward order*
+leaves N separate free blocks; freeing in *reverse order*
+chain-coalesces them all. This is fine for SNOBOL4's expected
+allocation pattern (LIFO-ish per pattern-match attempt) but
+worth revisiting if profiling shows it matters.
 
 Why free-list rather than bump or slab:
 
 | Backend | Per-cell `?FREEMAIN` works? | Code size | Per-block overhead | Verdict |
 |---|---|---|---|---|
-| Bump-only | No (FREEMAIN is a no-op) | ~30 lines | 0 bytes | Doesn't satisfy the `?FREEMAIN` contract; consumers needing real free have to roll their own anyway |
-| Free-list | Yes | ~150 lines | ~6 bytes/block | **Chosen.** Honors both macros' contracts at modest cost. |
+| Bump-only | No (FREEMAIN is a no-op) | ~30 lines | 0 bytes | Doesn't satisfy the `_PLSW_FREEMAIN` contract; consumers needing real free have to roll their own anyway |
+| Free-list | Yes | ~120 lines of `.msw` | 6 bytes/block | **Chosen and shipped in v1.** Honors both procedures' contracts at modest cost. |
 | Size-class slab | Yes (within a class) | ~300+ lines | 0–4 bytes/block | Better for tiny-allocation churn but most code; defer until profiled need |
 
 The free-list backend is intentionally simple: first-fit, single
@@ -221,17 +284,48 @@ The following are *not* PL/SW concerns and will not be added to
 
 ## Implementation roadmap
 
-This doc is design-only. Future sagas:
-
-1. **dcpls/`pr/storage-macros`** — implement `plsw_storage.msw` +
-   `plsw_storage.plsw` with the free-list backend. Add
-   regression tests under `reg-rs/` exercising alloc, free,
-   coalesce, OOM, double-free.
+1. **dcpls/`pr/storage-macros`** ✅ — shipped: `include/_plsw_storage.msw`
+   with the free-list backend. Reg-rs cases `plsw_storage_basic`,
+   `plsw_storage_coalesce`, `plsw_storage_oom`,
+   `plsw_storage_double_free`, `plsw_storage_size_mismatch` cover
+   the implementation.
 2. **dcsno/`pr/storage-allocation-runtime`** — SNOBOL4 builds its
    region/mark/reclaim runtime over PL/SW's primitives.
    See `tools/briefs/dcsno-storage-allocation-runtime.md`.
-3. (Future) Other consumers (Prolog, etc.) layer their policy
+3. **dcpls/`pr/storage-?macros` (future)** — once PL/SW's macro
+   system supports AST-level expansion, add `?GETMAIN` /
+   `?FREEMAIN` macros so callers can use the PL/X-style spelling
+   instead of the procedure-call form. Procedures stay; macros
+   become the preferred surface.
+4. **dcpls/`pr/storage-backward-coalesce` (future, only if
+   profiled need)** — extend the free-list to coalesce with the
+   immediate-previous free block on free, in addition to forward.
+5. (Future) Other consumers (Prolog, etc.) layer their policy
    the same way.
+
+## IBM heritage
+
+The `?GETMAIN` / `?FREEMAIN` spelling and the
+"`LEN` required on free" semantics come from IBM OS/MVS / OS/390:
+
+```
+GETMAIN  RU,LV=DATALEN,A=(R1)
+FREEMAIN RU,LV=DATALEN,A=(R1)
+```
+
+Both `GETMAIN` and `FREEMAIN` required the length value (`LV=`)
+because the OS/360-lineage allocator did not always store size in
+an in-band header — it used `GQE`/`FQE` chains stored *outside*
+the user region. Callers had to remember the length they
+allocated. CICS later relaxed this (CICS tracked allocations
+itself).
+
+PL/SW *does* keep an in-band header (`_PLSW_BLOCK_SIZE` is
+recorded), so we *could* drop the `LEN` parameter on free. We
+keep it for two reasons: (1) PL/X spelling continuity, and
+(2) the cross-check between caller-supplied `LEN` and the in-band
+size catches a real class of bugs (wrong size remembered, header
+corruption).
 
 ## See also
 

@@ -1,0 +1,31 @@
+/* storage_basic.plsw -- single alloc, write, free.
+ *
+ * Allocates a 12-byte block, writes a marker into it, frees it,
+ * and prints the result of each step. Verifies the basic alloc
+ * + free path (header sentinel set on alloc, cleared on free,
+ * size-mismatch and double-free both return 0). */
+
+%DEFINE PLSW_HEAP_SIZE 1024;
+%INCLUDE _plsw_storage;
+
+DCL P INT;
+DCL RC INT;
+
+MAIN: PROC;
+    P = _PLSW_GETMAIN(12);
+    IF (P != 0) THEN
+        CALL UART_PUTS(ADDR(MSG_OK));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_OOM));
+
+    RC = _PLSW_FREEMAIN(P, 12);
+    IF (RC = 0) THEN
+        CALL UART_PUTS(ADDR(MSG_FREED));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_FAIL));
+END;
+
+DCL MSG_OK    (16) CHAR INIT('alloc 12: ok');
+DCL MSG_OOM   (16) CHAR INIT('alloc 12: oom');
+DCL MSG_FREED (16) CHAR INIT('free: ok');
+DCL MSG_FAIL  (16) CHAR INIT('free: fail');

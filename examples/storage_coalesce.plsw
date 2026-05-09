@@ -1,0 +1,42 @@
+/* storage_coalesce.plsw -- forward-coalesce on free.
+ *
+ * Allocates three 100-byte blocks. Frees them in reverse order
+ * (C, B, A). Each free should coalesce with the next-higher free
+ * block, eventually reconstituting a single ~1024-byte free
+ * region. Verifies by re-allocating a block larger than any
+ * original (800 bytes) -- only succeeds if coalesce worked. */
+
+%DEFINE PLSW_HEAP_SIZE 1024;
+%INCLUDE _plsw_storage;
+
+DCL A INT;
+DCL B INT;
+DCL C INT;
+DCL BIG INT;
+
+MAIN: PROC;
+    A = _PLSW_GETMAIN(100);
+    B = _PLSW_GETMAIN(100);
+    C = _PLSW_GETMAIN(100);
+
+    IF (A != 0 AND B != 0 AND C != 0) THEN
+        CALL UART_PUTS(ADDR(MSG_3OK));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_3FAIL));
+
+    /* Free in reverse so each forward-coalesce extends the gap */
+    CALL _PLSW_FREEMAIN(C, 100);
+    CALL _PLSW_FREEMAIN(B, 100);
+    CALL _PLSW_FREEMAIN(A, 100);
+
+    BIG = _PLSW_GETMAIN(800);
+    IF (BIG != 0) THEN
+        CALL UART_PUTS(ADDR(MSG_BIG_OK));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_BIG_FAIL));
+END;
+
+DCL MSG_3OK     (24) CHAR INIT('three 100-byte: ok');
+DCL MSG_3FAIL   (24) CHAR INIT('three 100-byte: fail');
+DCL MSG_BIG_OK  (24) CHAR INIT('alloc 800 after: ok');
+DCL MSG_BIG_FAIL(24) CHAR INIT('alloc 800 after: fail');

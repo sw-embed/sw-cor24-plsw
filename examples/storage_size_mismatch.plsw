@@ -1,0 +1,34 @@
+/* storage_size_mismatch.plsw -- size-mismatch detection.
+ *
+ * Allocates 12 bytes; tries to free with LEN=11. Must return
+ * RC=2 (size mismatch). The block stays allocated, so a correct
+ * free with LEN=12 afterwards must succeed (RC=0). */
+
+%DEFINE PLSW_HEAP_SIZE 256;
+%INCLUDE _plsw_storage;
+
+DCL P INT;
+DCL RC_BAD INT;
+DCL RC_OK INT;
+
+MAIN: PROC;
+    P = _PLSW_GETMAIN(12);
+
+    RC_BAD = _PLSW_FREEMAIN(P, 11);
+    IF (RC_BAD = 2) THEN
+        CALL UART_PUTS(ADDR(MSG_MISMATCH));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_NO_MISMATCH));
+
+    /* Block must still be allocated; correct length frees it */
+    RC_OK = _PLSW_FREEMAIN(P, 12);
+    IF (RC_OK = 0) THEN
+        CALL UART_PUTS(ADDR(MSG_FREED));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_BROKEN));
+END;
+
+DCL MSG_MISMATCH    (28) CHAR INIT('free len=11: rc=2');
+DCL MSG_NO_MISMATCH (28) CHAR INIT('free len=11: missed!');
+DCL MSG_FREED       (28) CHAR INIT('free len=12: ok');
+DCL MSG_BROKEN      (28) CHAR INIT('free len=12: broken');

@@ -1,0 +1,2 @@
+command = "./tests/driver.sh storage_basic"
+exit_code = 0

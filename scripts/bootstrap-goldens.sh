@@ -40,6 +40,11 @@ cases=(
     macro
     hello_macro
     chain
+    storage_basic
+    storage_coalesce
+    storage_oom
+    storage_double_free
+    storage_size_mismatch
 )
 
 # Ensure the compiler .lgo exists before we start. Without it the

@@ -1,0 +1,33 @@
+/* storage_double_free.plsw -- double-free detection.
+ *
+ * Allocates a block, frees it once (RC=0), tries to free again
+ * (RC=1, the alloc-magic sentinel was cleared by the first free
+ * so the header no longer looks allocated). */
+
+%DEFINE PLSW_HEAP_SIZE 256;
+%INCLUDE _plsw_storage;
+
+DCL P INT;
+DCL RC1 INT;
+DCL RC2 INT;
+
+MAIN: PROC;
+    P = _PLSW_GETMAIN(20);
+    RC1 = _PLSW_FREEMAIN(P, 20);
+    RC2 = _PLSW_FREEMAIN(P, 20);
+
+    IF (RC1 = 0) THEN
+        CALL UART_PUTS(ADDR(MSG_FIRST_OK));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_FIRST_BAD));
+
+    IF (RC2 = 1) THEN
+        CALL UART_PUTS(ADDR(MSG_SECOND_DETECTED));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_SECOND_MISSED));
+END;
+
+DCL MSG_FIRST_OK        (32) CHAR INIT('first free: rc=0');
+DCL MSG_FIRST_BAD       (32) CHAR INIT('first free: rc!=0');
+DCL MSG_SECOND_DETECTED (32) CHAR INIT('second free: rc=1 (detected)');
+DCL MSG_SECOND_MISSED   (32) CHAR INIT('second free: missed!');

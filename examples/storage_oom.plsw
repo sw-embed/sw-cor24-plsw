@@ -1,0 +1,32 @@
+/* storage_oom.plsw -- out-of-memory return.
+ *
+ * Allocates a block larger than the heap. _PLSW_GETMAIN must
+ * return 0 and the allocator must remain in a valid state
+ * (subsequent in-bounds alloc still succeeds). */
+
+%DEFINE PLSW_HEAP_SIZE 256;
+%INCLUDE _plsw_storage;
+
+DCL TOO_BIG INT;
+DCL OK_PTR INT;
+
+MAIN: PROC;
+    /* 1024 > heap (256). Must return 0. */
+    TOO_BIG = _PLSW_GETMAIN(1024);
+    IF (TOO_BIG = 0) THEN
+        CALL UART_PUTS(ADDR(MSG_OOM));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_NOT_OOM));
+
+    /* Allocator should still work for in-bounds requests after OOM */
+    OK_PTR = _PLSW_GETMAIN(100);
+    IF (OK_PTR != 0) THEN
+        CALL UART_PUTS(ADDR(MSG_OK_AFTER));
+    ELSE
+        CALL UART_PUTS(ADDR(MSG_BROKEN));
+END;
+
+DCL MSG_OOM      (28) CHAR INIT('alloc 1024/256: oom');
+DCL MSG_NOT_OOM  (28) CHAR INIT('alloc 1024/256: not oom!');
+DCL MSG_OK_AFTER (28) CHAR INIT('alloc 100 after oom: ok');
+DCL MSG_BROKEN   (28) CHAR INIT('alloc 100 after oom: fail');
