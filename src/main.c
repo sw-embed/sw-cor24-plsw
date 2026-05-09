@@ -2463,6 +2463,108 @@ void test_static_data(void) {
     uart_putstr(emit_output());
     if (cg_err) { uart_puts("  FAIL: cg_err set"); errs = errs + 1; }
 
+    /* Test 11: Zero-fill array uses .zero N (not enumerated bytes).
+       This is the SNOBOL4 sno_main.s bloat case -- a 50-byte
+       array spelled out as ".byte 0,0,...×50" cost ~100 chars
+       in the .s; ".zero 50" is 9 chars. Same .bin bytes; the
+       text emission shrinks ~10x for typical arrays and ~10000x
+       for SNOBOL4's 64KB string buffer. */
+    uart_puts("--- static: large zero array uses .zero ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL BIGBUF(50) BYTE;");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        char *out2 = emit_output();
+        uart_putstr(out2);
+        if (!str_find(out2, ".zero   50")) {
+            uart_puts("  FAIL: missing '.zero   50' for DCL BIGBUF(50) BYTE");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: emitted '.zero   50'");
+        }
+        if (str_find(out2, ".byte   0,0")) {
+            uart_puts("  FAIL: still spelling out '.byte 0,0' for all-zero array");
+            errs = errs + 1;
+        }
+    }
+
+    /* Test 12: INIT(0) on an INT array also uses .zero, with
+       byte-width math (50 INT = 150 bytes). Pre-fix this was a
+       latent bug: the code emitted only ".word 0" (3 bytes) for
+       a 50-element INT array, leaving 147 bytes uninitialised. */
+    uart_puts("--- static: INIT(0) on INT array uses .zero with byte width ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL ITAB(50) INT(24) INIT(0);");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        char *out2 = emit_output();
+        uart_putstr(out2);
+        if (!str_find(out2, ".zero   150")) {
+            uart_puts("  FAIL: missing '.zero   150' for DCL ITAB(50) INT(24) INIT(0)");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: emitted '.zero   150'");
+        }
+    }
+
+    /* Test 13: Non-empty string init keeps spelled-out form. */
+    uart_puts("--- static: string init unchanged ---");
+    arena_init();
+    ast_init();
+    sym_init();
+    types_init();
+    layout_init();
+    emit_init();
+    cg_init();
+    cg_static_init();
+
+    parse_init("DCL GREETING(8) CHAR INIT('hi');");
+    prog = parse_program();
+    if (parse_err) {
+        uart_putstr("  PARSE ERROR: ");
+        uart_puts(parse_errmsg);
+        errs = errs + 1;
+    } else {
+        layout_globals(prog);
+        cg_emit_static_data(prog);
+        char *out2 = emit_output();
+        uart_putstr(out2);
+        if (!str_find(out2, "104,105")) {
+            uart_puts("  FAIL: missing string body bytes");
+            errs = errs + 1;
+        } else {
+            uart_puts("  OK: string init still spelled-out");
+        }
+    }
+
     /* Summary */
     uart_putstr("static data errors: ");
     print_int(errs);

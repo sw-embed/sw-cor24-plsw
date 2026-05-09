@@ -1,0 +1,9 @@
+number = 1
+slug = "emit-zero-fill"
+status = "completed"
+description = "Implement .zero N emission for INIT(0) static arrays per dcpls-emit-zero-fill..."
+role = "production"
+context_files = []
+created_at = "2026-05-09T12:56:32"
+completed_at = "2026-05-09T13:23:21"
+commits = ["c7e1262a9b2790bf87a3107cbd495fab8e945c6f"]

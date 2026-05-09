@@ -1,62 +1,77 @@
-# Parallel Test Isolation Saga
+# Emit Zero-Fill Saga
 
-`just test` runs the reg-rs suite with `--parallel`, but on
-macOS it fails non-deterministically: different cases fail on
-each run, with no actual code change between runs. Diagnosis:
-parallel pipelines share file paths in two places.
-
-1. **`mktemp /tmp/plsw-XXXXXX.s`** — the `XXXXXX` template is
-   followed by a literal `.s` suffix. BSD `mktemp` (macOS
-   default) substitutes only trailing X's; whether it tolerates
-   non-trailing X's varies. Even when it works, two parallel
-   processes on different hosts can synthesize the same
-   filename if the random source happens to collide. Subtle.
-
-2. **`pipeline.sh`'s conditional rebuild of `build/plsw.lgo`**
-   at line 33: if `.s` is newer than `.lgo`, parallel pipelines
-   can each fire `cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"`
-   and race on writing the same file. `just test`'s `build-lgo`
-   dependency normally prevents triggering this, but timestamp
-   resolution or unusual invocation patterns can make it fire.
+Per `tools/briefs/dcpls-emit-zero-fill.md`. dcsno is blocked
+because `sno_main.s` is 261,638 bytes (97.7% enumerated zero-fill
+text), maxing out PL/SW's 256 KB `EMIT_BUF` and preventing any
+new feature that touches `snoglob.msw`. The dcxas partner brief
+(`pr/zero-fill-directive`) shipped, so `cor24-asm` now accepts
+`.zero N`. This saga makes PL/SW codegen consume the directive
+for `INIT(0)` static arrays.
 
 ## Goal
 
-After this saga: `just test` runs reg-rs in parallel
-deterministically. Multiple back-to-back runs produce the same
-result with no random failures.
+When emitting a top-level static array whose initializer is
+all-zero, emit `.zero <total_bytes>` instead of enumerating
+`.byte 0,0,0,...` for each element. Same `.bin` bytes; smaller
+`.s`. After this lands and mike reinstalls the PL/SW compiler:
+
+* `sno_main.s` drops from ~261 KB to ~7 KB.
+* `EMIT_BUF` utilisation drops from 99.8% to ~3%.
+* dcsno's `pr/sno-engine-consolidation` (parked) restarts.
+
+## Scope
+
+Touch only `cg_emit_static_var` (and any helpers it uses) in
+`src/codegen.h`. Detect the "all-zero" case before entering the
+per-element emit loop:
+
+* Explicit `INIT(0)` on a BYTE/INT/PTR/WORD/CHAR array.
+* No `INIT` clause at all (implicit zero for static storage).
+* `INIT('')` empty-string CHAR array (likely zero-bytes; verify).
+* Mixed-init arrays like `INIT(0, 1, 2, 0, 0)` keep the
+  spelled-out form -- any non-zero element disables the fast
+  path.
+
+`total_bytes = array_count * element_width` (1 for BYTE/CHAR,
+3 for INT/PTR/WORD).
+
+## Verification
+
+1. **Byte-identical**: `examples/chain.plsw` (has INIT(0)
+   ARENA(512) BYTE) produces a `.bin` byte-identical to the
+   pre-change output.
+2. **Compiler unit tests** in `src/main.c`: add a suite with
+   `DCL X(100) BYTE INIT(0);` and verify the emitted `.s`
+   contains `.zero 100` (and not `.byte 0,...`).
+3. **Reg-rs**: `just test` 15/15 green. Goldens for `.out`/`.rgt`
+   should be unchanged (program output identical); `.err` will
+   shift because the assembly line count drops for chain.plsw.
+   Re-bootstrap and inspect.
+4. **Round-trip**: confirm `cor24-emu --lgo` runs the emitted
+   `.lgo` correctly (already covered by reg-rs running each
+   demo).
 
 ## Steps
 
-1. **parallel-test-isolation**. Single step:
-   - `scripts/pipeline.sh`: replace the per-file `mktemp
-     /tmp/plsw-XXXXXX.{s,lgo}` pattern with a single
-     `mktemp -d /tmp/plsw-XXXXXX` per invocation. Put
-     deterministically-named files inside (`program.s`,
-     `program.lgo`). `mktemp -d` works the same on Linux and
-     macOS; deterministic names mean the only randomness is
-     the directory, which mktemp guarantees unique.
-   - `scripts/pipeline.sh`: replace the conditional auto-rebuild
-     of `build/plsw.lgo` with a clean error message when the
-     `.lgo` is missing or stale. Force callers to run
-     `just build-lgo` (or equivalent) first. `just test`'s
-     existing `build-lgo` dependency handles this transparently;
-     ad-hoc CLI users get a clear "run `just build-lgo` first"
-     error.
-   - `scripts/pipeline-dump.sh`: same `mktemp -d` treatment for
-     any intermediate scratch (its `build/<name>.*` outputs are
-     intentional persistent artifacts, not temp files, and stay
-     as-is).
-   - Verify: clean rebuild + `just test` 5 times in a row, all
-     should be 15/15 green with identical output. (Heuristic --
-     can't fully reproduce mac-side flake, but eliminating the
-     known shared-write paths is the surgical fix.)
-   - Update `docs/testing.md` with a "Parallel-safety" note
-     mentioning the scratch-dir pattern and the build-lgo-first
-     prerequisite.
+1. **emit-zero-fill**. Single step:
+   - Locate `cg_emit_static_var` in `src/codegen.h`.
+   - Add an "all-zero init?" predicate: returns true when (a)
+     no INIT, OR (b) every INIT element is integer literal 0.
+   - When the predicate is true, emit `.zero <total_bytes>`
+     and skip the per-element loop.
+   - Add a compiler test suite in `src/main.c` covering the
+     positive and negative cases (all-zero, mixed, no-init,
+     non-zero string).
+   - Re-bootstrap reg-rs goldens after running the change
+     against the demos. Inspect each per the doc.
+   - Update `docs/storage-allocation.md` with a brief note (if
+     that doc references emission) -- probably not needed.
+   - `just test` 15/15 green.
 
-## Rules
+## Out of scope
 
-- Behavior on success unchanged: same exit codes, same stdout,
-  same stderr (modulo the diagnostic "missing build/plsw.lgo"
-  message, which only fires when `.lgo` is genuinely missing).
-- No goldens need re-bootstrapping (program output is identical).
+- Changes to `cor24-asm` (dcxas's brief; already shipped).
+- LIBRARY-mode DCL suppression -- stays the same; this fix only
+  affects entry-module emission.
+- Non-zero init optimization (`.byte 1,2,3` stays as-is).
+- Anything beyond `cg_emit_static_var`.
