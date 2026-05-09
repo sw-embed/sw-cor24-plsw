@@ -79,7 +79,39 @@ just test-bootstrap-goldens
 This invokes `reg-rs create -t plsw_<case> -c './tests/driver.sh <case>'`
 for each case. The command is run, its stdout+stderr+exit code
 captured, and the resulting `reg-rs/plsw_<case>.{rgt,out,err}`
-triples land on disk. Commit all three:
+triples land on disk.
+
+### Operator review (REQUIRED)
+
+**Captured goldens are not authoritative until a human has
+reviewed them.** Reg-rs faithfully reproduces whatever was
+captured -- including a demo that fails to compile, an OOM, or
+any other "broken" state. If the bootstrap captures a broken
+state, every subsequent `just test` will report green because
+the broken state is reproducible.
+
+The `plsw_record` incident (2026-05-09) is the worked example.
+`examples/record.plsw` was using `ADDR('literal')`, which the
+codegen rejects with `ADDR requires a variable, field, or array
+element`. Bootstrap captured `exit_code = 1` and an empty `.out`,
+which then "passed" forever -- masking a real demo regression
+nobody noticed until they tried to run the demo.
+
+Before `git add reg-rs/...`, open each
+`reg-rs/plsw_<case>.{rgt,out,err}` triple and confirm:
+
+* **`.rgt`**: `exit_code = 0` (unless the demo's intended state
+  really is non-zero -- rare; document why here in this file).
+* **`.out`**: non-empty and contains the expected program output.
+* **`.err`**: diagnostics look clean (no unexpected stack
+  traces, no compilation errors).
+
+`scripts/bootstrap-goldens.sh` catches the easy case (non-zero
+exit code) and aborts with a non-zero exit unless
+`--allow-failures` is passed. That guard is a backstop, not a
+substitute for review.
+
+Commit all three files in the triple:
 
 ```sh
 git add reg-rs/plsw_*.rgt reg-rs/plsw_*.out reg-rs/plsw_*.err
