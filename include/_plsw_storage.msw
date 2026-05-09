@@ -2,7 +2,7 @@
  *
  * Provides _PLSW_GETMAIN / _PLSW_FREEMAIN procedures backed by
  * a free-list allocator over a statically-declared heap region,
- * plus PL/X-style ?GETMAIN / ?FREEMAIN macros that wrap them.
+ * plus PL/I-flavored ?GETMAIN / ?FREEMAIN macros that wrap them.
  *
  *   %INCLUDE _plsw_storage;       -- entry module: impl + heap
  *
@@ -12,21 +12,32 @@
  *   %DEFINE PLSW_HEAP_SIZE 32768; -- override default 64KB heap
  *   %INCLUDE _plsw_storage;
  *
- * Macro form (PL/X-style; preferred surface):
- *   ?GETMAIN(LENGTH(N), ADDRESS(P), RC(rc));
+ * Macro form (PL/I-flavored; preferred surface):
+ *   ?GETMAIN  SET(P)  LENGTH(N)  RC(ret);
  *     -- expands to: P = _PLSW_GETMAIN(N);
- *                    IF (P = 0) THEN rc = 4; ELSE rc = 0;
- *     -- rc is 0 on success, 4 on out-of-memory.
+ *                    IF (P = 0) THEN ret = 4; ELSE ret = 0;
+ *     -- ret is 0 on success, 4 on out-of-memory.
  *
- *   ?FREEMAIN(LENGTH(N), ADDRESS(P), RC(rc));
- *     -- expands to: rc = _PLSW_FREEMAIN(P, N);
- *     -- rc passes through the procedure's return:
+ *   ?FREEMAIN ADDR(P) LENGTH(N) RC(ret);
+ *     -- expands to: ret = _PLSW_FREEMAIN(P, N);
+ *     -- ret passes through the procedure's return:
  *          0 = success
  *          1 = double-free / invalid pointer
  *          2 = size mismatch (LENGTH doesn't match recorded size)
  *
- * RC is REQUIRED in v1. Future saga can make it optional once
- * PL/SW's macro system supports %IF DEFINED inside templates.
+ * Clause naming follows MVS convention:
+ *   SET(lvalue)   -- GETMAIN: receive-pointer (written)
+ *   ADDR(lvalue)  -- FREEMAIN: source-pointer (read)
+ *   LENGTH(expr)  -- block size in bytes
+ *   RC(lvalue)    -- return code (written)
+ *
+ * Invocation syntax: space-separated parenthetical clauses,
+ * no outer parens, statement-terminated. Clauses may appear in
+ * any order.
+ *
+ * All clauses are REQUIRED in v1. Future saga can make RC
+ * optional once PL/SW's macro system supports %IF DEFINED
+ * inside templates.
  *
  * Procedure form (lower-level surface; same effect):
  *   P  = _PLSW_GETMAIN(N);            P=0 on OOM
@@ -204,7 +215,7 @@ END;
 
 %ENDIF;
 
-/* --- PL/X-style macros wrapping the procedures ---
+/* --- PL/I-flavored macros wrapping the procedures ---
  *
  * Defined unconditionally (outside the PLSW_STORAGE_HEADERS_ONLY
  * guard) so non-entry modules can use the macros even when their
@@ -213,17 +224,17 @@ END;
  * module's definitions. */
 
 MACRODEF GETMAIN;
+    REQUIRED SET(lvalue);
     REQUIRED LENGTH(expr);
-    REQUIRED ADDRESS(lvalue);
     REQUIRED RC(lvalue);
-    {ADDRESS} = _PLSW_GETMAIN({LENGTH});
-    IF ({ADDRESS} = 0) THEN {RC} = 4;
+    {SET} = _PLSW_GETMAIN({LENGTH});
+    IF ({SET} = 0) THEN {RC} = 4;
     ELSE {RC} = 0;
 END;
 
 MACRODEF FREEMAIN;
+    REQUIRED ADDR(lvalue);
     REQUIRED LENGTH(expr);
-    REQUIRED ADDRESS(lvalue);
     REQUIRED RC(lvalue);
-    {RC} = _PLSW_FREEMAIN({ADDRESS}, {LENGTH});
+    {RC} = _PLSW_FREEMAIN({ADDR}, {LENGTH});
 END;

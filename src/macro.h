@@ -641,16 +641,25 @@ void mac_body_substitute(int mi) {
     }
 }
 
-/* Parse macro invocation arguments: ?NAME(KEYWORD(value), ...).
- * Assumes cur_type == TOK_QUESTION and the next token is the macro name.
+/* Parse macro invocation: ?NAME KEY1(value1) KEY2(value2) ... ;
+ *
+ * Macro invocation syntax: space-separated parenthetical clauses,
+ * no outer parens around the keyword list, statement-terminated
+ * by the surrounding statement context.
+ *
+ * Assumes cur_type == TOK_QUESTION and the next token is the
+ * macro name. After this function returns, cur_type points at
+ * the token immediately following the last clause's closing ')'
+ * -- typically TOK_SEMI, but the caller is responsible for
+ * consuming the statement terminator.
+ *
  * Returns macro index or -1 on error. */
 int mac_parse_invoke(void) {
     mac_expand_err = 0;
     mac_expand_errmsg[0] = 0;
 
-    /* cur_type should be TOK_QUESTION already consumed;
-     * next token is the macro name (IDENT) */
-    lex_scan(); /* get macro name */
+    /* cur_type should be TOK_QUESTION; advance to the macro name */
+    lex_scan();
 
     if (cur_type != TOK_IDENT) {
         mac_exp_error("expected macro name after ?");
@@ -671,18 +680,21 @@ int mac_parse_invoke(void) {
         ai = ai + 1;
     }
 
-    lex_scan(); /* expect '(' */
-    if (cur_type != TOK_LPAREN) {
-        mac_exp_error("expected ( after macro name");
-        return -1;
-    }
+    lex_scan(); /* first clause name (or end-of-invocation token) */
 
-    lex_scan(); /* first keyword or ')' */
+    /* Parse keyword clauses. The invocation ends at the statement
+     * terminator (TOK_SEMI). Clause names may be ordinary
+     * identifiers (TOK_IDENT) or PL/SW reserved-word tokens
+     * (e.g. ADDR, PTR, INT) -- the macro definition accepts those
+     * as clause-name spellings, so the invocation must too. We
+     * dispatch on cur_text rather than cur_type. */
+    while (cur_type != TOK_SEMI && cur_type != TOK_EOF && !mac_expand_err) {
 
-    /* Parse keyword arguments: KEYWORD(value), ... */
-    while (cur_type != TOK_RPAREN && cur_type != TOK_EOF && !mac_expand_err) {
-        if (cur_type != TOK_IDENT) {
-            mac_exp_error("expected keyword in macro invocation");
+        /* The current token's text is the clause name. Empty text
+         * means we hit a punctuation token that isn't a valid
+         * clause-name -- treat as malformed invocation. */
+        if (cur_text[0] == 0) {
+            mac_exp_error("unexpected token in macro invocation");
             return -1;
         }
 
@@ -740,15 +752,7 @@ int mac_parse_invoke(void) {
         val[vpos] = 0;
         mac_arg_set[found] = 1;
 
-        lex_scan(); /* skip ')' of the keyword arg */
-
-        if (cur_type == TOK_COMMA) {
-            lex_scan(); /* skip comma, get next keyword */
-        }
-    }
-
-    if (cur_type == TOK_RPAREN) {
-        lex_scan(); /* skip closing ')' of invocation */
+        lex_scan(); /* skip ')' of the clause; advance to next clause or terminator */
     }
 
     /* Check required clauses */

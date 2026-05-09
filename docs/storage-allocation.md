@@ -2,12 +2,19 @@
 
 **Status:** v1 + macros shipped via `include/_plsw_storage.msw`.
 Procedures `_PLSW_GETMAIN` / `_PLSW_FREEMAIN` are functional, and
-the PL/X-style `?GETMAIN` / `?FREEMAIN` macros wrap them as
-source-template MACRODEFs (`{KEY}` placeholders, body re-fed to
-the lexer/parser at expansion). Reg-rs cases
-`plsw_storage_basic`, `plsw_storage_coalesce`, `plsw_storage_oom`,
-`plsw_storage_double_free`, `plsw_storage_size_mismatch` exercise
-the macros.
+the `?GETMAIN` / `?FREEMAIN` macros wrap them using PL/SW's
+source-template MACRODEF mechanism (`{KEY}` placeholders, body
+re-fed to the lexer/parser at expansion). Invocations are
+space-separated parenthetical clauses, statement-terminated:
+
+```pl/i
+?GETMAIN  SET(P)  LENGTH(N)  RC(rc);
+?FREEMAIN ADDR(P) LENGTH(N)  RC(rc);
+```
+
+Reg-rs cases `plsw_storage_basic`, `plsw_storage_coalesce`,
+`plsw_storage_oom`, `plsw_storage_double_free`,
+`plsw_storage_size_mismatch` exercise the macros end-to-end.
 
 ## Background
 
@@ -34,7 +41,7 @@ allocations and needs both per-cell free and bulk reclaim. Asking
 each PL/SW consumer to reinvent this is the wrong answer.
 
 The intuition for `?GETMAIN`/`?FREEMAIN` macros (modeled on
-PL/X / Real Storage Manager) is right. The design question is
+IBM MVS Real Storage Manager) is right. The design question is
 how much PL/SW should provide and how much each consumer should
 own.
 
@@ -48,8 +55,8 @@ Concretely:
 
 | Concern | Layer |
 |---|---|
-| `?GETMAIN(LENGTH(n), ADDRESS(p), RC(rc))` macro + impl | **PL/SW** (`plsw_storage.{msw,plsw}`) |
-| `?FREEMAIN(ADDRESS(p), LENGTH(n), RC(rc))` macro + impl | **PL/SW** |
+| `?GETMAIN SET(p) LENGTH(n) RC(rc)` macro + impl | **PL/SW** (`include/_plsw_storage.msw`) |
+| `?FREEMAIN ADDR(p) LENGTH(n) RC(rc)` macro + impl | **PL/SW** |
 | Free-list / size-class / fragmentation policy | **PL/SW** (implementation detail of `_PLSW_GETMAIN`) |
 | Region-save / region-restore / watermark reclaim | **consumer** |
 | Mark phase, sweep phase, GC root traversal | **consumer** |
@@ -97,15 +104,20 @@ frees it. No special case.
 ## Macro contract (shipped in v1)
 
 ```pl/i
-?GETMAIN(LENGTH(<expr>), ADDRESS(<lvalue>), RC(<lvalue>));
-?FREEMAIN(LENGTH(<expr>), ADDRESS(<lvalue>), RC(<lvalue>));
+?GETMAIN  SET(<lvalue>)  LENGTH(<expr>)  RC(<lvalue>);
+?FREEMAIN ADDR(<lvalue>) LENGTH(<expr>)  RC(<lvalue>);
 ```
+
+Invocation is space-separated parenthetical clauses,
+statement-terminated, no outer parens. Clauses may appear in any
+order.
 
 | Clause | Type | Semantics |
 |---|---|---|
+| `SET(lvalue)` | PTR | `?GETMAIN` only — writes the allocated address to this lvalue |
+| `ADDR(lvalue)` | PTR | `?FREEMAIN` only — reads the address to free from this lvalue |
 | `LENGTH(expr)` | INT (bytes) | size of the block to allocate / free |
-| `ADDRESS(lvalue)` | PTR | `?GETMAIN` writes the allocated address to its lvalue; `?FREEMAIN` reads the address to free |
-| `RC(lvalue)` | INT | return code, written by both macros: `?GETMAIN` 0=ok / 4=OOM (PL/X-style); `?FREEMAIN` passes through `_PLSW_FREEMAIN`'s return (0/1/2) |
+| `RC(lvalue)` | INT | return code, written by both macros: `?GETMAIN` 0=ok / 4=OOM; `?FREEMAIN` passes through `_PLSW_FREEMAIN`'s return (0/1/2) |
 
 `RC` is **required** in v1. PL/SW's macro system doesn't yet
 support `%IF DEFINED(RC)` inside source-template bodies, which
@@ -129,24 +141,23 @@ Concretely (from `include/_plsw_storage.msw`):
 
 ```pl/i
 MACRODEF GETMAIN;
+    REQUIRED SET(lvalue);
     REQUIRED LENGTH(expr);
-    REQUIRED ADDRESS(lvalue);
     REQUIRED RC(lvalue);
-    {ADDRESS} = _PLSW_GETMAIN({LENGTH});
-    IF ({ADDRESS} = 0) THEN {RC} = 4;
+    {SET} = _PLSW_GETMAIN({LENGTH});
+    IF ({SET} = 0) THEN {RC} = 4;
     ELSE {RC} = 0;
 END;
 
 MACRODEF FREEMAIN;
+    REQUIRED ADDR(lvalue);
     REQUIRED LENGTH(expr);
-    REQUIRED ADDRESS(lvalue);
     REQUIRED RC(lvalue);
-    {RC} = _PLSW_FREEMAIN({ADDRESS}, {LENGTH});
+    {RC} = _PLSW_FREEMAIN({ADDR}, {LENGTH});
 END;
 ```
 
-`?GETMAIN(LENGTH(12), ADDRESS(P), RC(rc))` expands (textually)
-to:
+`?GETMAIN SET(P) LENGTH(12) RC(rc);` expands (textually) to:
 
 ```pl/i
 P = _PLSW_GETMAIN(12);
@@ -340,7 +351,7 @@ The following are *not* PL/SW concerns and will not be added to
    with the free-list backend + `_PLSW_GETMAIN`/`_PLSW_FREEMAIN`
    procedures. Reg-rs cases `plsw_storage_*` cover the
    implementation.
-2. **dcpls/`pr/getmain-freemain-macros`** ✅ — shipped: PL/X-style
+2. **dcpls/`pr/getmain-freemain-macros`** ✅ — shipped: PL/I-flavored
    `?GETMAIN`/`?FREEMAIN` macros wrapping the procedures, plus
    the source-template MACRODEF mechanism (`{KEY}` placeholders
    in the body, body re-fed to the lexer/parser at expansion).
@@ -351,7 +362,7 @@ The following are *not* PL/SW concerns and will not be added to
    extend the source-template mechanism with `%IF`/`%ELSE`
    inside templates (so `RC` can become OPTIONAL on `?GETMAIN`),
    `%DO` loops, and nested `?MACRO` calls with finite recursion
-   depth (PL/X has 255 levels by default; we'd cap at 32).
+   depth (IBM systems-language macros allow 255 levels; we'd cap at 32).
    Implementation choices in step 001 of the macros saga were
    structured to leave this path open.
 5. **dcpls/`pr/storage-backward-coalesce` (future, only if
@@ -379,7 +390,7 @@ itself).
 
 PL/SW *does* keep an in-band header (`_PLSW_BLOCK_SIZE` is
 recorded), so we *could* drop the `LEN` parameter on free. We
-keep it for two reasons: (1) PL/X spelling continuity, and
+keep it for two reasons: (1) macro spelling consistency, and
 (2) the cross-check between caller-supplied `LEN` and the in-band
 size catches a real class of bugs (wrong size remembered, header
 corruption).

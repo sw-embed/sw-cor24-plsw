@@ -13,11 +13,11 @@ MAIN: PROC;
     CALL UART_PUTS(ADDR(MSG));
 
     /* LED on via macro (active-low: 0=on) */
-    ?LED_SET(VAL(0));
+    ?LED_SET VAL(0);
 
     /* NOP macro -- just loads a constant */
-    ?NOP(COUNT(99));
+    ?NOP COUNT(99);
 
     /* LED off via macro */
-    ?LED_SET(VAL(1));
+    ?LED_SET VAL(1);
 END;

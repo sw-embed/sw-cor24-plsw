@@ -215,7 +215,7 @@ void test_lexer(void) {
 
     /* Test 8: macro syntax */
     lex_dump("macro",
-        "?GETMAIN(LENGTH(256), TYPE(BYTE))");
+        "?GETMAIN LENGTH(256) TYPE(BYTE)");
 
     /* Test 9: mixed punctuation */
     lex_dump("punct",
@@ -4836,8 +4836,8 @@ void test_macro_expand(void) {
         uart_puts("  FAIL: could not parse GETMAIN def");
         errs = errs + 1;
     } else {
-        /* Now invoke: ?GETMAIN(LENGTH(256), ADDRESS(BUF)) */
-        src = "?GETMAIN(LENGTH(256), ADDRESS(BUF))";
+        /* Now invoke: ?GETMAIN LENGTH(256) ADDRESS(BUF) */
+        src = "?GETMAIN LENGTH(256) ADDRESS(BUF)";
         lex_init(src, str_len(src));
         lex_scan(); /* gets TOK_QUESTION */
 
@@ -4892,7 +4892,7 @@ void test_macro_expand(void) {
     lex_scan();
     mi = mac_parse_def();
 
-    src = "?GETMAIN()";
+    src = "?GETMAIN";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -4906,7 +4906,7 @@ void test_macro_expand(void) {
 
     /* Test 3: Unknown macro */
     uart_puts("--- expand: unknown macro ---");
-    src = "?UNKNOWN(FOO(1))";
+    src = "?UNKNOWN FOO(1)";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -4938,7 +4938,7 @@ void test_macro_expand(void) {
     lex_scan();
     mi = mac_parse_def();
 
-    src = "?GETMAIN(LENGTH(128), ADDRESS(BUF))";
+    src = "?GETMAIN LENGTH(128) ADDRESS(BUF)";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -4997,7 +4997,7 @@ void test_macro_expand(void) {
     lex_scan();
     mi = mac_parse_def();
 
-    src = "?SVC(CODE(42), TARGET(4096))";
+    src = "?SVC CODE(42) TARGET(4096)";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -5043,7 +5043,7 @@ void test_macro_expand(void) {
     lex_scan();
     mi = mac_parse_def();
 
-    src = "?GETMAIN(LENGTH(512))";
+    src = "?GETMAIN LENGTH(512)";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -5080,7 +5080,7 @@ void test_macro_expand(void) {
     lex_scan();
     mi = mac_parse_def();
 
-    src = "?GETMAIN(LENGTH(256))";
+    src = "?GETMAIN LENGTH(256)";
     lex_init(src, str_len(src));
     lex_scan();
 
@@ -5163,7 +5163,7 @@ void test_macro_expand(void) {
         uart_puts(mac_parse_errmsg);
         errs = errs + 1;
     } else {
-        src = "?INST_DECODE(SRC(PC))";
+        src = "?INST_DECODE SRC(PC)";
         lex_init(src, str_len(src));
         lex_scan();
         result = mac_invoke();
@@ -5242,7 +5242,7 @@ void test_macro_expand(void) {
         uart_puts(mac_parse_errmsg);
         errs = errs + 1;
     } else {
-        src = "?SETP(VAL(42), DEST(MYVAR))";
+        src = "?SETP VAL(42) DEST(MYVAR)";
         lex_init(src, str_len(src));
         lex_scan();
         result = mac_invoke();
@@ -5290,7 +5290,7 @@ void test_macro_expand(void) {
         uart_puts(mac_parse_errmsg);
         errs = errs + 1;
     } else {
-        src = "?SETP2(VAL(99), DEST(OTHER))";
+        src = "?SETP2 VAL(99) DEST(OTHER)";
         lex_init(src, str_len(src));
         lex_scan();
         result = mac_invoke();
@@ -5336,7 +5336,7 @@ void test_macro_expand(void) {
         uart_puts(mac_parse_errmsg);
         errs = errs + 1;
     } else {
-        src = "?DOUBLE_USE(X(N), Y(7))";
+        src = "?DOUBLE_USE X(N) Y(7)";
         lex_init(src, str_len(src));
         lex_scan();
         result = mac_invoke();

@@ -1,7 +1,7 @@
 /* storage_basic.plsw -- single alloc, free via ?GETMAIN/?FREEMAIN.
  *
  * Allocates a 12-byte block, frees it, prints status from each.
- * Uses the PL/X-style macros that wrap _PLSW_GETMAIN/_PLSW_FREEMAIN. */
+ * Uses the macros that wrap _PLSW_GETMAIN/_PLSW_FREEMAIN. */
 
 %DEFINE PLSW_HEAP_SIZE 1024;
 %INCLUDE _plsw_storage;
@@ -10,13 +10,13 @@ DCL P INT;
 DCL RC INT;
 
 MAIN: PROC;
-    ?GETMAIN(LENGTH(12), ADDRESS(P), RC(RC));
+    ?GETMAIN LENGTH(12) SET(P) RC(RC);
     IF (RC = 0) THEN
         CALL UART_PUTS(ADDR(MSG_OK));
     ELSE
         CALL UART_PUTS(ADDR(MSG_OOM));
 
-    ?FREEMAIN(LENGTH(12), ADDRESS(P), RC(RC));
+    ?FREEMAIN LENGTH(12) ADDR(P) RC(RC);
     IF (RC = 0) THEN
         CALL UART_PUTS(ADDR(MSG_FREED));
     ELSE

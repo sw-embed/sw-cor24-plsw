@@ -1,8 +1,8 @@
 /* storage_oom.plsw -- out-of-memory return.
  *
  * Allocates a block larger than the heap. ?GETMAIN must set
- * RC=4 (PL/X-style OOM code) and the allocator must remain in
- * a valid state (subsequent in-bounds alloc still succeeds). */
+ * RC=4 (the OOM code) and the allocator must remain in a valid
+ * state (subsequent in-bounds alloc still succeeds). */
 
 %DEFINE PLSW_HEAP_SIZE 256;
 %INCLUDE _plsw_storage;
@@ -13,14 +13,14 @@ DCL RC INT;
 
 MAIN: PROC;
     /* 1024 > heap (256). Must set RC=4. */
-    ?GETMAIN(LENGTH(1024), ADDRESS(TOO_BIG), RC(RC));
+    ?GETMAIN LENGTH(1024) SET(TOO_BIG) RC(RC);
     IF (RC = 4) THEN
         CALL UART_PUTS(ADDR(MSG_OOM));
     ELSE
         CALL UART_PUTS(ADDR(MSG_NOT_OOM));
 
     /* Allocator should still work for in-bounds requests after OOM */
-    ?GETMAIN(LENGTH(100), ADDRESS(OK_PTR), RC(RC));
+    ?GETMAIN LENGTH(100) SET(OK_PTR) RC(RC);
     IF (RC = 0) THEN
         CALL UART_PUTS(ADDR(MSG_OK_AFTER));
     ELSE
