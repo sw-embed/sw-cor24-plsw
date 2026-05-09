@@ -1,6 +1,9 @@
 # reg-rs's internal SQLite index and lockfiles are user-local
-# state, not part of the regression baseline. Only .rgt
-# (TOML metadata) and .out (golden output) are committed.
+# state, not part of the regression baseline -- reg-rs reconstructs
+# the .tdb at run time from the committed .rgt/.out/.err triple.
+# All three of those are part of the golden baseline and must be
+# committed: reg-rs's compare step matches stdout against .out,
+# stderr against .err, and exit code against the value in .rgt.
 *.tdb
 *.tdb.lock
 *.tdb-*

@@ -1,0 +1,3 @@
+Compilation failed:
+CODEGEN ERROR: ADDR requires a variable, field, or array element
+--- compilation failed ---

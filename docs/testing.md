@@ -2,12 +2,14 @@
 
 PL/SW's regression suite uses [`reg-rs`](https://github.com/sw-embed/reg-rs)
 -- the same golden-output convention used across other sw-cor24-*
-language projects (sw-cor24-basic, etc.). Each test is a (.rgt,
-.out) pair under `reg-rs/`: `.rgt` is the test metadata (command,
-timeout, exit code, description) and `.out` is the captured
-golden stdout+stderr. Re-running a test executes its command and
-diffs the live output against the golden -- any mismatch is a
-regression.
+language projects (sw-cor24-basic, etc.). Each test is a
+(.rgt, .out, .err) triple under `reg-rs/`: `.rgt` is the test
+metadata (command + exit code), `.out` is the captured golden
+stdout, and `.err` is the captured golden stderr. Re-running a
+test executes its command and diffs the live output against the
+golden -- any mismatch in stdout, stderr, or exit code is a
+regression. (`.tdb` files are reg-rs's internal SQLite index,
+regenerated from the triples on demand, and are gitignored.)
 
 ## Layout
 
@@ -16,8 +18,9 @@ tests/
   driver.sh                   per-case dispatcher; calls scripts/pipeline.sh
                               with the right .msw includes for each example
 reg-rs/
-  plsw_<case>.rgt             test metadata (TOML)
-  plsw_<case>.out             golden output (text)
+  plsw_<case>.rgt             test metadata (TOML: command + exit_code)
+  plsw_<case>.out             golden stdout
+  plsw_<case>.err             golden stderr
   *.tdb / *.tdb.lock          reg-rs SQLite index (gitignored)
 scripts/
   test.sh                     wraps `reg-rs run -p plsw_ --parallel`
@@ -70,11 +73,11 @@ just test-bootstrap-goldens
 
 This invokes `reg-rs create -t plsw_<case> -c './tests/driver.sh <case>'`
 for each case. The command is run, its stdout+stderr+exit code
-captured, and the resulting `reg-rs/plsw_<case>.{rgt,out}` files
-land on disk. Commit them:
+captured, and the resulting `reg-rs/plsw_<case>.{rgt,out,err}`
+triples land on disk. Commit all three:
 
 ```sh
-git add reg-rs/plsw_*.rgt reg-rs/plsw_*.out
+git add reg-rs/plsw_*.rgt reg-rs/plsw_*.out reg-rs/plsw_*.err
 ```
 
 Subsequent `just test` runs compare against those committed
@@ -91,7 +94,7 @@ the new output as the baseline).
 3. Add the case to the `cases=(...)` list in
    `scripts/bootstrap-goldens.sh`.
 4. Run `just test-bootstrap-goldens` to capture the golden.
-5. `git add reg-rs/plsw_<new-case>.{rgt,out}` and commit.
+5. `git add reg-rs/plsw_<new-case>.{rgt,out,err}` and commit.
 
 ## Linker tests
 
@@ -99,49 +102,57 @@ the new output as the baseline).
 `components/linker/tests/demo-plsw-modular.sh` exercise the
 separate-compilation pipeline (assemble -> meta-gen -> link24 ->
 cor24-emu). They're run via `just test-linker` rather than
-`just test` because:
+`just test` because they use hand-written `.s` fixtures under
+`components/linker/tests/fixtures-{fixup,plsw}/`, not the
+reg-rs convention.
 
-1. They use hand-written `.s` fixtures under
-   `components/linker/tests/fixtures-{fixup,plsw}/`, not the
-   reg-rs convention.
-2. They currently still depend on `cor24-run --assemble --base-addr`
-   for pass-2 reassembly (cor24-asm 0.1.0 has no `--base-addr` --
-   tracked in the dcxas brief at `tools/briefs/dcxas-cor24-asm-base-addr.md`).
-3. **Output garble (pre-existing).** `demo-fixup.sh` produces
-   garbled UART text instead of the expected
-   `main:enter\nliba:enter\n...` sequence. The script runs end-to-end
-   and exits cleanly, but the linked binary's runtime output
-   doesn't match what the script's header comment promises. Root
-   cause not yet investigated; likely a stale fixture, a
-   relocation bug in link24/meta-gen, or a runtime-memory
-   assumption that drifted post-cor24-emu install. Treat the
-   linker demos as exercise-only until that's diagnosed.
+Status as of this saga (against the May-7 toolchain on PATH):
 
-## Current blockers (test bootstrap is gated on these)
+| Demo | Status | Notes |
+|---|---|---|
+| `demo-plsw-modular.sh` | ✅ PASS | end-to-end .plsw -> .lgo via PL/SW + link24 + meta-gen + cor24-emu; expected output `HI` matches |
+| `demo-fixup.sh` | ❌ garble | UART output is `~eU\t:` repeated 3x instead of the expected `main:enter\n...main:leave` sequence |
 
-`just test-bootstrap-goldens` depends on `just build-lgo` working,
-which requires `tc24r` to compile `src/main.c` cleanly. Two
-distinct tc24r limitations are blocking that today:
+`demo-fixup.sh` runs cleanly (no script error, exits 0), assembles
+all four hand-written modules, links them, loads via
+`cor24-emu --load-binary`, and reads stable garbled bytes from the
+program's UART writes. The script's `awk` filter strips the
+expected header (`Loaded N bytes...`/`Entry point:`/`Running...`)
+and isolates the program's UART traffic, leaving:
 
-1. **`[A * B]` array sizes** (`src/macro.h:387`). tc24r 0.x
-   doesn't accept binary expressions in array size declarations.
-   Fix in flight: dcxtc/`pr/array-size-expressions`. Brief:
-   `devgroup/tools/briefs/dcxtc-array-size-expressions.md`.
+```
+~eU	:
+z{|'~eU	:
+~eU	:
+```
 
-2. **Adjacent string-literal concatenation** (`src/main.c`, ~265
-   continuation lines across the test fixtures). tc24r 0.x errors
-   on `"abc" "def"` -- standard C since C89. Fix in flight:
-   dcxtc/`pr/string-literal-concatenation`. Brief:
-   `devgroup/tools/briefs/dcxtc-string-literal-concatenation.md`.
+Hex view of the bytes: `0x7E 0x65 0x55 0x09 0x3A 0x0A` repeated
+with minor variation. The expected output is ASCII
+`main:enter\nliba:enter\nutil:inc\nliba:leave\nlibb:enter\nutil:inc\nlibb:leave\nmain:leave\n`,
+none of which appears.
 
-We are dogfooding the compiler -- no PL/SW-side workarounds. Both
-fixes land in tc24r; once mike installs the new binary,
-`just build` succeeds and `just test-bootstrap-goldens` lights up.
+Probable causes (not investigated in this saga):
 
-After that, this saga's follow-up is one short PR:
-1. `just test-bootstrap-goldens`
-2. `git add reg-rs/plsw_*.{rgt,out}`
-3. Commit, mark-pr, relay.
+1. **Stale hand-written `.s` fixtures.** `fixtures-fixup/{main,liba,libb,util}.s`
+   may target older addressing or directive conventions. The
+   modular-plsw path (which compiles fresh `.plsw` to `.s` via
+   `pl-sw`) works correctly, so the toolchain itself is fine —
+   the bug is upstream in the fixture text.
+2. **`la <reg>, <imm>` resolution drift.** If the fixtures use
+   absolute-address `la` forms that `cor24-asm`'s newer encoding
+   handles differently, or if the `--base-addr` semantics in
+   pass-2 reassembly produce different bytes than the older
+   `cor24-run --assemble` did, the resulting program would jump
+   into wrong code/data. The 3-cycle repetition in the garble
+   (each module entering and outputting the same bad string)
+   matches what you'd see if all three modules' `_UART_PUTS` calls
+   resolve to the same wrong data address.
+3. **`fixtures-fixup` was always broken** and the comment-stated
+   "Expected output" was aspirational rather than empirical. Git
+   blame on the fixture files would establish whether they ever
+   produced the `main:enter` sequence.
 
-From then on, every `pr/*` in this repo runs `just test` as a
-gate.
+This is a separate blocker from the PL/SW goldens work — the
+production .plsw compilation path is exercised by the modular
+demo and works. Out of scope for this saga; capture for a future
+investigation.

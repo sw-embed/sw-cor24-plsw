@@ -1,0 +1,2 @@
+command = "./tests/driver.sh hello"
+exit_code = 0

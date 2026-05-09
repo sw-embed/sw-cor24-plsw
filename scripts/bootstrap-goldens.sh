@@ -4,9 +4,11 @@
 #
 # Run this once when first creating the golden baseline, or
 # manually after an intentional behavior change lands. After
-# bootstrap, commit the resulting reg-rs/plsw_*.rgt and
-# reg-rs/plsw_*.out files to git. The .tdb files are reg-rs's
-# internal SQLite index and are gitignored.
+# bootstrap, commit the resulting reg-rs/plsw_*.{rgt,out,err}
+# triples to git -- reg-rs compares stdout to .out, stderr to
+# .err, and exit code to the value in .rgt. The .tdb files are
+# reg-rs's internal SQLite index, regenerated from the triples
+# at run time, and are gitignored.
 #
 # Prerequisites:
 #   * `just build-lgo` produces build/plsw.lgo (currently blocked
@@ -55,4 +57,4 @@ done
 
 echo >&2
 echo "Bootstrapped ${#cases[@]} golden(s) under reg-rs/. Commit:" >&2
-echo "  git add reg-rs/plsw_*.rgt reg-rs/plsw_*.out" >&2
+echo "  git add reg-rs/plsw_*.rgt reg-rs/plsw_*.out reg-rs/plsw_*.err" >&2
