@@ -1,8 +1,9 @@
 number = 1
 slug = "bootstrap-goldens"
-status = "in-progress"
+status = "completed"
 description = "Bootstrap reg-rs goldens for the PL/SW regression suite per tools/briefs/dcpl..."
 role = "production"
 context_files = []
 created_at = "2026-05-08T08:41:47"
-commits = []
+completed_at = "2026-05-08T16:00:09"
+commits = ["6265001cf1eda3e94b74e9531c54ccdc6857fdbd"]
