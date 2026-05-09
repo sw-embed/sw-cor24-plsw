@@ -532,14 +532,81 @@ void mac_gen_substitute(int mi, char *tmpl) {
 }
 
 /* Substitute clause references in body text.
- * In the body, bare clause names are replaced with argument values. */
+ *
+ * The body of a MACRODEF (the source statements after the
+ * REQUIRED/OPTIONAL clauses, up to the macro's terminating END)
+ * is a PL/SW SOURCE TEMPLATE -- it expands into source code that
+ * is re-fed to the lexer/parser at the call site, so the rest
+ * of the compiler handles type-checking and codegen normally.
+ *
+ * Two substitution forms are recognized in the body:
+ *
+ *   {KEY}    -- explicit placeholder; same syntax as GEN DO's
+ *               asm-line substitution. Replaced with the
+ *               argument value for clause KEY.
+ *
+ *   KEY      -- bare identifier matching a clause name; same
+ *               substitution as {KEY}. Convenient for cases
+ *               where the call site naturally writes the
+ *               clause name as an identifier.
+ *
+ * Anything else is emitted verbatim. Operators, punctuation,
+ * non-clause identifiers all pass through.
+ *
+ * This is the source-template counterpart to GEN DO's
+ * assembly-template emission (see mac_gen_substitute). A
+ * single MACRODEF can have both kinds of blocks; expansion
+ * concatenates the asm emissions (each wrapped in ASM DO; ...; END;)
+ * followed by the substituted body source. */
 void mac_body_substitute(int mi) {
     char *body = mac_body(mi);
     int blen = str_len(body);
     int i = 0;
 
     while (i < blen) {
-        /* Try to match an identifier */
+        /* Explicit {KEY} placeholder (same as GEN DO's syntax).
+         * mac_parse_body inserts spaces between tokens, so the
+         * body holds "{ KEY }" with whitespace; strip whitespace
+         * inside the braces when extracting the placeholder name. */
+        if (body[i] == 123) { /* '{' */
+            char pname[MACRO_NAME_MAX];
+            int pi = 0;
+            int j = i + 1;
+            while (j < blen && body[j] != 125 && pi < MACRO_NAME_MAX - 1) {
+                if (body[j] != 32) { /* skip spaces */
+                    pname[pi] = body[j];
+                    pi = pi + 1;
+                }
+                j = j + 1;
+            }
+            pname[pi] = 0;
+            if (j < blen && body[j] == 125) { /* matched '}' */
+                int ci = 0;
+                int found = 0;
+                while (ci < mac_cl_count[mi]) {
+                    if (str_eq_nocase(pname, mac_cl_name(mi, ci))) {
+                        if (mac_arg_set[ci]) {
+                            mac_exp_append(mac_arg_val(ci));
+                        } else {
+                            mac_exp_appendc(48); /* '0' for unset optional */
+                        }
+                        found = 1;
+                        break;
+                    }
+                    ci = ci + 1;
+                }
+                if (found) {
+                    i = j + 1;
+                    continue;
+                }
+                /* Not a clause name -- fall through to verbatim */
+            }
+            /* Bare '{' or unrecognized placeholder: emit as-is */
+            mac_exp_appendc(123);
+            i = i + 1;
+            continue;
+        }
+        /* Bare identifier matching a clause name */
         if (is_alpha(body[i])) {
             char word[MACRO_NAME_MAX];
             int wi = 0;
@@ -550,7 +617,6 @@ void mac_body_substitute(int mi) {
             }
             word[wi] = 0;
 
-            /* Check if this is a clause name */
             int ci = 0;
             int found = 0;
             while (ci < mac_cl_count[mi]) {
@@ -558,7 +624,7 @@ void mac_body_substitute(int mi) {
                     if (mac_arg_set[ci]) {
                         mac_exp_append(mac_arg_val(ci));
                     } else {
-                        mac_exp_appendc(48); /* '0' for unset optional */
+                        mac_exp_appendc(48);
                     }
                     found = 1;
                     break;

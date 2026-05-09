@@ -5220,6 +5220,164 @@ void test_macro_expand(void) {
         uart_puts("  OK: overflow rejected with 'too many lines' error");
     }
 
+    /* Test 10: Source-template body with {KEY} placeholders.
+       The body of a MACRODEF (no GEN block) is a PL/SW source
+       template. {KEY} placeholders are substituted with the
+       caller's argument values; the result is re-fed to the
+       lexer/parser at the call site. */
+    uart_puts("--- expand: source-template body, {KEY} placeholders ---");
+    mac_init();
+
+    src = "MACRODEF SETP;"
+        "   REQUIRED VAL(expr);"
+        "   REQUIRED DEST(lvalue);"
+        "   {DEST} = {VAL};"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+    if (mi < 0 || mac_parse_err) {
+        uart_putstr("  FAIL parse: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        src = "?SETP(VAL(42), DEST(MYVAR))";
+        lex_init(src, str_len(src));
+        lex_scan();
+        result = mac_invoke();
+        if (!result) {
+            uart_putstr("  FAIL: mac_invoke returned null: ");
+            uart_puts(mac_expand_errmsg);
+            errs = errs + 1;
+        } else {
+            uart_putstr("  expansion: '");
+            uart_putstr(result);
+            uart_puts("'");
+            if (!str_find(result, "MYVAR")) {
+                uart_puts("  FAIL: DEST substitution missing 'MYVAR'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: DEST substituted to MYVAR");
+            }
+            if (!str_find(result, "42")) {
+                uart_puts("  FAIL: VAL substitution missing '42'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: VAL substituted to 42");
+            }
+        }
+    }
+
+    /* Test 11: Source-template body with bare clause-name
+       substitution (no {} brackets). For symmetry / convenience,
+       a bare identifier matching a clause name is also
+       substituted. */
+    uart_puts("--- expand: source-template body, bare clause names ---");
+    mac_init();
+
+    src = "MACRODEF SETP2;"
+        "   REQUIRED VAL(expr);"
+        "   REQUIRED DEST(lvalue);"
+        "   DEST = VAL;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+    if (mi < 0 || mac_parse_err) {
+        uart_putstr("  FAIL parse: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        src = "?SETP2(VAL(99), DEST(OTHER))";
+        lex_init(src, str_len(src));
+        lex_scan();
+        result = mac_invoke();
+        if (!result) {
+            uart_putstr("  FAIL: mac_invoke returned null: ");
+            uart_puts(mac_expand_errmsg);
+            errs = errs + 1;
+        } else {
+            uart_putstr("  expansion: '");
+            uart_putstr(result);
+            uart_puts("'");
+            if (!str_find(result, "OTHER")) {
+                uart_puts("  FAIL: DEST bare substitution missing 'OTHER'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: bare DEST substituted to OTHER");
+            }
+            if (!str_find(result, "99")) {
+                uart_puts("  FAIL: VAL bare substitution missing '99'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: bare VAL substituted to 99");
+            }
+        }
+    }
+
+    /* Test 12: Source-template body with same arg referenced
+       multiple times. */
+    uart_puts("--- expand: source-template body, repeated args ---");
+    mac_init();
+
+    src = "MACRODEF DOUBLE_USE;"
+        "   REQUIRED X(lvalue);"
+        "   REQUIRED Y(expr);"
+        "   {X} = {Y}; {X} = {X} + 1;"
+        "END;";
+
+    lex_init(src, str_len(src));
+    lex_scan();
+    mi = mac_parse_def();
+    if (mi < 0 || mac_parse_err) {
+        uart_putstr("  FAIL parse: ");
+        uart_puts(mac_parse_errmsg);
+        errs = errs + 1;
+    } else {
+        src = "?DOUBLE_USE(X(N), Y(7))";
+        lex_init(src, str_len(src));
+        lex_scan();
+        result = mac_invoke();
+        if (!result) {
+            uart_putstr("  FAIL: mac_invoke returned null: ");
+            uart_puts(mac_expand_errmsg);
+            errs = errs + 1;
+        } else {
+            uart_putstr("  expansion: '");
+            uart_putstr(result);
+            uart_puts("'");
+            /* X appears 3 times in template, Y once. After
+               substitution: N appears 3 times, 7 appears once. */
+            int n_count = 0;
+            int yi = 0;
+            int rlen = str_len(result);
+            while (yi < rlen) {
+                if (result[yi] == 'N' && (yi + 1 >= rlen || !is_alnum(result[yi + 1]))) {
+                    if (yi == 0 || !is_alnum(result[yi - 1])) {
+                        n_count = n_count + 1;
+                    }
+                }
+                yi = yi + 1;
+            }
+            if (n_count != 3) {
+                uart_putstr("  FAIL: X substituted ");
+                print_int(n_count);
+                uart_puts(" times, expected 3");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: X substituted 3x with N");
+            }
+            if (!str_find(result, "7")) {
+                uart_puts("  FAIL: Y substitution missing '7'");
+                errs = errs + 1;
+            } else {
+                uart_puts("  OK: Y substituted with 7");
+            }
+        }
+    }
+
     /* Summary */
     uart_putstr("macro expansion errors: ");
     print_int(errs);

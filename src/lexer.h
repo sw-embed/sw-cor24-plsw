@@ -690,6 +690,8 @@ int lex_scan(void) {
     if (c == 63) { lex_set(TOK_QUESTION, "?"); return TOK_QUESTION; }
     if (c == 37) { lex_set(TOK_PERCENT, "%"); return TOK_PERCENT; }
     if (c == 58) { lex_set(TOK_COLON, ":"); return TOK_COLON; }
+    if (c == 123) { lex_set(TOK_LBRACE, "{"); return TOK_LBRACE; }
+    if (c == 125) { lex_set(TOK_RBRACE, "}"); return TOK_RBRACE; }
 
     if (c == 45) { /* - */
         if (lex_peek() == 62) {

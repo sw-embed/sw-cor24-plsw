@@ -1,6 +1,6 @@
 number = 1
 slug = "macro-template-expansion"
-status = "pending"
+status = "in-progress"
 description = "Step 001 of getmain-freemain-macros. Extend MACRODEF to support source-text t..."
 role = "production"
 context_files = []

@@ -75,6 +75,8 @@
 #define TOK_QUESTION  76
 #define TOK_PERCENT   77
 #define TOK_COLON     78
+#define TOK_LBRACE    79  /* '{' -- macro body placeholder syntax */
+#define TOK_RBRACE    80  /* '}' -- macro body placeholder syntax */
 
 #define TOK_EOF       99
 
@@ -234,6 +236,8 @@ char *tok_name(int type) {
     if (type == TOK_QUESTION) return "?";
     if (type == TOK_PERCENT) return "%";
     if (type == TOK_COLON) return ":";
+    if (type == TOK_LBRACE) return "{";
+    if (type == TOK_RBRACE) return "}";
     if (type == TOK_EOF) return "EOF";
     return "???";
 }
