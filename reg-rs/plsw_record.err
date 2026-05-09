@@ -1,3 +1,2 @@
-Compilation failed:
-CODEGEN ERROR: ADDR requires a variable, field, or array element
---- compilation failed ---
+=== Compiled record.plsw (469 lines of assembly) ===
+=== Running ===
