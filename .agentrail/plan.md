@@ -1,77 +1,43 @@
-# Emit Zero-Fill Saga
+# Rebuild PL/SW LGO Saga
 
-Per `tools/briefs/dcpls-emit-zero-fill.md`. dcsno is blocked
-because `sno_main.s` is 261,638 bytes (97.7% enumerated zero-fill
-text), maxing out PL/SW's 256 KB `EMIT_BUF` and preventing any
-new feature that touches `snoglob.msw`. The dcxas partner brief
-(`pr/zero-fill-directive`) shipped, so `cor24-asm` now accepts
-`.zero N`. This saga makes PL/SW codegen consume the directive
-for `INIT(0)` static arrays.
+Per `tools/briefs/dcpls-rebuild-plsw-lgo.md`. The `.zero N`
+codegen change shipped today (`c7e1262`, merged via
+`pr/emit-zero-fill`), but `work/lib/cor24/plsw.lgo` is from
+May 9 00:04 -- before the change landed. Until that artifact is
+rebuilt, `pl-sw` invocations still emit per-byte `.byte 0` and
+dcsno's `snobol4-runtime-split` step 2 stays blocked.
 
 ## Goal
 
-When emitting a top-level static array whose initializer is
-all-zero, emit `.zero <total_bytes>` instead of enumerating
-`.byte 0,0,0,...` for each element. Same `.bin` bytes; smaller
-`.s`. After this lands and mike reinstalls the PL/SW compiler:
+Signal to mike that `plsw.lgo` should be rebuilt from current
+`dev` (or `main` after promotion) and reinstalled to
+`work/lib/cor24/plsw.lgo`. Build chain is `just clean && just
+build-lgo` -- one command, deterministic, no source changes.
 
-* `sno_main.s` drops from ~261 KB to ~7 KB.
-* `EMIT_BUF` utilisation drops from 99.8% to ~3%.
-* dcsno's `pr/sno-engine-consolidation` (parked) restarts.
+## Approach (option 2 from the brief: docs only)
 
-## Scope
-
-Touch only `cg_emit_static_var` (and any helpers it uses) in
-`src/codegen.h`. Detect the "all-zero" case before entering the
-per-element emit loop:
-
-* Explicit `INIT(0)` on a BYTE/INT/PTR/WORD/CHAR array.
-* No `INIT` clause at all (implicit zero for static storage).
-* `INIT('')` empty-string CHAR array (likely zero-bytes; verify).
-* Mixed-init arrays like `INIT(0, 1, 2, 0, 0)` keep the
-  spelled-out form -- any non-zero element disables the fast
-  path.
-
-`total_bytes = array_count * element_width` (1 for BYTE/CHAR,
-3 for INT/PTR/WORD).
-
-## Verification
-
-1. **Byte-identical**: `examples/chain.plsw` (has INIT(0)
-   ARENA(512) BYTE) produces a `.bin` byte-identical to the
-   pre-change output.
-2. **Compiler unit tests** in `src/main.c`: add a suite with
-   `DCL X(100) BYTE INIT(0);` and verify the emitted `.s`
-   contains `.zero 100` (and not `.byte 0,...`).
-3. **Reg-rs**: `just test` 15/15 green. Goldens for `.out`/`.rgt`
-   should be unchanged (program output identical); `.err` will
-   shift because the assembly line count drops for chain.plsw.
-   Re-bootstrap and inspect.
-4. **Round-trip**: confirm `cor24-emu --lgo` runs the emitted
-   `.lgo` correctly (already covered by reg-rs running each
-   demo).
+The brief offers two shapes; I'm taking option 2 (doc the
+rebuild command, mike rebuilds at relay) because it matches the
+existing `build/` gitignored convention and avoids committing a
+2.3 MB binary. Adding a CHANGES.md entry plus the agentrail
+bookkeeping is the deliverable; the actual rebuild is mike's
+post-relay action.
 
 ## Steps
 
-1. **emit-zero-fill**. Single step:
-   - Locate `cg_emit_static_var` in `src/codegen.h`.
-   - Add an "all-zero init?" predicate: returns true when (a)
-     no INIT, OR (b) every INIT element is integer literal 0.
-   - When the predicate is true, emit `.zero <total_bytes>`
-     and skip the per-element loop.
-   - Add a compiler test suite in `src/main.c` covering the
-     positive and negative cases (all-zero, mixed, no-init,
-     non-zero string).
-   - Re-bootstrap reg-rs goldens after running the change
-     against the demos. Inspect each per the doc.
-   - Update `docs/storage-allocation.md` with a brief note (if
-     that doc references emission) -- probably not needed.
-   - `just test` 15/15 green.
-
-## Out of scope
-
-- Changes to `cor24-asm` (dcxas's brief; already shipped).
-- LIBRARY-mode DCL suppression -- stays the same; this fix only
-  affects entry-module emission.
-- Non-zero init optimization (`.byte 1,2,3` stays as-is).
-- Anything beyond `cg_emit_static_var`.
+1. **rebuild-plsw-lgo**. Single step:
+   - Verify `c7e1262` is in current `dev` (`git log --oneline
+     --grep='zero N' -1`).
+   - Run `just clean && just build-lgo` from `dev`; confirm
+     `build/plsw.lgo` exists and is non-trivial (>1 MB).
+   - Run a quick probe: compile a `.plsw` with `DCL X(64) BYTE
+     INIT(0);` and verify the emitted `.s` contains `.zero 64`.
+   - Run `just test` (15/15 green) to confirm the new compiler
+     doesn't regress any demo.
+   - Add `CHANGES.md` (new file) recording the milestone: the
+     codegen change shipped, this saga signals time to rebuild
+     `plsw.lgo`. Include the exact rebuild command and the
+     installation target.
+   - Commit + complete + mark-pr. The pr/ branch's diff is the
+     CHANGES.md plus the agentrail records -- a short signal,
+     not a heavy artifact.
