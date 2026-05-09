@@ -1,0 +1,2 @@
+command = "./tests/driver.sh storage_size_mismatch"
+exit_code = 0

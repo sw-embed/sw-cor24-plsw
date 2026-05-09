@@ -35,9 +35,14 @@ case "$case_name" in
     hello_macro)        args=("$ex/greet.msw" "$ex/hello_macro.plsw") ;;
     chain)              args=("$inc/cvt.msw" "$inc/ascb.msw" "$inc/asxb.msw"
                               "$inc/tcb.msw" "$ex/chain.plsw") ;;
+    storage_basic)         args=("$inc/_plsw_storage.msw" "$ex/storage_basic.plsw") ;;
+    storage_coalesce)      args=("$inc/_plsw_storage.msw" "$ex/storage_coalesce.plsw") ;;
+    storage_oom)           args=("$inc/_plsw_storage.msw" "$ex/storage_oom.plsw") ;;
+    storage_double_free)   args=("$inc/_plsw_storage.msw" "$ex/storage_double_free.plsw") ;;
+    storage_size_mismatch) args=("$inc/_plsw_storage.msw" "$ex/storage_size_mismatch.plsw") ;;
     *)
         echo "driver.sh: unknown case '$case_name'" >&2
-        echo "available cases: hello led loop record define select_demo select_nested macro hello_macro chain" >&2
+        echo "available cases: hello led loop record define select_demo select_nested macro hello_macro chain storage_basic storage_coalesce storage_oom storage_double_free storage_size_mismatch" >&2
         exit 2
         ;;
 esac

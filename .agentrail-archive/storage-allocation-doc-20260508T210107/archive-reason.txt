@@ -1,0 +1,1 @@
+storage-allocation-doc shipped via 5146ee1 + a395f92, merged in d161c15. Closing before storage-macros saga.

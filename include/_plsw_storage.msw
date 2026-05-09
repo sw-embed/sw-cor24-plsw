@@ -1,0 +1,196 @@
+/* _plsw_storage.msw -- PL/SW heap allocator runtime
+ *
+ * Provides _PLSW_GETMAIN / _PLSW_FREEMAIN procedures backed by
+ * a free-list allocator over a statically-declared heap region.
+ * The PL/X-style ?GETMAIN / ?FREEMAIN macros are not implemented
+ * in v1; PL/SW's MACRODEF/GEN system emits assembly only and
+ * can't synthesize the right code for arbitrary expression-typed
+ * LENGTH or arbitrary lvalue-typed ADDRESS arguments. Future
+ * saga: add macros once PL/SW's macro system supports AST-level
+ * expansion. Until then, call the procedures directly.
+ *
+ *   %INCLUDE _plsw_storage;       -- entry module: impl + heap
+ *
+ *   %DEFINE PLSW_STORAGE_HEADERS_ONLY 1;
+ *   %INCLUDE _plsw_storage;       -- non-entry module: header only
+ *
+ *   %DEFINE PLSW_HEAP_SIZE 32768; -- override default 64KB heap
+ *   %INCLUDE _plsw_storage;
+ *
+ * Calling convention (call as ordinary PL/SW procedures):
+ *   P  = _PLSW_GETMAIN(N);            P=0 on OOM
+ *   RC = _PLSW_FREEMAIN(P, N);        RC=0 on success,
+ *                                     1=double-free/invalid,
+ *                                     2=size mismatch
+ *
+ * See docs/storage-allocation.md for the full design.
+ */
+
+/* --- Default heap size (overridable via %DEFINE before include) --- */
+%IF DEFINED(PLSW_HEAP_SIZE);
+%ELSE;
+%DEFINE PLSW_HEAP_SIZE 65536;
+%ENDIF;
+
+/* --- Allocated-block sentinel ---
+ * Stored in BLOCK_NEXT while the block is allocated. 0xFFFFFF
+ * cannot be a real heap address (heap lives in low SRAM under
+ * 1 MB). Detects double-free and validates that _PLSW_FREEMAIN
+ * received a previously-allocated block. */
+%DEFINE _PLSW_ALLOC_MAGIC 16777215;
+
+/* --- Block header (BASED template) ---
+ * Each block in the heap, free or allocated, has a 6-byte header.
+ *   BLOCK_SIZE = total bytes (header + user data)
+ *   BLOCK_NEXT = next free block address (when free), or
+ *                _PLSW_ALLOC_MAGIC (when allocated) */
+DCL 1 _PLSW_BLOCK BASED,
+  3 _PLSW_BLOCK_SIZE INT,
+  3 _PLSW_BLOCK_NEXT INT;
+DCL _PLSW_BP PTR;
+
+%IF DEFINED(PLSW_STORAGE_HEADERS_ONLY);
+/* Non-entry module: no heap, no impl. The macros (when added)
+ * would emit calls to _PLSW_GETMAIN / _PLSW_FREEMAIN which the
+ * linker resolves to the entry module's definitions. */
+%ELSE;
+
+/* --- Heap region + free-list head --- */
+DCL _PLSW_HEAP_BUF(PLSW_HEAP_SIZE) BYTE;
+DCL _PLSW_FREE_HEAD INT INIT(0);
+DCL _PLSW_INIT_DONE INT INIT(0);
+
+/* Lazy init: first call to _PLSW_GETMAIN sets up one giant free
+ * block covering the entire heap region. */
+_PLSW_INIT: PROC;
+    _PLSW_FREE_HEAD = ADDR(_PLSW_HEAP_BUF);
+    _PLSW_BP = _PLSW_FREE_HEAD;
+    _PLSW_BP->_PLSW_BLOCK_SIZE = PLSW_HEAP_SIZE;
+    _PLSW_BP->_PLSW_BLOCK_NEXT = 0;
+    _PLSW_INIT_DONE = 1;
+END;
+
+/* _PLSW_GETMAIN(SIZE) -- allocate SIZE user bytes.
+ * Returns address of the user block (after the 6-byte header),
+ * or 0 on out-of-memory. First-fit; splits the chosen block when
+ * the remainder leaves room for another header + min user byte. */
+_PLSW_GETMAIN: PROC(SIZE INT) RETURNS(INT);
+    DCL NEEDED INT;
+    DCL PREV INT;
+    DCL CURR INT;
+    DCL CURR_SIZE INT;
+    DCL CURR_NEXT INT;
+    DCL NEW_FREE INT;
+
+    IF (_PLSW_INIT_DONE = 0) THEN
+        CALL _PLSW_INIT();
+
+    NEEDED = SIZE + 6;
+
+    PREV = 0;
+    CURR = _PLSW_FREE_HEAD;
+    DO WHILE (CURR != 0);
+        _PLSW_BP = CURR;
+        CURR_SIZE = _PLSW_BP->_PLSW_BLOCK_SIZE;
+        CURR_NEXT = _PLSW_BP->_PLSW_BLOCK_NEXT;
+        IF (CURR_SIZE >= NEEDED) THEN DO;
+            IF (CURR_SIZE >= NEEDED + 7) THEN DO;
+                /* Split: allocated block stays at CURR; free
+                 * remainder starts at CURR + NEEDED */
+                NEW_FREE = CURR + NEEDED;
+                _PLSW_BP = NEW_FREE;
+                _PLSW_BP->_PLSW_BLOCK_SIZE = CURR_SIZE - NEEDED;
+                _PLSW_BP->_PLSW_BLOCK_NEXT = CURR_NEXT;
+                _PLSW_BP = CURR;
+                _PLSW_BP->_PLSW_BLOCK_SIZE = NEEDED;
+                _PLSW_BP->_PLSW_BLOCK_NEXT = _PLSW_ALLOC_MAGIC;
+                IF (PREV = 0) THEN
+                    _PLSW_FREE_HEAD = NEW_FREE;
+                ELSE DO;
+                    _PLSW_BP = PREV;
+                    _PLSW_BP->_PLSW_BLOCK_NEXT = NEW_FREE;
+                END;
+            END;
+            ELSE DO;
+                /* Use whole block (remainder too small to be useful) */
+                _PLSW_BP = CURR;
+                _PLSW_BP->_PLSW_BLOCK_NEXT = _PLSW_ALLOC_MAGIC;
+                IF (PREV = 0) THEN
+                    _PLSW_FREE_HEAD = CURR_NEXT;
+                ELSE DO;
+                    _PLSW_BP = PREV;
+                    _PLSW_BP->_PLSW_BLOCK_NEXT = CURR_NEXT;
+                END;
+            END;
+            RETURN(CURR + 6);
+        END;
+        PREV = CURR;
+        CURR = CURR_NEXT;
+    END;
+    RETURN(0);
+END;
+
+/* _PLSW_FREEMAIN(USERADDR, LEN) -- free a previously-allocated
+ * block.  Returns:
+ *   0 = success
+ *   1 = block not allocated (double-free, invalid pointer, or
+ *       corrupted header sentinel)
+ *   2 = size mismatch (LEN doesn't match allocated size) */
+_PLSW_FREEMAIN: PROC(USERADDR INT, LEN INT) RETURNS(INT);
+    DCL BLOCK INT;
+    DCL EXPECTED INT;
+    DCL PREV INT;
+    DCL CURR INT;
+    DCL BLK_SIZE INT;
+    DCL NEXT_AFTER INT;
+    DCL NEXT_SIZE INT;
+
+    BLOCK = USERADDR - 6;
+    EXPECTED = LEN + 6;
+
+    _PLSW_BP = BLOCK;
+    /* Double-free / invalid-pointer check */
+    IF (_PLSW_BP->_PLSW_BLOCK_NEXT != _PLSW_ALLOC_MAGIC) THEN
+        RETURN(1);
+    /* Size mismatch */
+    IF (_PLSW_BP->_PLSW_BLOCK_SIZE != EXPECTED) THEN
+        RETURN(2);
+
+    /* Sorted insert: walk free list to find PREV (last block with
+     * addr < BLOCK) and CURR (first block with addr >= BLOCK). */
+    PREV = 0;
+    CURR = _PLSW_FREE_HEAD;
+    DO WHILE (CURR != 0 AND CURR < BLOCK);
+        PREV = CURR;
+        _PLSW_BP = CURR;
+        CURR = _PLSW_BP->_PLSW_BLOCK_NEXT;
+    END;
+
+    /* Link block in: block.next = curr; prev.next = block (or head) */
+    _PLSW_BP = BLOCK;
+    _PLSW_BP->_PLSW_BLOCK_NEXT = CURR;
+    IF (PREV = 0) THEN
+        _PLSW_FREE_HEAD = BLOCK;
+    ELSE DO;
+        _PLSW_BP = PREV;
+        _PLSW_BP->_PLSW_BLOCK_NEXT = BLOCK;
+    END;
+
+    /* Forward coalesce: if BLOCK end touches CURR, merge */
+    _PLSW_BP = BLOCK;
+    BLK_SIZE = _PLSW_BP->_PLSW_BLOCK_SIZE;
+    IF (CURR != 0) THEN DO;
+        IF (BLOCK + BLK_SIZE = CURR) THEN DO;
+            _PLSW_BP = CURR;
+            NEXT_AFTER = _PLSW_BP->_PLSW_BLOCK_NEXT;
+            NEXT_SIZE = _PLSW_BP->_PLSW_BLOCK_SIZE;
+            _PLSW_BP = BLOCK;
+            _PLSW_BP->_PLSW_BLOCK_SIZE = BLK_SIZE + NEXT_SIZE;
+            _PLSW_BP->_PLSW_BLOCK_NEXT = NEXT_AFTER;
+        END;
+    END;
+
+    RETURN(0);
+END;
+
+%ENDIF;

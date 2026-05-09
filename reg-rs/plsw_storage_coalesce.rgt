@@ -1,0 +1,2 @@
+command = "./tests/driver.sh storage_coalesce"
+exit_code = 0

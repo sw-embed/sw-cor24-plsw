@@ -1,0 +1,2 @@
+alloc 1024/256: oom
+alloc 100 after oom: ok
