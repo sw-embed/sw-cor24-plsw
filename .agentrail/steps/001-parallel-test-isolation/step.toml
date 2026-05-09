@@ -1,8 +1,9 @@
 number = 1
 slug = "parallel-test-isolation"
-status = "in-progress"
+status = "completed"
 description = "Make scripts/pipeline.sh parallel-safe: (1) replace per-file mktemp /tmp/plsw..."
 role = "production"
 context_files = []
 created_at = "2026-05-09T10:22:08"
-commits = []
+completed_at = "2026-05-09T10:24:47"
+commits = ["8feade8265ca0d1111a2212607eb1d8261b85c2b"]
