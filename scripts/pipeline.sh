@@ -26,13 +26,18 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
-# Verify compiler .s exists; (re)build .lgo if missing or stale.
+# Verify compiler artifacts exist. Don't auto-rebuild here:
+# parallel reg-rs runs (e.g. via `just test`) can fire multiple
+# pipeline.sh instances concurrently, and an auto-rebuild block
+# would race on writing build/plsw.lgo. Force callers to do the
+# build first (`just test` already does via the build-lgo dep).
 if [ ! -f "$COMPILER_ASM" ]; then
     echo "Error: compiler not built ($COMPILER_ASM). Run 'just build' first." >&2
     exit 1
 fi
 if [ ! -f "$COMPILER_LGO" ] || [ "$COMPILER_ASM" -nt "$COMPILER_LGO" ]; then
-    cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"
+    echo "Error: compiler .lgo missing or stale ($COMPILER_LGO). Run 'just build-lgo' first." >&2
+    exit 1
 fi
 
 # Separate .msw and .plsw files
@@ -98,10 +103,18 @@ if [ -z "$ASM" ]; then
     exit 1
 fi
 
-# Write assembly to temp file, then assemble to a temp .lgo
-TMPASM=$(mktemp /tmp/plsw-XXXXXX.s)
-TMPLGO=$(mktemp /tmp/plsw-XXXXXX.lgo)
-trap "rm -f $TMPASM $TMPLGO" EXIT
+# Per-invocation scratch directory. mktemp -d is the only call
+# that needs the random suffix; files inside use deterministic
+# names so we don't depend on BSD-vs-GNU mktemp differences with
+# trailing extensions (`mktemp /tmp/foo-XXXXXX.s` is portable
+# only if you trust both implementations to substitute the X's
+# correctly when followed by a literal suffix). The directory
+# isolation also prevents two parallel pipelines from ever
+# touching the same path even hypothetically.
+SCRATCH=$(mktemp -d /tmp/plsw-XXXXXX)
+trap "rm -rf $SCRATCH" EXIT
+TMPASM="$SCRATCH/program.s"
+TMPLGO="$SCRATCH/program.lgo"
 echo "$ASM" > "$TMPASM"
 
 ASM_LINES=$(echo "$ASM" | wc -l | tr -d ' ')

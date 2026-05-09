@@ -67,6 +67,32 @@ too because `demo-plsw-modular.sh` needs the compiler artifact.
 `just smoke` is a manual sanity check that just runs the compiler
 binary interactively for 100M cycles.
 
+### Parallel safety
+
+`reg-rs run --parallel` fires the 15 cases concurrently. For that
+to be deterministic, `pipeline.sh` must never write to a shared
+path during a test:
+
+* `build/plsw.s` and `build/plsw.lgo` are read-only after
+  `just build-lgo` finishes. `pipeline.sh` errors cleanly if
+  either is missing or stale rather than auto-rebuilding -- a
+  hidden auto-rebuild would let two parallel pipelines race on
+  writing the same `.lgo`. Run `just build-lgo` (or `just test`
+  which depends on it) before invoking `pipeline.sh` directly.
+* Per-invocation scratch lives in a `mktemp -d /tmp/plsw-XXXXXX`
+  directory. `program.s` and `program.lgo` are deterministic
+  filenames *inside* that unique directory. This sidesteps the
+  Linux-vs-BSD `mktemp` template behavior (BSD `mktemp` does not
+  reliably substitute `XXXXXX` when followed by a literal
+  extension like `.s`) and gives every parallel pipeline its own
+  filesystem space.
+
+Concretely: a non-deterministic failure set across runs (case
+`A` fails one run, case `B` the next, no code change in between)
+almost always means a parallel write race somewhere. The two
+known vectors above are closed; if a new race appears, look for
+newly-introduced shared paths in the test path.
+
 ## Bootstrapping goldens
 
 The first time the suite is established (or after an intentional
