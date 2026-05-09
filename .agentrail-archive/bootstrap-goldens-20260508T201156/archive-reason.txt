@@ -1,0 +1,1 @@
+bootstrap-goldens shipped via 6265001 + 5ec539f, merged in 7995f1b. Closing before the storage-allocation-doc saga.

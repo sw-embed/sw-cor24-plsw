@@ -1,0 +1,38 @@
+So, since we are using PL/SW to implement the SNOBOL4 interpeter which can run a compiler.sno program that itself parses, there could
+   be a lot of small allocations.  I would like an opt-in .msw implementation of alloc/free/reclaim logic wrapped in
+  ?GETMAIN/?FREEMAIN, but the COR24 ISA does not have SVC equivalent instructions so would have to call a label function/procedure to
+  do the get/free logic.  So the SNOBOL4 interpreter (e.g. snoglob.msw or similar) would use this.  We might require a declare/define
+  or introduce something PL/I-like for a pragma, or other way to opt-in.  We could have ?PROLOG/?EPILOG macros, but they are more for
+  linkage than enabling storage management.
+
+● The instinct is right — ?PROLOG/?EPILOG are about linkage state, storage wants its own pair. Three concrete decisions to make first:
+
+  1. Pack the macros and the implementation as a sibling pair, not a single header. Match the existing modular pattern: plsw_storage.msw
+   declares ?GETMAIN/?FREEMAIN/?RECLAIM macros plus EXTERNAL decls of _PLSW_GETMAIN/_PLSW_FREEMAIN/_PLSW_RECLAIM; plsw_storage.plsw is
+  %DEFINE LIBRARY and provides the implementations + the storage region. SNOBOL4 then %INCLUDE plsw_storage; in snoglob.msw and adds
+  plsw_storage to its link line — same shape as sno_util etc. Macros expand to a normal call sequence (push r0; jal r1, _PLSW_GETMAIN;
+  pop), no SVC needed. Opt-in is both the include and the link, so a small program that doesn't need a heap pays nothing.
+
+  2. Pick the backend per workload via %DEFINE PLSW_STORAGE_BACKEND before the include. Three defensible choices for SNOBOL4:
+  - REGION (bump + watermark): ?GETMAIN bumps, ?FREEMAIN is a no-op, ?RECLAIM resets to a saved mark. Constant-time, ~zero
+  per-allocation overhead, fits pattern-match attempts naturally (save before, reclaim on backtrack). Loses long-lived strings if they
+  live in the region.
+  - FREELIST (header-per-block): real per-cell free, ~6 bytes header overhead per block, first-fit + coalesce on free. Code/data
+  overhead worse for tiny strings.
+  - HYBRID (size-class slab for small + freelist for large): best for SNOBOL4's character-cell churn but most code.
+
+  I'd start REGION-only and only add a backend when measurement justifies it. SNOBOL4's compiler.sno-parses-source workload has natural
+  per-statement / per-match-attempt scope boundaries, which is what region allocators are good at. Long-lived globals (the symbol table)
+   get declared statically, not via ?GETMAIN.
+
+  3. Configure heap size at include time, not via a DCL pragma. %DEFINE PLSW_HEAP_SIZE 8192; before %INCLUDE plsw_storage; is enough —
+  the .plsw module emits DCL PLSW_HEAP(PLSW_HEAP_SIZE) BYTE; based on it. PL/I-style pragma is more ceremony than the existing %DEFINE
+  mechanism already supports. If you want a more declarative spelling, a ?STORAGE(REGION, 8192); macro at top-of-program could expand to
+   the right %DEFINEs.
+
+  Main tradeoff to settle before any code: whether SNOBOL4 needs true ?FREEMAIN semantics or whether REGION-with-?RECLAIM is enough.
+  REGION gets you running with maybe 80 lines of .plsw and zero per-allocation overhead. FREELIST is 200+ lines and pays per-block.
+  SNOBOL4 traditionally GC's, which is closer to REGION (drop everything not still rooted) than to malloc/free.
+
+  Want me to draft a brief (dcpls-storage-macros.md) for the REGION-first version, or do you want to nail down backend semantics first?
+

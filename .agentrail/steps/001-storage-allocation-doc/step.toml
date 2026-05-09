@@ -1,0 +1,8 @@
+number = 1
+slug = "storage-allocation-doc"
+status = "in-progress"
+description = "Document the PL/SW storage-allocation design and write a brief for dcsno. Del..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T20:12:21"
+commits = []
