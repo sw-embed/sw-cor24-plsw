@@ -1,0 +1,1 @@
+Re-drafting after user feedback: no new keywords (use GEN DO source vs GEN ASM DO, BC break OK); plan for long-term preprocessor vision (recursion, conditionals); RC clause in scope.
