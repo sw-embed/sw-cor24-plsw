@@ -1,0 +1,9 @@
+number = 1
+slug = "macro-template-expansion"
+status = "completed"
+description = "Step 001 of getmain-freemain-macros. Extend MACRODEF to support source-text t..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T23:18:17"
+completed_at = "2026-05-08T23:35:36"
+commits = ["7a116bea00f77a166afef2b474371e94c9b4ea65"]

@@ -1,9 +1,7 @@
-/* storage_basic.plsw -- single alloc, write, free.
+/* storage_basic.plsw -- single alloc, free via ?GETMAIN/?FREEMAIN.
  *
- * Allocates a 12-byte block, writes a marker into it, frees it,
- * and prints the result of each step. Verifies the basic alloc
- * + free path (header sentinel set on alloc, cleared on free,
- * size-mismatch and double-free both return 0). */
+ * Allocates a 12-byte block, frees it, prints status from each.
+ * Uses the macros that wrap _PLSW_GETMAIN/_PLSW_FREEMAIN. */
 
 %DEFINE PLSW_HEAP_SIZE 1024;
 %INCLUDE _plsw_storage;
@@ -12,13 +10,13 @@ DCL P INT;
 DCL RC INT;
 
 MAIN: PROC;
-    P = _PLSW_GETMAIN(12);
-    IF (P != 0) THEN
+    ?GETMAIN LENGTH(12) SET(P) RC(RC);
+    IF (RC = 0) THEN
         CALL UART_PUTS(ADDR(MSG_OK));
     ELSE
         CALL UART_PUTS(ADDR(MSG_OOM));
 
-    RC = _PLSW_FREEMAIN(P, 12);
+    ?FREEMAIN LENGTH(12) ADDR(P) RC(RC);
     IF (RC = 0) THEN
         CALL UART_PUTS(ADDR(MSG_FREED));
     ELSE

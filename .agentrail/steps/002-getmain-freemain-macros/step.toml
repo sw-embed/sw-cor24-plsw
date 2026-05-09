@@ -1,0 +1,9 @@
+number = 2
+slug = "getmain-freemain-macros"
+status = "completed"
+description = "Step 002 of getmain-freemain-macros (gated on step 001). Define ?GETMAIN(LENG..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T23:18:17"
+completed_at = "2026-05-09T00:00:40"
+commits = ["bf6041cef536699e9bed550e8c8133d9a15da636"]

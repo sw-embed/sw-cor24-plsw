@@ -532,14 +532,81 @@ void mac_gen_substitute(int mi, char *tmpl) {
 }
 
 /* Substitute clause references in body text.
- * In the body, bare clause names are replaced with argument values. */
+ *
+ * The body of a MACRODEF (the source statements after the
+ * REQUIRED/OPTIONAL clauses, up to the macro's terminating END)
+ * is a PL/SW SOURCE TEMPLATE -- it expands into source code that
+ * is re-fed to the lexer/parser at the call site, so the rest
+ * of the compiler handles type-checking and codegen normally.
+ *
+ * Two substitution forms are recognized in the body:
+ *
+ *   {KEY}    -- explicit placeholder; same syntax as GEN DO's
+ *               asm-line substitution. Replaced with the
+ *               argument value for clause KEY.
+ *
+ *   KEY      -- bare identifier matching a clause name; same
+ *               substitution as {KEY}. Convenient for cases
+ *               where the call site naturally writes the
+ *               clause name as an identifier.
+ *
+ * Anything else is emitted verbatim. Operators, punctuation,
+ * non-clause identifiers all pass through.
+ *
+ * This is the source-template counterpart to GEN DO's
+ * assembly-template emission (see mac_gen_substitute). A
+ * single MACRODEF can have both kinds of blocks; expansion
+ * concatenates the asm emissions (each wrapped in ASM DO; ...; END;)
+ * followed by the substituted body source. */
 void mac_body_substitute(int mi) {
     char *body = mac_body(mi);
     int blen = str_len(body);
     int i = 0;
 
     while (i < blen) {
-        /* Try to match an identifier */
+        /* Explicit {KEY} placeholder (same as GEN DO's syntax).
+         * mac_parse_body inserts spaces between tokens, so the
+         * body holds "{ KEY }" with whitespace; strip whitespace
+         * inside the braces when extracting the placeholder name. */
+        if (body[i] == 123) { /* '{' */
+            char pname[MACRO_NAME_MAX];
+            int pi = 0;
+            int j = i + 1;
+            while (j < blen && body[j] != 125 && pi < MACRO_NAME_MAX - 1) {
+                if (body[j] != 32) { /* skip spaces */
+                    pname[pi] = body[j];
+                    pi = pi + 1;
+                }
+                j = j + 1;
+            }
+            pname[pi] = 0;
+            if (j < blen && body[j] == 125) { /* matched '}' */
+                int ci = 0;
+                int found = 0;
+                while (ci < mac_cl_count[mi]) {
+                    if (str_eq_nocase(pname, mac_cl_name(mi, ci))) {
+                        if (mac_arg_set[ci]) {
+                            mac_exp_append(mac_arg_val(ci));
+                        } else {
+                            mac_exp_appendc(48); /* '0' for unset optional */
+                        }
+                        found = 1;
+                        break;
+                    }
+                    ci = ci + 1;
+                }
+                if (found) {
+                    i = j + 1;
+                    continue;
+                }
+                /* Not a clause name -- fall through to verbatim */
+            }
+            /* Bare '{' or unrecognized placeholder: emit as-is */
+            mac_exp_appendc(123);
+            i = i + 1;
+            continue;
+        }
+        /* Bare identifier matching a clause name */
         if (is_alpha(body[i])) {
             char word[MACRO_NAME_MAX];
             int wi = 0;
@@ -550,7 +617,6 @@ void mac_body_substitute(int mi) {
             }
             word[wi] = 0;
 
-            /* Check if this is a clause name */
             int ci = 0;
             int found = 0;
             while (ci < mac_cl_count[mi]) {
@@ -558,7 +624,7 @@ void mac_body_substitute(int mi) {
                     if (mac_arg_set[ci]) {
                         mac_exp_append(mac_arg_val(ci));
                     } else {
-                        mac_exp_appendc(48); /* '0' for unset optional */
+                        mac_exp_appendc(48);
                     }
                     found = 1;
                     break;
@@ -575,16 +641,25 @@ void mac_body_substitute(int mi) {
     }
 }
 
-/* Parse macro invocation arguments: ?NAME(KEYWORD(value), ...).
- * Assumes cur_type == TOK_QUESTION and the next token is the macro name.
+/* Parse macro invocation: ?NAME KEY1(value1) KEY2(value2) ... ;
+ *
+ * Macro invocation syntax: space-separated parenthetical clauses,
+ * no outer parens around the keyword list, statement-terminated
+ * by the surrounding statement context.
+ *
+ * Assumes cur_type == TOK_QUESTION and the next token is the
+ * macro name. After this function returns, cur_type points at
+ * the token immediately following the last clause's closing ')'
+ * -- typically TOK_SEMI, but the caller is responsible for
+ * consuming the statement terminator.
+ *
  * Returns macro index or -1 on error. */
 int mac_parse_invoke(void) {
     mac_expand_err = 0;
     mac_expand_errmsg[0] = 0;
 
-    /* cur_type should be TOK_QUESTION already consumed;
-     * next token is the macro name (IDENT) */
-    lex_scan(); /* get macro name */
+    /* cur_type should be TOK_QUESTION; advance to the macro name */
+    lex_scan();
 
     if (cur_type != TOK_IDENT) {
         mac_exp_error("expected macro name after ?");
@@ -605,18 +680,21 @@ int mac_parse_invoke(void) {
         ai = ai + 1;
     }
 
-    lex_scan(); /* expect '(' */
-    if (cur_type != TOK_LPAREN) {
-        mac_exp_error("expected ( after macro name");
-        return -1;
-    }
+    lex_scan(); /* first clause name (or end-of-invocation token) */
 
-    lex_scan(); /* first keyword or ')' */
+    /* Parse keyword clauses. The invocation ends at the statement
+     * terminator (TOK_SEMI). Clause names may be ordinary
+     * identifiers (TOK_IDENT) or PL/SW reserved-word tokens
+     * (e.g. ADDR, PTR, INT) -- the macro definition accepts those
+     * as clause-name spellings, so the invocation must too. We
+     * dispatch on cur_text rather than cur_type. */
+    while (cur_type != TOK_SEMI && cur_type != TOK_EOF && !mac_expand_err) {
 
-    /* Parse keyword arguments: KEYWORD(value), ... */
-    while (cur_type != TOK_RPAREN && cur_type != TOK_EOF && !mac_expand_err) {
-        if (cur_type != TOK_IDENT) {
-            mac_exp_error("expected keyword in macro invocation");
+        /* The current token's text is the clause name. Empty text
+         * means we hit a punctuation token that isn't a valid
+         * clause-name -- treat as malformed invocation. */
+        if (cur_text[0] == 0) {
+            mac_exp_error("unexpected token in macro invocation");
             return -1;
         }
 
@@ -674,15 +752,7 @@ int mac_parse_invoke(void) {
         val[vpos] = 0;
         mac_arg_set[found] = 1;
 
-        lex_scan(); /* skip ')' of the keyword arg */
-
-        if (cur_type == TOK_COMMA) {
-            lex_scan(); /* skip comma, get next keyword */
-        }
-    }
-
-    if (cur_type == TOK_RPAREN) {
-        lex_scan(); /* skip closing ')' of invocation */
+        lex_scan(); /* skip ')' of the clause; advance to next clause or terminator */
     }
 
     /* Check required clauses */

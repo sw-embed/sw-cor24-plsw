@@ -1,0 +1,8 @@
+number = 1
+slug = "macro-source-expansion"
+status = "pending"
+description = "Step 001 of getmain-freemain-macros saga. Extend PL/SW's macro system to supp..."
+role = "production"
+context_files = []
+created_at = "2026-05-08T23:00:38"
+commits = []

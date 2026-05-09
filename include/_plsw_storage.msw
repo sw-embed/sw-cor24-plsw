@@ -1,13 +1,8 @@
 /* _plsw_storage.msw -- PL/SW heap allocator runtime
  *
  * Provides _PLSW_GETMAIN / _PLSW_FREEMAIN procedures backed by
- * a free-list allocator over a statically-declared heap region.
- * The PL/X-style ?GETMAIN / ?FREEMAIN macros are not implemented
- * in v1; PL/SW's MACRODEF/GEN system emits assembly only and
- * can't synthesize the right code for arbitrary expression-typed
- * LENGTH or arbitrary lvalue-typed ADDRESS arguments. Future
- * saga: add macros once PL/SW's macro system supports AST-level
- * expansion. Until then, call the procedures directly.
+ * a free-list allocator over a statically-declared heap region,
+ * plus PL/I-flavored ?GETMAIN / ?FREEMAIN macros that wrap them.
  *
  *   %INCLUDE _plsw_storage;       -- entry module: impl + heap
  *
@@ -17,11 +12,36 @@
  *   %DEFINE PLSW_HEAP_SIZE 32768; -- override default 64KB heap
  *   %INCLUDE _plsw_storage;
  *
- * Calling convention (call as ordinary PL/SW procedures):
+ * Macro form (PL/I-flavored; preferred surface):
+ *   ?GETMAIN  SET(P)  LENGTH(N)  RC(ret);
+ *     -- expands to: P = _PLSW_GETMAIN(N);
+ *                    IF (P = 0) THEN ret = 4; ELSE ret = 0;
+ *     -- ret is 0 on success, 4 on out-of-memory.
+ *
+ *   ?FREEMAIN ADDR(P) LENGTH(N) RC(ret);
+ *     -- expands to: ret = _PLSW_FREEMAIN(P, N);
+ *     -- ret passes through the procedure's return:
+ *          0 = success
+ *          1 = double-free / invalid pointer
+ *          2 = size mismatch (LENGTH doesn't match recorded size)
+ *
+ * Clause naming follows MVS convention:
+ *   SET(lvalue)   -- GETMAIN: receive-pointer (written)
+ *   ADDR(lvalue)  -- FREEMAIN: source-pointer (read)
+ *   LENGTH(expr)  -- block size in bytes
+ *   RC(lvalue)    -- return code (written)
+ *
+ * Invocation syntax: space-separated parenthetical clauses,
+ * no outer parens, statement-terminated. Clauses may appear in
+ * any order.
+ *
+ * All clauses are REQUIRED in v1. Future saga can make RC
+ * optional once PL/SW's macro system supports %IF DEFINED
+ * inside templates.
+ *
+ * Procedure form (lower-level surface; same effect):
  *   P  = _PLSW_GETMAIN(N);            P=0 on OOM
- *   RC = _PLSW_FREEMAIN(P, N);        RC=0 on success,
- *                                     1=double-free/invalid,
- *                                     2=size mismatch
+ *   RC = _PLSW_FREEMAIN(P, N);        same RC values as above
  *
  * See docs/storage-allocation.md for the full design.
  */
@@ -194,3 +214,27 @@ _PLSW_FREEMAIN: PROC(USERADDR INT, LEN INT) RETURNS(INT);
 END;
 
 %ENDIF;
+
+/* --- PL/I-flavored macros wrapping the procedures ---
+ *
+ * Defined unconditionally (outside the PLSW_STORAGE_HEADERS_ONLY
+ * guard) so non-entry modules can use the macros even when their
+ * include doesn't emit the impl + heap. The macro expansions
+ * call the procedures, which the linker resolves to the entry
+ * module's definitions. */
+
+MACRODEF GETMAIN;
+    REQUIRED SET(lvalue);
+    REQUIRED LENGTH(expr);
+    REQUIRED RC(lvalue);
+    {SET} = _PLSW_GETMAIN({LENGTH});
+    IF ({SET} = 0) THEN {RC} = 4;
+    ELSE {RC} = 0;
+END;
+
+MACRODEF FREEMAIN;
+    REQUIRED ADDR(lvalue);
+    REQUIRED LENGTH(expr);
+    REQUIRED RC(lvalue);
+    {RC} = _PLSW_FREEMAIN({ADDR}, {LENGTH});
+END;

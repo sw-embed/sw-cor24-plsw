@@ -6,5 +6,5 @@
 DCL MSG(20) CHAR INIT('Hello from macros!');
 
 MAIN: PROC;
-    ?GREET(MSG(_MSG));
+    ?GREET MSG(_MSG);
 END;
