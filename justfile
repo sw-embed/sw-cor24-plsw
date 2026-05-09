@@ -29,10 +29,12 @@ run-input input: build-lgo
     cor24-emu --lgo {{plsw_lgo}} --speed 0 -u "{{input}}"
 
 # Run the PL/SW reg-rs regression suite. Tests live under
-# reg-rs/plsw_*.{rgt,out}; driver is tests/driver.sh. If reg-rs
-# reports "no tests matched", run `just test-bootstrap-goldens`
-# once to create the baseline (requires a working build-lgo).
-test:
+# reg-rs/plsw_*.{rgt,out,err}; driver is tests/driver.sh. The
+# build-lgo dependency ensures a fresh clone produces the
+# compiler artifact before any test fixture invokes pipeline.sh.
+# If reg-rs reports "no tests matched", run `just
+# test-bootstrap-goldens` once to create the baseline.
+test: build-lgo
     ./scripts/test.sh
 
 # (Re)create reg-rs goldens from the current toolchain output.
@@ -46,8 +48,10 @@ test-bootstrap-goldens: build-lgo
 # -> cor24-emu). Separate from `test` because they exercise
 # components/linker/ end-to-end and currently surface a
 # pre-existing garbled-output regression unrelated to this saga;
-# see docs/testing.md.
-test-linker:
+# see docs/testing.md. demo-plsw-modular.sh needs build/plsw.s
+# to compile its .plsw fixtures, so we depend on build-lgo here
+# too.
+test-linker: build-lgo
     ./components/linker/tests/demo-fixup.sh
     ./components/linker/tests/demo-plsw-modular.sh
 

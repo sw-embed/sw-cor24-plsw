@@ -1,0 +1,1 @@
+Make just test work from a fresh clone. Add build-lgo dependency to the test recipe in justfile (and test-linker if applicable). Verify by cleaning the build dir and re-running just test. Document the dependency in docs/testing.md. Branch feat/test-build-dep already cut; rename to pr/test-build-dep via dg-mark-pr.
