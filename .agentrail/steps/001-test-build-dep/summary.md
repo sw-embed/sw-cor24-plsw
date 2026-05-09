@@ -1,0 +1,1 @@
+Fixed latent bug where just test failed on fresh clones because it lacked a build-lgo dependency. Added the dependency to both test and test-linker recipes; verified by deleting build/ and dist/ and running just test, which triggered tc24r + cor24-asm and then ran 15/15 green. Documented the dependency in docs/testing.md.
