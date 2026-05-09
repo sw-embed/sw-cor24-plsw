@@ -1,57 +1,62 @@
-# Record Demo Fix + Test-Rigor Saga
+# Parallel Test Isolation Saga
 
-Two related issues:
+`just test` runs the reg-rs suite with `--parallel`, but on
+macOS it fails non-deterministically: different cases fail on
+each run, with no actual code change between runs. Diagnosis:
+parallel pipelines share file paths in two places.
 
-1. **`examples/record.plsw` doesn't compile.** It uses
-   `ADDR('literal')` for the row labels, but the current codegen
-   rejects inline string literals to `ADDR()` ("ADDR requires a
-   variable, field, or array element"). Already fixed in the
-   web-ui clone (`web-sw-cor24-plsw/src/demos.rs`); needs
-   retrofitting here. While we're at it, also use a `PRINT_STR`
-   helper that walks a NUL-terminated label via `UART_PUTCHAR`,
-   so the label and value land on the same line (`UART_PUTS`
-   appends a newline, splitting label from value otherwise).
+1. **`mktemp /tmp/plsw-XXXXXX.s`** — the `XXXXXX` template is
+   followed by a literal `.s` suffix. BSD `mktemp` (macOS
+   default) substitutes only trailing X's; whether it tolerates
+   non-trailing X's varies. Even when it works, two parallel
+   processes on different hosts can synthesize the same
+   filename if the random source happens to collide. Subtle.
 
-2. **The reg-rs golden for `plsw_record` was bootstrapped while
-   the demo was broken.** `reg-rs/plsw_record.rgt` records
-   `exit_code = 1` and `.out` is empty -- exactly what a failed
-   compile produces. So `just test` reports green even though
-   `record.plsw` fails to compile and produces no output.
-
-Issue 2 is a process failure on the operator's part, not a
-reg-rs bug. The fix is to **require human inspection of golden
-files before commit** -- and to make the bootstrap script
-surface anomalies (non-zero exit codes, empty stdout) so they
-can't slip through.
+2. **`pipeline.sh`'s conditional rebuild of `build/plsw.lgo`**
+   at line 33: if `.s` is newer than `.lgo`, parallel pipelines
+   can each fire `cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"`
+   and race on writing the same file. `just test`'s `build-lgo`
+   dependency normally prevents triggering this, but timestamp
+   resolution or unusual invocation patterns can make it fire.
 
 ## Goal
 
-After this saga: `examples/record.plsw` compiles and produces
-the expected `X = 100 / Y = 200 / P->X = 100 / P->Y = 200 /
-Sum = 300` output; reg-rs goldens for all 15 cases are
-re-validated with operator review; bootstrap script flags
-anomalies; `docs/testing.md` documents the inspection
-requirement explicitly.
+After this saga: `just test` runs reg-rs in parallel
+deterministically. Multiple back-to-back runs produce the same
+result with no random failures.
 
 ## Steps
 
-1. **record-fix-and-test-rigor**. Single step:
-   - Rewrite `examples/record.plsw` using pre-declared CHAR
-     labels and a `PRINT_STR` helper. Match the
-     `web-sw-cor24-plsw` shape but with the original 100/200
-     values to preserve recognizability of the demo's output.
-   - Update `scripts/bootstrap-goldens.sh`: after each
-     `reg-rs create`, summarize the captured exit_code and
-     stdout-line-count; abort the run (non-zero exit) if any
-     case has a non-zero exit code, unless the operator passes
-     a `--allow-failures` flag explicitly. Print a clear
-     "REVIEW BEFORE COMMITTING" banner.
-   - Update `docs/testing.md`: add an "Operator review" section
-     making it explicit that goldens are *not* trustworthy until
-     a human has inspected each `.out`/`.err`/`.rgt` triple for
-     sanity. Document the bootstrap-script's anomaly checks.
-     Note the `plsw_record` incident as the worked example.
-   - Re-bootstrap reg-rs goldens for all 15 cases. Inspect each
-     before committing. Verify each `.out` is non-empty and
-     matches expectations; verify each `.rgt` has `exit_code = 0`.
-   - Verify `just test` 15/15 green from a clean rebuild.
+1. **parallel-test-isolation**. Single step:
+   - `scripts/pipeline.sh`: replace the per-file `mktemp
+     /tmp/plsw-XXXXXX.{s,lgo}` pattern with a single
+     `mktemp -d /tmp/plsw-XXXXXX` per invocation. Put
+     deterministically-named files inside (`program.s`,
+     `program.lgo`). `mktemp -d` works the same on Linux and
+     macOS; deterministic names mean the only randomness is
+     the directory, which mktemp guarantees unique.
+   - `scripts/pipeline.sh`: replace the conditional auto-rebuild
+     of `build/plsw.lgo` with a clean error message when the
+     `.lgo` is missing or stale. Force callers to run
+     `just build-lgo` (or equivalent) first. `just test`'s
+     existing `build-lgo` dependency handles this transparently;
+     ad-hoc CLI users get a clear "run `just build-lgo` first"
+     error.
+   - `scripts/pipeline-dump.sh`: same `mktemp -d` treatment for
+     any intermediate scratch (its `build/<name>.*` outputs are
+     intentional persistent artifacts, not temp files, and stay
+     as-is).
+   - Verify: clean rebuild + `just test` 5 times in a row, all
+     should be 15/15 green with identical output. (Heuristic --
+     can't fully reproduce mac-side flake, but eliminating the
+     known shared-write paths is the surgical fix.)
+   - Update `docs/testing.md` with a "Parallel-safety" note
+     mentioning the scratch-dir pattern and the build-lgo-first
+     prerequisite.
+
+## Rules
+
+- Behavior on success unchanged: same exit codes, same stdout,
+  same stderr (modulo the diagnostic "missing build/plsw.lgo"
+  message, which only fires when `.lgo` is genuinely missing).
+- No goldens need re-bootstrapping (program output is identical).

@@ -28,7 +28,8 @@ if [ ! -f "$COMPILER_ASM" ]; then
     exit 1
 fi
 if [ ! -f "$COMPILER_LGO" ] || [ "$COMPILER_ASM" -nt "$COMPILER_LGO" ]; then
-    cor24-asm "$COMPILER_ASM" -o "$COMPILER_LGO"
+    echo "Error: compiler .lgo missing or stale ($COMPILER_LGO). Run 'just build-lgo' first." >&2
+    exit 1
 fi
 
 # Separate .msw and .plsw files
