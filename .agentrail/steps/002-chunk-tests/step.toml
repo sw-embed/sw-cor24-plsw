@@ -1,6 +1,6 @@
 number = 2
 slug = "chunk-tests"
-status = "pending"
+status = "in-progress"
 description = """
 Add `test_chunk_*` functions to `src/test_main.c` exercising the
 chunk alloca..."""
