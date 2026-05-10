@@ -1,98 +1,110 @@
-# chunk-allocator (Phase 2 of shrink-lgo)
+# ast-to-chunks (Phase 2b of shrink-lgo)
 
-Per `docs/shrink-lgo-size.md` Phase 2. Build the chunk allocator
-infrastructure that later sagas (`ast-to-chunks`, `buffer-to-chunks`)
-will draw from. **No pool migration in this saga** — only the
-allocator API, its tests, and a baseline measurement of the new
-`.lgo` size.
+Migrate the AST node pool from 10 × 12,288-slot parallel static
+arrays to chunk-backed storage drawn from the 64 KB pool that
+the `chunk-allocator` saga shipped.
 
-## Sizing decision
+This is **the largest single shrink** in the whole shrink-lgo
+plan. Per `docs/shrink-lgo-size.md`, the AST pool is ~360 KB of
+`.data` (56% of the total). After this saga, the AST static
+cost drops to ~50 bytes of metadata; in exchange, AST consumes
+1-N chunks dynamically (where N is determined by Phase 0
+measurement). Net projected: ~360 KB - 64 KB pool already paid
+= **~296 KB net shrink** of `plsw.lgo`.
 
-Per discussion 2026-05-10, the pool is sized smaller than both the
-brief and the shrink-lgo doc originally proposed:
+## Target
 
-* `CHUNK_SIZE = 4096` (chars; matches the 4 KB static-block ceiling
-  rule from Phase 5 — every chunk is exactly one ceiling-unit).
-* `CHUNK_MAX = 16` (16 × 4 KB = **64 KB total pre-reserved pool**).
+After this saga, `plsw.lgo` should be in the **~1.35-1.4 MB**
+range (down from the current 1.66 MB), unblocking dcsno's
+saga-expr-completeness step 003 and the downstream dcftn work
+that depend on PL/SW fitting in COR24's 1 MB SRAM with room
+for runtime.
 
-Rationale: 64 KB is the entire dynamic-memory budget for the
-production compiler. Small enough that Phase 2 doesn't blow past
-the 1 MB SRAM ceiling on its own; granular enough that pools
-(AST, arena, etc.) can request just what they need. If Phase 0
-measurements during `ast-to-chunks` show this is too tight, bump
-`CHUNK_MAX` then — measurement-driven, not aspirational.
+## Sizing
 
-## Approach
+* Per chunk: `CHUNK_SIZE = 4096` chars. 10 fields × 3 bytes per
+  node = 30 bytes/node. So **~136 nodes per chunk**.
+* `CHUNK_MAX = 16` total chunks. If used solely by AST (worst
+  case), that gives **2,176-node ceiling** -- much smaller than
+  today's `NODE_POOL_MAX = 12288` cap. Phase 0 measurement
+  decides whether 16 chunks is enough or `CHUNK_MAX` needs
+  bumping. Measurement-driven, not aspirational.
 
-* Project convention is header-only modules (see `arena.h`,
-  `ast.h`, etc. — only `main.c` and `test_main.c` are `.c` files).
-  So implementation lives in `src/chunk.h`, included by both
-  `main.c` and `test_main.c`.
-* Static state:
-  - `struct chunk_desc { int in_use; char *base; }` × `CHUNK_MAX`
-  - `char chunk_storage[CHUNK_MAX * CHUNK_SIZE]` — the only
-    static block in the project that exceeds the 4 KB ceiling;
-    carries `/* lint-exempt: chunk-pool */` marker for Phase 5.
-* API:
-  - `void chunk_init(void)` — mark all chunks free, fill `base`
-    pointers from `chunk_storage`.
-  - `char *chunk_alloc(void)` — return base of a free chunk, or
-    `NULL` when exhausted.
-  - `void chunk_free(char *base)` — mark the chunk owning `base`
-    free. Silent no-op on an unknown pointer (don't trap — keep
-    the freestanding contract simple).
-  - `int chunk_used(void)` — count of in-use chunks (for budget
-    reporting; consumed by Phase 0-style measurement code later).
+## Layout decision
 
-## Tests
+**Struct-of-arrays per chunk.** Each chunk holds parallel
+sub-arrays for the 10 fields, indexed by slot. Macros translate
+node-id `i` to `(chunk_idx = i / N, slot = i % N)` once, then
+field access is `chunks[chunk_idx]->kind[slot]` etc. This:
 
-Add `test_chunk_*` to `src/test_main.c` and a new entry in
-`run_suite()`:
-
-1. `test_chunk_init` — after `chunk_init()`, `chunk_used() == 0`.
-2. `test_chunk_alloc_distinct` — `CHUNK_MAX` allocs return
-   non-NULL, distinct, page-aligned `base` pointers; `chunk_used()
-   == CHUNK_MAX`.
-3. `test_chunk_exhaustion` — the `(CHUNK_MAX+1)`th alloc returns
-   `NULL`; `chunk_used()` unchanged.
-4. `test_chunk_free_reuse` — free a chunk, alloc again, get the
-   freed `base` back; `chunk_used()` decrements then increments.
-5. `test_chunk_free_unknown` — `chunk_free(NULL)` and
-   `chunk_free(some_random_ptr)` are no-ops (state unchanged).
-
-Run via `build/plsw_test.lgo` for hands-on verification. Reg-rs
-(`just test`) is unaffected — production compile path doesn't
-touch chunk_* yet — so 15/15 must stay green.
+* Keeps the parallel-array shape callers already use.
+* Localizes the change to `src/ast.h` (and the macro layer).
+* Avoids touching every field reference's structural form.
 
 ## Steps
 
-1. **chunk-api**. Create `src/chunk.h` with the data structures,
-   API, and `lint-exempt: chunk-pool` marker. `#include "chunk.h"`
-   from both `main.c` and `test_main.c`. Build both `.lgo`s clean
-   (no callers yet — just verifies the header compiles in both
-   contexts and the static block lands in the binary).
+1. **measure-ast**. Add `#ifdef MEASURE` instrumentation in
+   `nd_alloc()` to track `peak_nd`. Build a one-off measurement
+   binary, run it across representative inputs (lexer/parser
+   suites in test_main, hello.plsw, hello_macro.plsw, sno_exec
+   if present, plsw self-compile). Capture peak node counts in
+   `docs/memory-audit-2026-05-10.md`. Decide: does 16 chunks
+   (~2,176-node ceiling) suffice? If not, document the bump and
+   apply it to `src/chunk.h` in the same step.
 
-2. **chunk-tests**. Add the five `test_chunk_*` functions to
-   `src/test_main.c` and a `run_chunk_suite()` (or an entry in
-   `run_suite`). Verify `plsw_test.lgo` runs the new tests
-   successfully under `cor24-run`. Confirm `just test` reg-rs
-   suite stays 15/15 green.
+2. **ast-accessors**. Introduce `nd_kind(i)` / `nd_type(i)` /
+   `nd_stor(i)` / `nd_level(i)` / `nd_left(i)` / `nd_right(i)` /
+   `nd_next(i)` / `nd_ival(i)` / `nd_line(i)` / `nd_name(i)`
+   accessor macros in `src/ast.h`. Initially they resolve to the
+   existing parallel arrays (`#define nd_kind(i) nd_kind_arr[i]`
+   or similar -- pick a naming that doesn't collide). Mechanical
+   replacement of all ~391 callsites across `src/types.h`,
+   `src/parser.h`, `src/layout.h`, `src/ast.h`, `src/codegen.h`,
+   and `src/test_main.c`. No storage change yet -- proves the
+   macro layer compiles and tests pass before disturbing storage.
 
-3. **chunk-baseline**. Capture new SHA + size for `plsw.lgo`
-   (will grow ~64 KB from the pre-reservation — expected and
-   recorded as the Phase 2 cost). Capture new size for
-   `plsw_test.lgo`. Update `docs/shrink-lgo-size.md` Phase 2
-   section to "DONE 2026-05-10" with measured numbers and the
-   final API. Add CHANGES.md rebuild-trigger entry. Sets the
-   stage for the next saga (`ast-to-chunks`).
+3. **ast-chunk-storage**. Switch the macros to chunk-backed
+   storage. Each chunk holds an `ast_block` struct-of-arrays.
+   `nd_alloc()` allocates the next slot in the current chunk;
+   when the chunk fills, `chunk_alloc()` for a new one;
+   `ast_init()` returns all AST chunks to the pool. The static
+   parallel arrays `nd_kind_arr[NODE_POOL_MAX]` etc. are
+   removed. Tests must continue to pass, including the chunk
+   suite (#37) and reg-rs (15/15).
+
+4. **ast-baseline**. `just clean && just build-lgo &&
+   just build-test-lgo`. Capture new sizes + SHAs. Update
+   `docs/shrink-lgo-size.md` Phase 2b -> DONE with measured
+   numbers. Add CHANGES.md entry flagging this as a **rebuild
+   recommended** entry for downstream consumers (binary behavior
+   changes only at the limit -- chunk overflow message replaces
+   pool overflow -- but the .lgo bytes are different and dcsno
+   should refresh its installed plsw.lgo). Close the saga.
+
+## Risks
+
+* Indexing performance: `i / N` and `i % N` where N=136 is not
+  power of two. tc24r doesn't strength-reduce divisions. The
+  brief flagged this. If measurement after step 3 shows
+  unacceptable slowdown, consider:
+  - Round N down to a power-of-two-friendly value at the cost
+    of underutilizing each chunk (e.g. N=128 -> wastes 8 nodes
+    per chunk = 240 bytes total).
+  - Cache `(chunk_idx, slot)` separately rather than recomputing
+    on every access.
+* Mechanical-replacement scope: 391 callsites is a lot. A single
+  missed `nd_kind[i]` becomes a build error after step 2 (good
+  -- catches it immediately).
+* Reset hygiene: if `ast_init()` doesn't release chunks back to
+  the pool, repeated compiles in REPL mode leak chunks until
+  exhaustion. Test this explicitly in step 3.
 
 ## What does NOT go in this saga
 
-* No pool migration (AST stays in its 10 parallel arrays;
-  arena_buf stays static; src_buf stays static). All migrations
-  are subsequent sagas.
-* No lint script (Phase 5, separate saga).
-* No tc24r change.
-* No measurement-driven `CHUNK_MAX` retuning — that's Phase 0's
-  job inside `ast-to-chunks` once we can actually count consumed
-  chunks against real compiles.
+* Migrating other pools (`arena_buf`, `src_buf`, `inc_buf`,
+  `mac_gen_buf`) to chunks -- that's the `buffer-to-chunks`
+  saga (Phase 3), only if measurements demand more headroom
+  after this saga lands.
+* Lint script enforcing the 4 KB ceiling -- that's
+  `static-lint` (Phase 5).
+* tc24r changes.
