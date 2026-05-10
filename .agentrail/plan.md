@@ -1,43 +1,45 @@
-# Rebuild PL/SW LGO Saga
+# Shrink plsw.lgo
 
-Per `tools/briefs/dcpls-rebuild-plsw-lgo.md`. The `.zero N`
-codegen change shipped today (`c7e1262`, merged via
-`pr/emit-zero-fill`), but `work/lib/cor24/plsw.lgo` is from
-May 9 00:04 -- before the change landed. Until that artifact is
-rebuilt, `pl-sw` invocations still emit per-byte `.byte 0` and
-dcsno's `snobol4-runtime-split` step 2 stays blocked.
+The compiled PL/SW compiler (`build/plsw.lgo`) is 1.7 MB — far
+larger than this language's "tiny integer subset of PL/I" warrants
+for an embedded target. Storage waste here is gating dcsno's
+`saga-expr-completeness` and, downstream, dcftn. This saga reduces
+both static-storage waste and code size to free SRAM headroom and
+speed builds.
 
-## Goal
+## Corrected baseline understanding
 
-Signal to mike that `plsw.lgo` should be rebuilt from current
-`dev` (or `main` after promotion) and reinstalled to
-`work/lib/cor24/plsw.lgo`. Build chain is `just clean && just
-build-lgo` -- one command, deterministic, no source changes.
+Earlier analysis claimed tc24r emits one COR24 word per `char[]`
+slot ("3× tax"). That was wrong: `sizeof(char) == 1` in tc24r and
+chars are packed 3-per-word in `.word` directives. The original
+brief at `tools/briefs/dcpls-dynamic-memory-architecture.md` carried
+the same incorrect assumption in its constraint #1. The true
+physical sizes are ~1× the C array length, not 3×.
 
-## Approach (option 2 from the brief: docs only)
+So:
 
-The brief offers two shapes; I'm taking option 2 (doc the
-rebuild command, mike rebuilds at relay) because it matches the
-existing `build/` gitignored convention and avoids committing a
-2.3 MB binary. Adding a CHANGES.md entry plus the agentrail
-bookkeeping is the deliverable; the actual rebuild is mike's
-post-relay action.
+* `emit_buf[262144]` (pre-streaming) was ~256 KB physical, not
+  786 KB. The streaming-emit saga's win was real but smaller than
+  the brief implied.
+* `chunk_storage[16 * 65536]` proposed in Phase 2 = 1 MB physical,
+  not 3 MB — fits in SRAM, but at 100% of budget, so still wants
+  parameter tuning.
+* No tc24r ABI change is needed. The brief's "out of scope" item
+  on 24-bit char packing is moot.
+
+## Scope
+
+This saga is the umbrella plan; individual phases ship as their
+own sagas. The plan and detailed phase breakdown live in
+`docs/shrink-lgo-size.md` (written by step 1 of this saga).
 
 ## Steps
 
-1. **rebuild-plsw-lgo**. Single step:
-   - Verify `c7e1262` is in current `dev` (`git log --oneline
-     --grep='zero N' -1`).
-   - Run `just clean && just build-lgo` from `dev`; confirm
-     `build/plsw.lgo` exists and is non-trivial (>1 MB).
-   - Run a quick probe: compile a `.plsw` with `DCL X(64) BYTE
-     INIT(0);` and verify the emitted `.s` contains `.zero 64`.
-   - Run `just test` (15/15 green) to confirm the new compiler
-     doesn't regress any demo.
-   - Add `CHANGES.md` (new file) recording the milestone: the
-     codegen change shipped, this saga signals time to rebuild
-     `plsw.lgo`. Include the exact rebuild command and the
-     installation target.
-   - Commit + complete + mark-pr. The pr/ branch's diff is the
-     CHANGES.md plus the agentrail records -- a short signal,
-     not a heavy artifact.
+1. **plan-and-baseline**: write `docs/shrink-lgo-size.md` with
+   the corrected analysis, the multi-phase roadmap, and the
+   measured baseline (component sizes by category). Update the
+   architecture brief's constraint #1 inline correction note.
+   Commit doc + any measurement scripts.
+
+Subsequent phases (test split, chunk allocator, lint, etc.) will
+be added as separate sagas based on what the baseline reveals.
