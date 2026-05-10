@@ -1,0 +1,8 @@
+number = 1
+slug = "streaming-emit"
+status = "in-progress"
+description = "Replace 256 KB emit_buf with 4 KB coalescer per dcpls-streaming-emit brief (O..."
+role = "production"
+context_files = []
+created_at = "2026-05-09T17:21:36"
+commits = []

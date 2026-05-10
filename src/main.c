@@ -5933,6 +5933,18 @@ char *compile_program(char *source) {
     /* Emit string literal table */
     cg_emit_string_table();
 
+    /* Drain the streaming buffer's tail to UART. Bytes prior
+     * to this already flowed during emit_char's auto-flush;
+     * this just pushes whatever's left in emit_buf. Callers in
+     * production (main()'s compile-mode handler) must NOT then
+     * print emit_output() -- the streaming has already done
+     * the work, and printing the tail again would duplicate
+     * the last < 4 KB. emit_output() is still returned so
+     * compile_program keeps its NULL-on-failure /
+     * non-NULL-on-success contract, and so test suites that
+     * inspect short emissions via str_find continue to work
+     * for fragments that fit in the unflushed tail. */
+    emit_flush();
     return emit_output();
 }
 
@@ -7016,14 +7028,19 @@ int main() {
             return 1;
         }
 
-        uart_puts("--- compiling ---");
+        uart_puts("--- generated assembly ---");
         out = compile_program(src_buf);
         if (!out) {
             uart_puts("--- compilation failed ---");
             return 1;
         }
-        uart_puts("--- generated assembly ---");
-        uart_putstr(out);
+        /* Note the framing-marker reorder vs. the pre-streaming
+         * shape: "--- generated assembly ---" must print BEFORE
+         * compile_program() since the .s now streams to UART
+         * during the compile, not as a single dump after. The
+         * trailing uart_putstr(out) that used to dump the full
+         * buffer is gone -- bytes already streamed; reprinting
+         * would duplicate the trailing < 4 KB. */
         uart_puts("--- end assembly ---");
     } else if (len > 0 && (line[0] == 82 || line[0] == 114)) {
         /* 'R' or 'r' -- REPL */
