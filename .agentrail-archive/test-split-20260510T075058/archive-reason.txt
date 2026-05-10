@@ -1,0 +1,1 @@
+Phase 1 of shrink-lgo (test-split) shipped via pr/test-split, merged 2026-05-10. Next: chunk-allocator saga for Phase 2.

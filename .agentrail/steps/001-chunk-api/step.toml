@@ -1,0 +1,10 @@
+number = 1
+slug = "chunk-api"
+status = "in-progress"
+description = """
+Create the chunk allocator header `src/chunk.h` and wire it into
+both binarie..."""
+role = "production"
+context_files = []
+created_at = "2026-05-10T07:52:37"
+commits = []
