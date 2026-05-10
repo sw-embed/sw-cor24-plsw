@@ -1,10 +1,11 @@
 number = 3
 slug = "chunk-baseline"
-status = "in-progress"
+status = "completed"
 description = """
 Capture the post-Phase-2 baseline measurements and update the
 shrink-lgo plan..."""
 role = "production"
 context_files = []
 created_at = "2026-05-10T07:52:37"
-commits = []
+completed_at = "2026-05-10T09:45:20"
+commits = ["b3faae107dd1096a8ef464f620aad6799bbbbe56"]

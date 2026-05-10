@@ -1,0 +1,1 @@
+Phase 2 (chunk-allocator) shipped: src/chunk.h + test_chunk + baseline. Production plsw.lgo grew +145 KB (pool reservation). Next: ast-to-chunks for Phase 2b's ~296 KB net reclaim.
