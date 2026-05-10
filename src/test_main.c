@@ -6583,6 +6583,96 @@ void test_select_codegen(void) {
     uart_putchar(10);
 }
 
+/* Exercises src/chunk.h: init, alloc, exhaustion, free+reuse,
+ * unknown-pointer no-op. Tallies an error count and prints it at
+ * the end so a glance tells pass/fail. No reg-rs golden depends
+ * on this output (production plsw.lgo doesn't call chunk_*). */
+void test_chunk(void) {
+    int errs;
+    int i;
+    char *p[CHUNK_MAX];
+    char *p_extra;
+    char *p_reuse;
+
+    errs = 0;
+
+    /* 1. init -> chunk_used == 0 */
+    chunk_init();
+    uart_putstr("after init, chunk_used: ");
+    print_int(chunk_used());
+    uart_putchar(10);
+    if (chunk_used() != 0) errs = errs + 1;
+
+    /* re-init after some allocs still resets to 0 */
+    chunk_alloc();
+    chunk_alloc();
+    chunk_init();
+    uart_putstr("after re-init, chunk_used: ");
+    print_int(chunk_used());
+    uart_putchar(10);
+    if (chunk_used() != 0) errs = errs + 1;
+
+    /* 2. CHUNK_MAX allocs return non-NULL, distinct bases */
+    chunk_init();
+    i = 0;
+    while (i < CHUNK_MAX) {
+        p[i] = chunk_alloc();
+        if (p[i] == 0) errs = errs + 1;
+        i = i + 1;
+    }
+    uart_putstr("after CHUNK_MAX allocs, chunk_used: ");
+    print_int(chunk_used());
+    uart_putchar(10);
+    if (chunk_used() != CHUNK_MAX) errs = errs + 1;
+
+    /* pairwise distinct */
+    i = 0;
+    while (i < CHUNK_MAX) {
+        int j = i + 1;
+        while (j < CHUNK_MAX) {
+            if (p[i] == p[j]) errs = errs + 1;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    uart_putstr("distinct check done\n");
+
+    /* 3. exhaustion: (CHUNK_MAX+1)th alloc returns 0 */
+    p_extra = chunk_alloc();
+    uart_putstr("alloc beyond CHUNK_MAX returned NULL: ");
+    print_int(p_extra == 0);
+    uart_putchar(10);
+    if (p_extra != 0) errs = errs + 1;
+    if (chunk_used() != CHUNK_MAX) errs = errs + 1;
+
+    /* 4. free + reuse: free p[3], next alloc returns p[3] */
+    chunk_free(p[3]);
+    uart_putstr("after free p[3], chunk_used: ");
+    print_int(chunk_used());
+    uart_putchar(10);
+    if (chunk_used() != CHUNK_MAX - 1) errs = errs + 1;
+
+    p_reuse = chunk_alloc();
+    uart_putstr("alloc returned freed slot: ");
+    print_int(p_reuse == p[3]);
+    uart_putchar(10);
+    if (p_reuse != p[3]) errs = errs + 1;
+    if (chunk_used() != CHUNK_MAX) errs = errs + 1;
+
+    /* 5. free of NULL and unknown pointer are no-ops */
+    chunk_free(0);
+    if (chunk_used() != CHUNK_MAX) errs = errs + 1;
+    chunk_free((char *)0xDEAD);
+    if (chunk_used() != CHUNK_MAX) errs = errs + 1;
+    uart_putstr("after free(NULL) + free(0xDEAD), chunk_used: ");
+    print_int(chunk_used());
+    uart_putchar(10);
+
+    uart_putstr("chunk errors: ");
+    print_int(errs);
+    uart_putchar(10);
+}
+
 /* Run a test suite by number. Returns 1 if valid suite. */
 int run_suite(int n) {
     if (n == 0) { uart_puts("=== String Tests ==="); test_strings(); }
@@ -6622,12 +6712,13 @@ int run_suite(int n) {
     else if (n == 34) { uart_puts("=== Record Pointer Compile ==="); test_record_pointer(); }
     else if (n == 35) { uart_puts("=== Multi-BASED Pointer Tests ==="); test_multi_based(); }
     else if (n == 36) { uart_puts("=== SELECT/WHEN Codegen Tests ==="); test_select_codegen(); }
+    else if (n == 37) { uart_puts("=== Chunk Allocator Tests ==="); test_chunk(); }
     else { return 0; }
     uart_puts("");
     return 1;
 }
 
-#define SUITE_COUNT 37
+#define SUITE_COUNT 38
 
 int main() {
     char line[LINE_MAX];
@@ -6636,7 +6727,7 @@ int main() {
 
     uart_puts("PL/SW Compiler Tests v0.1");
     uart_puts("COR24 target");
-    uart_putstr("Enter suite # (0-36) or 'a' for all: ");
+    uart_putstr("Enter suite # (0-37) or 'a' for all: ");
 
     len = uart_getline(line, LINE_MAX);
 
