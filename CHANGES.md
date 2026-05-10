@@ -4,6 +4,49 @@ Notable PL/SW changes that affect the shipped `plsw.lgo`. Not a
 full changelog -- only entries that signal "rebuild and reinstall
 the compiler" are recorded here.
 
+## 2026-05-10 -- chunk allocator scaffolding (no semantic change)
+
+* Infrastructure: `feat(chunk): scaffold 4KB chunk allocator`
+  + `test(chunk): add test_chunk suite` + this baseline (saga
+  `chunk-allocator`, Phase 2 of `docs/shrink-lgo-size.md`).
+* Rebuild signal: this same saga's mark-pr (final step).
+* Effect: adds `src/chunk.h` -- a header-only 4 KB-chunk
+  allocator (`CHUNK_SIZE = 4096`, `CHUNK_MAX = 16`) carving a
+  single 64 KB pre-reservation into chunks, with the API
+  `chunk_init` / `chunk_alloc` / `chunk_free` / `chunk_used`.
+  Each chunk equals the project's 4 KB static-block ceiling,
+  the granularity Phase 5's lint script will enforce.
+  `chunk_storage` carries `/* lint-exempt: chunk-pool */` --
+  it's the only static array in the project deliberately
+  exceeding 4 KB. **No callers in production** -- tc24r's DCE
+  elides `chunk_init/alloc/free/used` from `build/plsw.s`. The
+  static cost is `chunk_storage` (`.zero 65536`) +
+  `chunk_table` (`.zero 96`).
+* No semantic change to the production compiler. Downstream
+  consumers (dcsno, dcftn) **do not need to rebuild** -- their
+  inputs produce identical `.s` output. The reinstall here is
+  about parity (so the relayed `plsw.lgo` matches the saga's
+  recorded SHA), not behavior.
+* Build SHA: `build/plsw.lgo` SHA-256
+  `712fb0be04cf639c82b8887638c4735224f8ae34bb53426ae43ec761456372a0`
+  (1,657,430 bytes; +145,848 bytes / +14% vs the post-test-split
+  build of 1,511,582 -- the 64 KB pool reservation plus its
+  `.lgo` encoding overhead). `build/plsw_test.lgo` SHA-256
+  `b829f2862555308c849080cf7978069277e25902f608bfbec43a32295c770d88`
+  (1,663,430 bytes -- includes the test_chunk suite and the
+  surviving `chunk_*` function bodies).
+* The actual headline shrink lands in the **next saga
+  (`ast-to-chunks`)** when the 360 KB AST static pool migrates
+  onto chunks. Net projected after that: ~296 KB net reclaim
+  (-360 KB AST static + 64 KB pool already paid here).
+* Rebuild / install command:
+  ```sh
+  cd $SRCROOT
+  just clean
+  just build-lgo
+  install -m 0640 build/plsw.lgo $TOOLROOT/../lib/cor24/plsw.lgo
+  ```
+
 ## 2026-05-10 -- test split: production compiler shrinks ~13%
 
 * Refactor: `refactor(build): split tests out of main.c into
