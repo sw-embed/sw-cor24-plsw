@@ -1,0 +1,10 @@
+number = 2
+slug = "chunk-tests"
+status = "pending"
+description = """
+Add `test_chunk_*` functions to `src/test_main.c` exercising the
+chunk alloca..."""
+role = "production"
+context_files = []
+created_at = "2026-05-10T07:52:37"
+commits = []
