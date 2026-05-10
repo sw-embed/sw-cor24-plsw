@@ -4,6 +4,43 @@ Notable PL/SW changes that affect the shipped `plsw.lgo`. Not a
 full changelog -- only entries that signal "rebuild and reinstall
 the compiler" are recorded here.
 
+## 2026-05-09 -- streaming `.s` emission, 4 KB coalescer
+
+* Codegen change: `feat(emit): stream .s emission, replace
+  256 KB emit_buf with 4 KB coalescer` (saga
+  `pr/streaming-emit`).
+* Rebuild signal: this same saga's mark-pr.
+* Effect: replaces the per-compilation `emit_buf` accumulator
+  (256 KB) with a 4 KB coalescing flush buffer that drains to
+  UART when full. The `.s` stream is unbounded by buffer size;
+  the 256 KB ceiling that capped library-module compilation
+  goes away, and PL/SW gets ~252 KB of SRAM headroom.
+* Direct downstream: dcsno's `saga-expr-completeness` step 003
+  unblocks. `sno_exec.s` was at 99.96% of the old ceiling
+  (262,030 / 262,144 bytes); any further library-module growth
+  would have overflowed.
+* Side effect: `emit_output()` now reflects only the unflushed
+  tail (the bytes since the last `emit_flush()`). Production
+  `compile_program()` calls `emit_flush()` at end and the
+  bytes have already streamed to UART via the per-buffer-fill
+  flush. `main()`'s compile-mode handler dropped its
+  `uart_putstr(out)` line accordingly. Tests in `src/main.c`
+  that emit small fragments (< 4 KB) and inspect via
+  `str_find` continue to work because no flush triggers
+  mid-fragment; tests emitting > 4 KB would only see the tail
+  (none currently exist that hit this).
+* Build SHA: `build/plsw.lgo` SHA-256
+  `b6525ebe7c2e3c0dfd073dc5fe765bf8786f3672c0adf2e85bbf4287ac081d11`
+  (1,738,122 bytes; ~25% smaller than the May 9 13:35 build,
+  reflecting the freed 256 KB).
+* Rebuild / install command (same shape as the prior entry):
+  ```sh
+  cd $SRCROOT
+  just clean
+  just build-lgo
+  install -m 0640 build/plsw.lgo $TOOLROOT/../lib/cor24/plsw.lgo
+  ```
+
 ## 2026-05-09 -- `.zero N` codegen for all-zero static data
 
 * Codegen change: `c7e1262 feat(codegen): emit .zero N for

@@ -6,14 +6,38 @@
 
 #include "str.h"
 
-/* --- Output buffer --- */
-
-/* 256KB output buffer for generated assembly */
-#define EMIT_BUF_SIZE 262144
+/* --- Output buffer ---
+ *
+ * 4 KB coalescing buffer. PL/SW emits the .s as a forward-only
+ * stream: when the buffer fills, emit_flush() drains it to UART
+ * and resets emit_pos. The previous design accumulated the
+ * entire compilation in a 256 KB buffer; that capped .s size at
+ * 256 KB and consumed ~25% of COR24's 1 MB SRAM. Streaming
+ * removes both ceilings.
+ *
+ * Coalescing (vs. per-character UART writes) keeps the syscall
+ * count low: each emit_str / emit_int / emit_label is many
+ * small emit_char calls, and cor24-emu's UART is char-at-a-time;
+ * batching ~4 KB at a time amortises the overhead. */
+#define EMIT_BUF_SIZE 4096
 
 char emit_buf[EMIT_BUF_SIZE];
-int emit_pos;     /* current write position */
-int emit_err;     /* error flag */
+int emit_pos;     /* current write position within emit_buf */
+int emit_err;     /* error flag (currently unused under streaming;
+                   * reserved for future per-flush UART error
+                   * propagation) */
+
+/* Drain emit_buf[0..emit_pos] to UART and reset emit_pos.
+ * Called automatically by emit_char when the buffer fills, and
+ * manually at end-of-compilation to drain any tail. */
+void emit_flush(void) {
+    int i = 0;
+    while (i < emit_pos) {
+        uart_putchar(emit_buf[i]);
+        i = i + 1;
+    }
+    emit_pos = 0;
+}
 
 /* --- Label counter --- */
 
@@ -37,11 +61,13 @@ void emit_init(void) {
     mem_set(emit_buf, 0, 256);  /* clear start of buffer */
 }
 
-/* Append a single character to the output buffer */
+/* Append a single character to the output buffer.
+ * When the buffer fills, drain it to UART via emit_flush()
+ * and continue writing into the freshly-empty buffer. The .s
+ * stream is unbounded by buffer size as a result. */
 void emit_char(int ch) {
     if (emit_pos >= EMIT_BUF_SIZE - 1) {
-        emit_err = 1;
-        return;
+        emit_flush();
     }
     emit_buf[emit_pos] = ch;
     emit_pos = emit_pos + 1;
@@ -315,9 +341,28 @@ void emit_epilogue(void) {
     emit_instr("jmp     (r1)");
 }
 
-/* --- Output access --- */
+/* --- Output access ---
+ *
+ * Both emit_output() and emit_length() reflect ONLY the
+ * unflushed tail (the bytes in emit_buf since the last
+ * emit_flush). Under the streaming design they're useful for:
+ *
+ *   * NULL-vs-non-NULL contract: compile_program returns
+ *     emit_output() so callers can detect compile failure
+ *     (returns 0/NULL) vs success (always non-NULL).
+ *   * Compile-internal test suites in src/main.c that emit
+ *     small fragments and inspect via str_find -- as long as
+ *     the fragment is < EMIT_BUF_SIZE (4 KB), nothing flushes
+ *     and the buffer holds the whole emission.
+ *
+ * Tests that emit > 4 KB will see only the trailing chunk.
+ * Production callers (main()'s compile-mode handler) must NOT
+ * print emit_output() after a compile -- the bytes already
+ * streamed during the compile via emit_flush(); reprinting
+ * the tail would duplicate the trailing < 4 KB to UART. */
 
-/* Null-terminate the buffer and return pointer */
+/* Null-terminate the buffer and return pointer to the
+ * unflushed tail. See note above re: streaming contract. */
 char *emit_output(void) {
     if (emit_pos < EMIT_BUF_SIZE) {
         emit_buf[emit_pos] = 0;
@@ -325,7 +370,8 @@ char *emit_output(void) {
     return emit_buf;
 }
 
-/* Return current output length */
+/* Return current unflushed-tail length. See note on
+ * emit_output() for the streaming contract. */
 int emit_length(void) {
     return emit_pos;
 }
