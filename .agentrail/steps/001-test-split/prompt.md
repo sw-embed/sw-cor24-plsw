@@ -1,0 +1,1 @@
+Move ~6,800 lines of test code (46 test_* functions + run_suite + test branches of main) out of src/main.c into a new src/test_main.c. Build two .lgo binaries: production plsw.lgo (compile mode + REPL only) and plsw_test.lgo (test runner). Add justfile build-test target. Verify reg-rs 15/15 green. Capture new plsw.lgo SHA+size, add CHANGES.md entry.
