@@ -1,6 +1,6 @@
 number = 3
 slug = "chunk-baseline"
-status = "pending"
+status = "in-progress"
 description = """
 Capture the post-Phase-2 baseline measurements and update the
 shrink-lgo plan..."""
