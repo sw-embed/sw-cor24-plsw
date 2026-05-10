@@ -1,71 +1,98 @@
-# Test split (Phase 1 of shrink-lgo)
+# chunk-allocator (Phase 2 of shrink-lgo)
 
-Per `docs/shrink-lgo-size.md` Phase 1. Move ~6,800 lines of test
-code (46 `test_*` functions + `run_suite()` + the 'a'/numeric
-branches of `main()`) out of `src/main.c` and into a separate
-test driver. Build two `.lgo`s:
+Per `docs/shrink-lgo-size.md` Phase 2. Build the chunk allocator
+infrastructure that later sagas (`ast-to-chunks`, `buffer-to-chunks`)
+will draw from. **No pool migration in this saga** — only the
+allocator API, its tests, and a baseline measurement of the new
+`.lgo` size.
 
-* `build/plsw.lgo` — production compiler (compile mode + REPL).
-  Goal: shrink from 1.74 MB to under ~900 KB.
-* `build/plsw_test.lgo` — test runner. Same headers, same
-  compiler internals, but only test code in its top-level.
+## Sizing decision
 
-`just test` (reg-rs) does NOT use the in-binary test suites
-(driver.sh + pipeline.sh use production `plsw.lgo` to compile
-`.plsw` fixtures). So the split is functionally invisible to
-`just test`. The only thing the test split changes is what the
-production `.lgo` carries.
+Per discussion 2026-05-10, the pool is sized smaller than both the
+brief and the shrink-lgo doc originally proposed:
 
-## Constraint discovered during prep
+* `CHUNK_SIZE = 4096` (chars; matches the 4 KB static-block ceiling
+  rule from Phase 5 — every chunk is exactly one ceiling-unit).
+* `CHUNK_MAX = 16` (16 × 4 KB = **64 KB total pre-reserved pool**).
 
-tc24r accepts `-D` on its CLI but silently ignores it for
-`#ifdef`. Source-level `#define` works; CLI doesn't. So the
-split must be done with two separate source files, not a single
-`#ifdef BUILD_TESTS` switch. (Reported to tc24r is out of scope.)
+Rationale: 64 KB is the entire dynamic-memory budget for the
+production compiler. Small enough that Phase 2 doesn't blow past
+the 1 MB SRAM ceiling on its own; granular enough that pools
+(AST, arena, etc.) can request just what they need. If Phase 0
+measurements during `ast-to-chunks` show this is too tight, bump
+`CHUNK_MAX` then — measurement-driven, not aspirational.
 
 ## Approach
 
-* New file `src/test_main.c` — `#include`s the same compiler
-  headers as `src/main.c`, contains the 46 `test_*` functions,
-  the `run_suite(int)` dispatcher, and a small `main()` that
-  reads the suite # / "a" / "r" and dispatches.
-* `src/main.c` shrinks to: includes, the source-read helpers
-  (`read_line_term`, `read_file_content`, `read_source`,
-  `read_compile_input`, `inc_buf_alloc`), `src_buf` /
-  `inc_buf`, and a `main()` with only compile mode + REPL.
-* `justfile`:
-  - `build` still builds `plsw.s` from `main.c`.
-  - New `build-test` target builds `plsw_test.s` from
-    `test_main.c`, then `plsw_test.lgo`.
-  - `test` keeps depending on `build-lgo` (production), since
-    that's what reg-rs needs. A manual `just smoke-test` (or
-    similar) can run the in-binary tests via plsw_test.lgo if
-    needed for diagnostics.
+* Project convention is header-only modules (see `arena.h`,
+  `ast.h`, etc. — only `main.c` and `test_main.c` are `.c` files).
+  So implementation lives in `src/chunk.h`, included by both
+  `main.c` and `test_main.c`.
+* Static state:
+  - `struct chunk_desc { int in_use; char *base; }` × `CHUNK_MAX`
+  - `char chunk_storage[CHUNK_MAX * CHUNK_SIZE]` — the only
+    static block in the project that exceeds the 4 KB ceiling;
+    carries `/* lint-exempt: chunk-pool */` marker for Phase 5.
+* API:
+  - `void chunk_init(void)` — mark all chunks free, fill `base`
+    pointers from `chunk_storage`.
+  - `char *chunk_alloc(void)` — return base of a free chunk, or
+    `NULL` when exhausted.
+  - `void chunk_free(char *base)` — mark the chunk owning `base`
+    free. Silent no-op on an unknown pointer (don't trap — keep
+    the freestanding contract simple).
+  - `int chunk_used(void)` — count of in-use chunks (for budget
+    reporting; consumed by Phase 0-style measurement code later).
 
 ## Tests
 
-1. `just clean && just build-lgo` — must succeed and produce a
-   smaller `plsw.lgo`.
-2. `just build-test` — must succeed and produce `plsw_test.lgo`
-   that runs the in-binary suites correctly.
-3. `just test` — all 15 reg-rs tests still green.
-4. CHANGES.md gets a new rebuild-trigger entry with the new SHA.
+Add `test_chunk_*` to `src/test_main.c` and a new entry in
+`run_suite()`:
+
+1. `test_chunk_init` — after `chunk_init()`, `chunk_used() == 0`.
+2. `test_chunk_alloc_distinct` — `CHUNK_MAX` allocs return
+   non-NULL, distinct, page-aligned `base` pointers; `chunk_used()
+   == CHUNK_MAX`.
+3. `test_chunk_exhaustion` — the `(CHUNK_MAX+1)`th alloc returns
+   `NULL`; `chunk_used()` unchanged.
+4. `test_chunk_free_reuse` — free a chunk, alloc again, get the
+   freed `base` back; `chunk_used()` decrements then increments.
+5. `test_chunk_free_unknown` — `chunk_free(NULL)` and
+   `chunk_free(some_random_ptr)` are no-ops (state unchanged).
+
+Run via `build/plsw_test.lgo` for hands-on verification. Reg-rs
+(`just test`) is unaffected — production compile path doesn't
+touch chunk_* yet — so 15/15 must stay green.
 
 ## Steps
 
-1. **test-split**. Single step:
-   - Create `src/test_main.c` with all test code + a test-only
-     `main()`.
-   - Strip `src/main.c` to production-only.
-   - Add `build-test` / `build-test-lgo` targets to `justfile`.
-   - Verify both binaries build.
-   - Run `just test`; confirm 15/15 green.
-   - Capture new `plsw.lgo` SHA + size; add CHANGES.md entry.
-   - Commit + complete + mark-pr.
+1. **chunk-api**. Create `src/chunk.h` with the data structures,
+   API, and `lint-exempt: chunk-pool` marker. `#include "chunk.h"`
+   from both `main.c` and `test_main.c`. Build both `.lgo`s clean
+   (no callers yet — just verifies the header compiles in both
+   contexts and the static block lands in the binary).
 
-## What does NOT go in this PR
+2. **chunk-tests**. Add the five `test_chunk_*` functions to
+   `src/test_main.c` and a `run_chunk_suite()` (or an entry in
+   `run_suite`). Verify `plsw_test.lgo` runs the new tests
+   successfully under `cor24-run`. Confirm `just test` reg-rs
+   suite stays 15/15 green.
 
-* No allocator change (Phase 2's chunk allocator).
-* No buffer migration (Phase 3).
-* No lint rule (Phase 5).
+3. **chunk-baseline**. Capture new SHA + size for `plsw.lgo`
+   (will grow ~64 KB from the pre-reservation — expected and
+   recorded as the Phase 2 cost). Capture new size for
+   `plsw_test.lgo`. Update `docs/shrink-lgo-size.md` Phase 2
+   section to "DONE 2026-05-10" with measured numbers and the
+   final API. Add CHANGES.md rebuild-trigger entry. Sets the
+   stage for the next saga (`ast-to-chunks`).
+
+## What does NOT go in this saga
+
+* No pool migration (AST stays in its 10 parallel arrays;
+  arena_buf stays static; src_buf stays static). All migrations
+  are subsequent sagas.
+* No lint script (Phase 5, separate saga).
 * No tc24r change.
+* No measurement-driven `CHUNK_MAX` retuning — that's Phase 0's
+  job inside `ast-to-chunks` once we can actually count consumed
+  chunks against real compiles.

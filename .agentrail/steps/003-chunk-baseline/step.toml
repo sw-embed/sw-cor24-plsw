@@ -1,0 +1,10 @@
+number = 3
+slug = "chunk-baseline"
+status = "pending"
+description = """
+Capture the post-Phase-2 baseline measurements and update the
+shrink-lgo plan..."""
+role = "production"
+context_files = []
+created_at = "2026-05-10T07:52:37"
+commits = []

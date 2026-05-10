@@ -1,5 +1,6 @@
 #include "io.h"
 #include "arena.h"
+#include "chunk.h"
 #include "lexer.h"
 #include "ast.h"
 #include "parser.h"
