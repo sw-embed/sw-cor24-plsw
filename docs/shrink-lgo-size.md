@@ -162,21 +162,31 @@ biggest, surest wins given the corrected sizing.
 * Define a yardstick: **post-shrink target ≤ 700 KB `plsw.lgo`**
   with no functional regression. ~60% reduction.
 
-### Phase 1 — Test split (largest single win, low risk)
+### Phase 1 — Test split (largest single win, low risk) — DONE 2026-05-10
 
-Move `test_*` functions out of `src/main.c` into a separate test
-binary (or per-suite binaries). This cleaves the ~1 MB of test
-text from the production compiler.
+Shipped via `pr/test-split`. 46 `test_*` functions and
+`run_suite()` moved from `src/main.c` into a new
+`src/test_main.c`. The shared `compile_program()` driver and
+its COR24 runtime-preamble emitters moved into `src/compile.h`
+so both binaries can call them without duplicating the body.
 
-* Approach: a `src/test_main.c` that does `#include` of the same
-  compiler headers as `src/main.c` but defines only test bodies
-  + a `test_main()`. Build two `.lgo` outputs: `plsw.lgo`
-  (production, no tests) and `plsw_test.lgo` (test runner).
-* Risk: tests currently use `compile_program()` and friends
-  directly; the separation needs the compiler headers to compile
-  cleanly without `main()`.
-* Expected win: ~900 KB off `plsw.lgo` (from ~1.74 MB to
-  ~840 KB). Phase 1 alone gets us under the headline target.
+* Production `plsw.lgo`: 1,738,122 → **1,511,582 bytes**
+  (~226 KB / 13% saved). Less than the speculated ~900 KB:
+  the test code was ~6,800 lines but compiled to only ~226 KB
+  of `.text` because most lines were calls to `uart_puts` /
+  `print_int` / fixture string literals, not dense computation.
+* `.text` line count in `build/plsw.s` halved (56,293 → 27,386
+  lines), confirming the test-text removal even though .lgo
+  byte savings were smaller than line-count would suggest.
+* Production binary still has full `.data` (AST pool, symtab,
+  buffers) — those are header-declared globals shared by both
+  binaries. Phase 2 is what shrinks `.data`.
+* `just test` (reg-rs) unchanged: 15/15 green. It drives the
+  production compiler against `.plsw` fixtures via
+  `pipeline.sh` and never touched the in-binary suites.
+* New build target: `just build-test-lgo` produces
+  `build/plsw_test.lgo` for hands-on debugging of in-binary
+  suites.
 
 ### Phase 2 — AST chunk allocator (largest static win)
 
