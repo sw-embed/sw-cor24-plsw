@@ -188,21 +188,66 @@ so both binaries can call them without duplicating the body.
   `build/plsw_test.lgo` for hands-on debugging of in-binary
   suites.
 
-### Phase 2 — AST chunk allocator (largest static win)
+### Phase 2 — Chunk allocator scaffolding — DONE 2026-05-10
+
+Shipped as the `chunk-allocator` saga (three steps):
+
+* `pr/chunk-api` — `src/chunk.h` with the API + 64 KB pre-reserved
+  pool (`CHUNK_SIZE = 4096`, `CHUNK_MAX = 16`). Header-only, matches
+  `arena.h`'s convention. Included from `main.c` and `test_main.c`.
+* `pr/chunk-tests` — new suite #37 `test_chunk` in `src/test_main.c`
+  covering init, alloc-distinct, exhaustion, free+reuse,
+  free-of-unknown. Verified `chunk errors: 0` under `cor24-emu`.
+* `pr/chunk-baseline` — this entry.
+
+**Sizing (smaller than both the brief and the original Phase 2
+plan).** Per discussion 2026-05-10, the pool is `16 × 4 KB =
+64 KB`, not `4 × 64 KB = 256 KB` as originally written. Each
+chunk equals the 4 KB static-block ceiling — the granularity
+that Phase 5's lint script will enforce. 64 KB is the entire
+dynamic-memory budget for the production compiler; bump
+`CHUNK_MAX` only if `ast-to-chunks` measurements demand it.
+
+**API.** `chunk_init` / `chunk_alloc` / `chunk_free` / `chunk_used`.
+`chunk_alloc` returns `0` (NULL) on exhaustion; `chunk_free` is a
+silent no-op on NULL or any unknown pointer (no trap path on
+freestanding COR24).
+
+**Static cost recorded.** `build/plsw.lgo` grew from 1,511,582
+(post-`test-split`) to **1,657,430 bytes** (+145,848 bytes /
+~14%). `build/plsw_test.lgo` is 1,663,430 bytes. The growth
+breakdown:
+
+* `chunk_storage` lands as `.zero 65536` in `build/plsw.s`
+  (single directive — tc24r elides the explicit `.word` run
+  when there's no static initializer). The source-level
+  declaration carries `/* lint-exempt: chunk-pool */`. The
+  Phase 5 compiled-output lint will need to recognise this
+  symbol's exemption when it scans for `.zero N > 4096`.
+* `chunk_table` lands as `.zero 96` (16 entries × 6 bytes).
+* tc24r's function-level DCE elides `chunk_init`/`alloc`/`free`/
+  `used` from `build/plsw.s` (no callers yet) — they appear only
+  in `build/plsw_test.s` where `test_chunk` uses them.
+
+**No headline shrink yet — by design.** Phase 2 is pre-reservation
+infrastructure. The actual reclaim lands in `ast-to-chunks` when
+the 360 KB AST static pool migrates onto these chunks.
+
+### Phase 2b — Migrate the AST onto chunks (next saga: `ast-to-chunks`)
 
 Replace the 10 × 12,288-slot parallel arrays with a chunk-based
 node store: nodes allocated from a fixed chunk pool, freed at
 end-of-compilation.
 
-* Approach: Phase 2 of the brief, but with corrected sizing —
-  start at `CHUNK_MAX = 4` × `CHUNK_SIZE = 65,536` chars =
-  256 KB pool. Adjust based on real compilation node counts (a
-  small `.plsw` program uses ~hundreds of nodes; biggest
-  realistic input maybe a few thousand).
-* Expected win: ~360 KB → ~256 KB pool, but the pool also subsumes
-  `arena_buf` (~24 KB), allows shrinking `src_buf`/`inc_buf`/
-  `mac_gen_buf` if they migrate to chunks too. Net ~150–200 KB
-  off .data.
+* Approach: indexable per-chunk node blocks. With `CHUNK_SIZE =
+  4096` chars and ~30 bytes per node (10 ints × 3 bytes), one
+  4 KB chunk holds ~136 nodes. 16 chunks max → ~2,176-node
+  ceiling — well below today's 12,288 cap, so a Phase 0-style
+  measurement against representative `.plsw` inputs must come
+  first to confirm the cap is workable (or bump `CHUNK_MAX`
+  measurement-driven).
+* Expected win: ~360 KB AST static reclaimed; net offset by the
+  64 KB pool already paid in Phase 2 = **~296 KB net shrink**.
 * Risk: AST access is in many call sites; the migration touches
   lots of code. Lint discipline (Phase 5) should land first or
   alongside to prevent regressions.
@@ -237,10 +282,10 @@ new baseline in `CHANGES.md`.
 Each phase is a separate saga. This saga (`shrink-lgo`) has only
 the plan-and-baseline step; subsequent sagas:
 
-1. `test-split` — Phase 1.
+1. `test-split` — Phase 1. **DONE 2026-05-10.**
 2. `chunk-allocator` — Phase 2 scaffolding (allocator + tests,
-   no AST migration yet).
-3. `ast-to-chunks` — Phase 2 migration of AST.
+   no AST migration yet). **DONE 2026-05-10.**
+3. `ast-to-chunks` — Phase 2b migration of AST. Next saga.
 4. `buffer-to-chunks` — Phase 3 (optional; only if dcsno still
    needs more headroom).
 5. `static-lint` — Phase 5.
