@@ -5,6 +5,9 @@ tc24r_include := env("ORGROOT", env("HOME") / "github/sw-embed") / "sw-cor24-x-t
 main_c := "src/main.c"
 main_s := "build/plsw.s"
 plsw_lgo := "build/plsw.lgo"
+test_main_c := "src/test_main.c"
+test_main_s := "build/plsw_test.s"
+plsw_test_lgo := "build/plsw_test.lgo"
 linker_dir := "components/linker"
 dist_bin := "dist/bin"
 
@@ -19,6 +22,26 @@ build:
 # this directly without re-assembling).
 build-lgo: build
     cor24-asm {{main_s}} -o {{plsw_lgo}}
+
+# Build the test runner binary. The in-binary suites
+# (test_strings, test_lexer, ..., test_select_codegen) live in
+# src/test_main.c and link against the same compiler headers as
+# src/main.c. They are NOT shipped in the production plsw.lgo;
+# the production build is what the toolchain installs and what
+# scripts/pipeline.sh / reg-rs invoke. Use plsw_test.lgo only
+# for diagnostic / development runs of the in-binary suites.
+build-test:
+    mkdir -p build
+    tc24r {{test_main_c}} -o {{test_main_s}} -I {{tc24r_include}} -I src
+
+build-test-lgo: build-test
+    cor24-asm {{test_main_s}} -o {{plsw_test_lgo}}
+
+# Run the in-binary test suites interactively (development aid).
+# `just test` is the regression suite; this is for hands-on
+# debugging of a specific suite.
+run-test: build-test-lgo
+    cor24-emu --lgo {{plsw_test_lgo}} --terminal --echo --speed 0
 
 # Build and run interactively
 run: build-lgo

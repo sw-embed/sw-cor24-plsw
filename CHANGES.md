@@ -4,6 +4,39 @@ Notable PL/SW changes that affect the shipped `plsw.lgo`. Not a
 full changelog -- only entries that signal "rebuild and reinstall
 the compiler" are recorded here.
 
+## 2026-05-10 -- test split: production compiler shrinks ~13%
+
+* Refactor: `refactor(build): split tests out of main.c into
+  test_main.c` (saga `pr/test-split`, Phase 1 of
+  `docs/shrink-lgo-size.md`).
+* Rebuild signal: this same saga's mark-pr.
+* Effect: 46 `test_*` functions and the `run_suite()` dispatcher
+  move from `src/main.c` (which tc24r compiles into the shipped
+  `plsw.lgo`) into a new `src/test_main.c` (which builds a
+  separate `plsw_test.lgo` for in-binary diagnostic suites). The
+  shared `compile_program()` driver and its COR24 runtime
+  preamble emitters move into `src/compile.h` so both binaries
+  reuse them without duplication. `just build-lgo` keeps making
+  the production compiler; new `just build-test-lgo` makes the
+  test runner. `just test` (reg-rs) is unaffected -- it uses
+  `pipeline.sh` which drives the production `plsw.lgo` against
+  `.plsw` fixtures, never the in-binary suites.
+* Build SHA: `build/plsw.lgo` SHA-256
+  `f6210655b99b51b6a87799c8620c2a95f16f80a34f11c5c1a8bcbf734d2e74d7`
+  (1,511,582 bytes; ~13% smaller than the 2026-05-09 streaming
+  build of 1,738,122 bytes -- ~226 KB freed by removing test
+  text from production).
+* Direct downstream: nothing is gated on this rebuild yet.
+  Phase 2 (AST chunk allocator, `docs/shrink-lgo-size.md` Phase
+  2) is the next planned reduction.
+* Rebuild / install command:
+  ```sh
+  cd $SRCROOT
+  just clean
+  just build-lgo
+  install -m 0640 build/plsw.lgo $TOOLROOT/../lib/cor24/plsw.lgo
+  ```
+
 ## 2026-05-09 -- streaming `.s` emission, 4 KB coalescer
 
 * Codegen change: `feat(emit): stream .s emission, replace

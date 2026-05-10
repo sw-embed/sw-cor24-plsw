@@ -1,45 +1,71 @@
-# Shrink plsw.lgo
+# Test split (Phase 1 of shrink-lgo)
 
-The compiled PL/SW compiler (`build/plsw.lgo`) is 1.7 MB — far
-larger than this language's "tiny integer subset of PL/I" warrants
-for an embedded target. Storage waste here is gating dcsno's
-`saga-expr-completeness` and, downstream, dcftn. This saga reduces
-both static-storage waste and code size to free SRAM headroom and
-speed builds.
+Per `docs/shrink-lgo-size.md` Phase 1. Move ~6,800 lines of test
+code (46 `test_*` functions + `run_suite()` + the 'a'/numeric
+branches of `main()`) out of `src/main.c` and into a separate
+test driver. Build two `.lgo`s:
 
-## Corrected baseline understanding
+* `build/plsw.lgo` — production compiler (compile mode + REPL).
+  Goal: shrink from 1.74 MB to under ~900 KB.
+* `build/plsw_test.lgo` — test runner. Same headers, same
+  compiler internals, but only test code in its top-level.
 
-Earlier analysis claimed tc24r emits one COR24 word per `char[]`
-slot ("3× tax"). That was wrong: `sizeof(char) == 1` in tc24r and
-chars are packed 3-per-word in `.word` directives. The original
-brief at `tools/briefs/dcpls-dynamic-memory-architecture.md` carried
-the same incorrect assumption in its constraint #1. The true
-physical sizes are ~1× the C array length, not 3×.
+`just test` (reg-rs) does NOT use the in-binary test suites
+(driver.sh + pipeline.sh use production `plsw.lgo` to compile
+`.plsw` fixtures). So the split is functionally invisible to
+`just test`. The only thing the test split changes is what the
+production `.lgo` carries.
 
-So:
+## Constraint discovered during prep
 
-* `emit_buf[262144]` (pre-streaming) was ~256 KB physical, not
-  786 KB. The streaming-emit saga's win was real but smaller than
-  the brief implied.
-* `chunk_storage[16 * 65536]` proposed in Phase 2 = 1 MB physical,
-  not 3 MB — fits in SRAM, but at 100% of budget, so still wants
-  parameter tuning.
-* No tc24r ABI change is needed. The brief's "out of scope" item
-  on 24-bit char packing is moot.
+tc24r accepts `-D` on its CLI but silently ignores it for
+`#ifdef`. Source-level `#define` works; CLI doesn't. So the
+split must be done with two separate source files, not a single
+`#ifdef BUILD_TESTS` switch. (Reported to tc24r is out of scope.)
 
-## Scope
+## Approach
 
-This saga is the umbrella plan; individual phases ship as their
-own sagas. The plan and detailed phase breakdown live in
-`docs/shrink-lgo-size.md` (written by step 1 of this saga).
+* New file `src/test_main.c` — `#include`s the same compiler
+  headers as `src/main.c`, contains the 46 `test_*` functions,
+  the `run_suite(int)` dispatcher, and a small `main()` that
+  reads the suite # / "a" / "r" and dispatches.
+* `src/main.c` shrinks to: includes, the source-read helpers
+  (`read_line_term`, `read_file_content`, `read_source`,
+  `read_compile_input`, `inc_buf_alloc`), `src_buf` /
+  `inc_buf`, and a `main()` with only compile mode + REPL.
+* `justfile`:
+  - `build` still builds `plsw.s` from `main.c`.
+  - New `build-test` target builds `plsw_test.s` from
+    `test_main.c`, then `plsw_test.lgo`.
+  - `test` keeps depending on `build-lgo` (production), since
+    that's what reg-rs needs. A manual `just smoke-test` (or
+    similar) can run the in-binary tests via plsw_test.lgo if
+    needed for diagnostics.
+
+## Tests
+
+1. `just clean && just build-lgo` — must succeed and produce a
+   smaller `plsw.lgo`.
+2. `just build-test` — must succeed and produce `plsw_test.lgo`
+   that runs the in-binary suites correctly.
+3. `just test` — all 15 reg-rs tests still green.
+4. CHANGES.md gets a new rebuild-trigger entry with the new SHA.
 
 ## Steps
 
-1. **plan-and-baseline**: write `docs/shrink-lgo-size.md` with
-   the corrected analysis, the multi-phase roadmap, and the
-   measured baseline (component sizes by category). Update the
-   architecture brief's constraint #1 inline correction note.
-   Commit doc + any measurement scripts.
+1. **test-split**. Single step:
+   - Create `src/test_main.c` with all test code + a test-only
+     `main()`.
+   - Strip `src/main.c` to production-only.
+   - Add `build-test` / `build-test-lgo` targets to `justfile`.
+   - Verify both binaries build.
+   - Run `just test`; confirm 15/15 green.
+   - Capture new `plsw.lgo` SHA + size; add CHANGES.md entry.
+   - Commit + complete + mark-pr.
 
-Subsequent phases (test split, chunk allocator, lint, etc.) will
-be added as separate sagas based on what the baseline reveals.
+## What does NOT go in this PR
+
+* No allocator change (Phase 2's chunk allocator).
+* No buffer migration (Phase 3).
+* No lint rule (Phase 5).
+* No tc24r change.
