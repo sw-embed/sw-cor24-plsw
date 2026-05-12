@@ -1,6 +1,6 @@
 number = 3
 slug = "ast-chunk-storage"
-status = "pending"
+status = "in-progress"
 description = """
 Switch the AST accessor macros (added in `ast-accessors`) to
 chunk-backed sto..."""

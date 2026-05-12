@@ -6728,6 +6728,12 @@ int main() {
     int suite;
     int len;
 
+    /* Initialize the chunk pool once so suites that use AST nodes
+       (parser, codegen, etc.) can call ast_init() / nd_alloc() without
+       hitting an unset chunk_table.base. test_chunk re-inits as part
+       of its own setup, which is idempotent. */
+    chunk_init();
+
     uart_puts("PL/SW Compiler Tests v0.1");
     uart_puts("COR24 target");
     uart_putstr("Enter suite # (0-37) or 'a' for all: ");
