@@ -1,6 +1,6 @@
 number = 4
 slug = "ast-baseline"
-status = "pending"
+status = "in-progress"
 description = """
 Capture post-Phase-2b baseline measurements and close the
 ast-to-chunks saga...."""

@@ -4,6 +4,69 @@ Notable PL/SW changes that affect the shipped `plsw.lgo`. Not a
 full changelog -- only entries that signal "rebuild and reinstall
 the compiler" are recorded here.
 
+## 2026-05-12 -- AST onto chunks: production compiler shrinks ~47%
+
+* Saga: `ast-to-chunks` (Phase 2b of
+  `docs/shrink-lgo-size.md`, four steps `pr/measure-ast` →
+  `pr/ast-accessors` → `pr/ast-chunk-storage` →
+  `pr/ast-baseline`).
+* Rebuild signal: **REQUIRED.** The `.lgo` bytes change and the
+  binary's behavior at the AST-cap boundary changes (see below).
+  Downstream consumers (dcsno, dcftn) should refresh their
+  installed `plsw.lgo`.
+* Effect: the ten static `nd_*_arr[NODE_POOL_MAX]` parallel
+  arrays in `src/ast.h` (10 × 12,288 ints = ~360 KB of
+  pre-reserved `.data`) are gone. AST nodes now live in
+  `struct ast_block` instances drawn from the 64 KB chunk pool
+  introduced in Phase 2. The accessor macros from
+  `pr/ast-accessors` (e.g. `nd_kind(i)`) make the move
+  transparent at all 406 callsites.
+  - `AST_NODES_PER_CHUNK = 136` (10 fields × 3 bytes × 136 =
+    4,080 bytes, fits one 4 KB chunk with 16 bytes of slack).
+  - `AST_CHUNKS_MAX = CHUNK_MAX = 16`. Effective node cap:
+    **2,176** (vs. the prior static cap of 12,288; 5.4×
+    headroom over the 406-node fixture peak recorded in
+    `docs/memory-audit-2026-05-10.md`).
+  - `compile_program()` calls `chunk_init()` first thing.
+    `ast_init()` returns owned chunks to the pool between
+    compiles; REPL-mode back-to-back compiles confirmed clean
+    across 30+ cycles.
+* **Cap-boundary message change.** Exhaustion now reports
+  "AST pool exhausted (chunk table full)" or "chunk_alloc
+  returned NULL for AST node" instead of the prior
+  "AST node pool exhausted (12288 nodes)". Any code or fixture
+  that greps the old message needs updating.
+* Build SHAs:
+  - `build/plsw.lgo` SHA-256
+    `3877480056c5ded09a0891305ae2574b214aa3cef4142c65fc049917720affef`
+    (872,174 bytes; **-785,256 bytes / -47.4%** vs. the
+    post-`chunk-allocator` build of 1,657,430).
+  - `build/plsw_test.lgo` SHA-256
+    `7ffd684c01c006cff1e79ba2e04f4c9e2cc4e06400a8f8f77b2c5f6a18375a3d`
+    (884,680 bytes; **-778,696 bytes / -46.8%** vs.
+    1,663,376).
+* No semantic regression: `just test` 15/15 green; in-binary
+  emulator suites 4/5/14/17/36/37 all 0 errors; all-suite run
+  confirms chunk reset hygiene. Pre-existing
+  streaming-emit-contract failures on suites 31-35 are
+  unchanged (verified against the pre-saga baseline; out of
+  scope for this saga).
+* Architecture context: `docs/shrink-lgo-size.md` Phase 2b is
+  marked DONE 2026-05-12. The headline ≤ 700 KB target is
+  still 172 KB out, but `plsw.lgo` at 872 KB leaves COR24's
+  1 MB SRAM with enough headroom that dcsno's
+  `saga-expr-completeness` and dcftn are **no longer gated**
+  by compiler size. Phase 3 (`buffer-to-chunks`) is optional,
+  contingent on whether dcsno/dcftn need additional headroom
+  after rebuilding.
+* Rebuild / install command:
+  ```sh
+  cd $SRCROOT
+  just clean
+  just build-lgo
+  install -m 0640 build/plsw.lgo $TOOLROOT/../lib/cor24/plsw.lgo
+  ```
+
 ## 2026-05-10 -- chunk allocator scaffolding (no semantic change)
 
 * Infrastructure: `feat(chunk): scaffold 4KB chunk allocator`

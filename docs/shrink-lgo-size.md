@@ -7,6 +7,19 @@ unreasonable. Storage waste here is **gating dcsno's
 `saga-expr-completeness` work and, downstream, dcftn**. This
 document is the umbrella plan for reducing it.
 
+## Status (2026-05-12)
+
+`build/plsw.lgo` is now **872,174 bytes** (sha256
+`38774800…0affef`), a **~865 KB drop / ~50% reduction** from the
+1,738,122-byte 2026-05-09 baseline. Phases 1, 2, and 2b are all
+landed; the headline yardstick of ≤ 700 KB is still 172 KB away,
+but the new total leaves COR24's 1 MB SRAM with ~150 KB of
+headroom plus the full 64 KB chunk pool's worth of dynamic
+working space — enough that **dcsno's `saga-expr-completeness`
+and dcftn are no longer gated by plsw.lgo size**. Phase 3
+(`buffer-to-chunks`) is now optional, decided after dcsno/dcftn
+report whether they need the additional headroom.
+
 This doc supersedes the constraint #1 framing in
 `tools/briefs/dcpls-dynamic-memory-architecture.md`. The brief's
 phase structure (0..6) is kept, but its sizing arithmetic is
@@ -233,24 +246,87 @@ breakdown:
 infrastructure. The actual reclaim lands in `ast-to-chunks` when
 the 360 KB AST static pool migrates onto these chunks.
 
-### Phase 2b — Migrate the AST onto chunks (next saga: `ast-to-chunks`)
+### Phase 2b — Migrate the AST onto chunks — DONE 2026-05-12
 
-Replace the 10 × 12,288-slot parallel arrays with a chunk-based
-node store: nodes allocated from a fixed chunk pool, freed at
-end-of-compilation.
+Shipped as the `ast-to-chunks` saga (four steps):
 
-* Approach: indexable per-chunk node blocks. With `CHUNK_SIZE =
-  4096` chars and ~30 bytes per node (10 ints × 3 bytes), one
-  4 KB chunk holds ~136 nodes. 16 chunks max → ~2,176-node
-  ceiling — well below today's 12,288 cap, so a Phase 0-style
-  measurement against representative `.plsw` inputs must come
-  first to confirm the cap is workable (or bump `CHUNK_MAX`
-  measurement-driven).
-* Expected win: ~360 KB AST static reclaimed; net offset by the
-  64 KB pool already paid in Phase 2 = **~296 KB net shrink**.
-* Risk: AST access is in many call sites; the migration touches
-  lots of code. Lint discipline (Phase 5) should land first or
-  alongside to prevent regressions.
+* `pr/measure-ast` — Phase 0 measurement step.
+  `#ifdef MEASURE`-instrumented `nd_alloc()` ran the production
+  compiler against all 15 reg-rs fixtures; peak AST node count
+  was **406** (storage_coalesce fixture), min 8 (hello).
+  Captured in `docs/memory-audit-2026-05-10.md`. Decision:
+  keep `CHUNK_MAX = 16`; the 2,176-node ceiling has **5.4×
+  headroom** over the worst-case fixture.
+* `pr/ast-accessors` — introduced the ten `nd_kind(i)` /
+  `nd_type(i)` / … function-like accessor macros and migrated
+  all 406 `nd_*[i]` callsites across `src/ast.h`,
+  `src/types.h`, `src/parser.h`, `src/layout.h`,
+  `src/codegen.h`, `src/test_main.c`. Storage was unchanged in
+  this step — the macros initially resolved to the same parallel
+  arrays — so the layer was proven before storage moved.
+* `pr/ast-chunk-storage` — switched the macros to chunk-backed
+  storage. The 10 static `nd_*_arr[NODE_POOL_MAX]` arrays were
+  replaced with a `struct ast_block` of parallel sub-arrays
+  drawn from `chunk_alloc()`, indexed via `(i /
+  AST_NODES_PER_CHUNK, i % AST_NODES_PER_CHUNK)`. `ast_init()`
+  returns chunks to the pool between compiles. `chunk_init()`
+  is now called at the top of `compile_program()` and once at
+  test-runner startup.
+* `pr/ast-baseline` — this entry.
+
+**Layout chosen.** `AST_NODES_PER_CHUNK = 136`,
+`AST_CHUNKS_MAX = CHUNK_MAX = 16`. Per-node footprint is 10
+fields × 3 bytes = 30 bytes; 136 × 30 = 4080 bytes per chunk,
+fitting one 4 KB chunk with 16 bytes of slack.
+Effective node cap: **2,176** (vs. the old static cap of
+12,288). Peak observed chunk usage: **3 of 16** (406 nodes ÷
+136 ≈ 2.98, rounds up to 3) — plenty of room for larger
+programs and concurrent AST/other-pool consumers when Phase 3
+arrives.
+
+**Static cost reclaimed.** `build/plsw.lgo` dropped from
+1,657,430 bytes (post-`chunk-allocator`) to **872,174 bytes**
+(saved **785,256 bytes / ~47%**). The drop overshoots the
+original ~296 KB projection by a wide margin: the assembler's
+encoding of the ten `int nd_*_arr[12288]` declarations carried
+significant overhead beyond the raw 360 KB the size doc had
+estimated for `.data`, and removing them collapsed the `.s`
+text as well. `build/plsw_test.lgo` dropped from 1,663,376 to
+**884,680 bytes** (-778,696 bytes / ~47%).
+
+**SHAs.**
+
+* `build/plsw.lgo` sha256
+  `3877480056c5ded09a0891305ae2574b214aa3cef4142c65fc049917720affef`
+  (872,174 bytes).
+* `build/plsw_test.lgo` sha256
+  `7ffd684c01c006cff1e79ba2e04f4c9e2cc4e06400a8f8f77b2c5f6a18375a3d`
+  (884,680 bytes).
+
+**Behavior change at the cap boundary.** On AST exhaustion, the
+old "AST node pool exhausted (12288 nodes)" message is replaced
+by "AST pool exhausted (chunk table full)" or, when the chunk
+pool itself is empty, "chunk_alloc returned NULL for AST node".
+Downstream consumers should treat this as the rebuild-required
+signal alongside the .lgo SHA change.
+
+**No semantic regression.** `just test` (reg-rs) stays 15/15
+green. Emulator suites 4 (AST), 5 (parser), 14 (codegen,
+`cg_err=0`), 17 (proc codegen), 36 (SELECT/WHEN), 37 (chunk
+allocator, 0 errors) all pass. The all-suite (`a`) run
+confirms reset hygiene across 30+ `ast_init()` cycles — chunks
+return cleanly to the pool between back-to-back compiles, so a
+16-chunk pool sustains arbitrary REPL workloads.
+
+**Out of scope, but observed.** Suites 31–35 (hello-world /
+LED-toggle / counted-loop / record-pointer / multi-based
+compile-roundtrip) have a pre-existing failure pattern: the
+streaming-emit contract in `compile_program()` flushes most of
+the `.s` to UART before the test sees `emit_output()`, so
+`str_find` on the returned tail finds nothing. Verified against
+the pre-saga baseline — same 8 failures there. Filed as a
+candidate for a future saga (rework those tests to capture
+streamed output, or buffer the full emission for tests).
 
 ### Phase 3 — Migrate buffers to chunks (bonus on Phase 2)
 
@@ -285,17 +361,18 @@ the plan-and-baseline step; subsequent sagas:
 1. `test-split` — Phase 1. **DONE 2026-05-10.**
 2. `chunk-allocator` — Phase 2 scaffolding (allocator + tests,
    no AST migration yet). **DONE 2026-05-10.**
-3. `ast-to-chunks` — Phase 2b migration of AST. Next saga.
-4. `buffer-to-chunks` — Phase 3 (optional; only if dcsno still
-   needs more headroom).
+3. `ast-to-chunks` — Phase 2b migration of AST.
+   **DONE 2026-05-12.**
+4. `buffer-to-chunks` — Phase 3 (optional; only if dcsno/dcftn
+   report needing more headroom after rebuilding on the
+   post-2b plsw.lgo).
 5. `static-lint` — Phase 5.
 6. `shrink-lgo-verify` — Phase 6.
 
 Ship in order; each unblocks the next. dcsno's
-`saga-expr-completeness` step 003 unblocks earlier — likely
-right after Phase 1 (test split), since splitting tests gives
-the production compiler all the SRAM headroom it needs without
-any allocator work.
+`saga-expr-completeness` step 003 unblocked after Phase 1 (test
+split). Phase 2b's ~785 KB reclaim now also clears the dcftn
+gate — `plsw.lgo` at 872 KB leaves ample SRAM for runtime work.
 
 ## Out of scope (still)
 
