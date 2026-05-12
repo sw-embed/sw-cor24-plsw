@@ -62,7 +62,7 @@ int layout_dcl_width(int node) {
     if (node == NODE_NULL) return 0;
 
     /* Record type: walk children to compute total size */
-    if (nd_type[node] == TYPE_RECORD) {
+    if (nd_type(node) == TYPE_RECORD) {
         layout_last_tdesc = -1;
         offset = 0;
         fcount = 0;
@@ -72,19 +72,19 @@ int layout_dcl_width(int node) {
         if (desc >= 0) {
             fbase = desc * TDESC_FIELD_MAX;
 
-            child = nd_left[node];
+            child = nd_left(node);
             while (child != NODE_NULL && fcount < TDESC_FIELD_MAX) {
                 fw = layout_dcl_width(child);
                 if (fw == 0) fw = 3;  /* default to 24-bit */
 
-                td_fname[fbase + fcount] = nd_name[child];
-                td_ftype[fbase + fcount] = nd_type[child];
+                td_fname[fbase + fcount] = nd_name(child);
+                td_ftype[fbase + fcount] = nd_type(child);
                 td_fwidth[fbase + fcount] = fw;
                 td_foffset[fbase + fcount] = offset;
 
                 offset = offset + fw;
                 fcount = fcount + 1;
-                child = nd_next[child];
+                child = nd_next(child);
             }
 
             td_count[desc] = fcount;
@@ -95,12 +95,12 @@ int layout_dcl_width(int node) {
     }
 
     /* Simple type width */
-    w = type_width(nd_type[node]);
+    w = type_width(nd_type(node));
     if (w == 0) w = 3;  /* default to 24-bit for untyped */
 
     /* Array: width = element_width * dimension */
-    if (nd_ival[node] > 0) {
-        w = w * nd_ival[node];
+    if (nd_ival(node) > 0) {
+        w = w * nd_ival(node);
     }
 
     return w;
@@ -123,11 +123,11 @@ void layout_params(int first_param) {
     offset = PARAM_BASE_OFFSET;
 
     while (p != NODE_NULL) {
-        w = type_width(nd_type[p]);
+        w = type_width(nd_type(p));
         if (w == 0) w = 3;
 
         /* Insert parameter into symbol table */
-        idx = sym_insert(nd_name[p], nd_type[p], w, STOR_AUTO);
+        idx = sym_insert(nd_name(p), nd_type(p), w, STOR_AUTO);
         if (idx >= 0) {
             sym_offset[idx] = offset;
             sym_flags[idx] = sym_flags[idx] | SYM_F_PARAM;
@@ -135,7 +135,7 @@ void layout_params(int first_param) {
 
         /* Parameters always occupy 3-byte stack slots (push is 3 bytes) */
         offset = offset + 3;
-        p = nd_next[p];
+        p = nd_next(p);
     }
 }
 
@@ -152,48 +152,48 @@ void layout_locals(int body_node) {
     if (body_node == NODE_NULL) return;
 
     /* If this node is itself a statement (not a BLOCK), handle it directly */
-    if (nd_kind[body_node] == NODE_IF) {
+    if (nd_kind(body_node) == NODE_IF) {
         /* Iterate through ELSE IF chain instead of recursing (#33) */
-        while (body_node != NODE_NULL && nd_kind[body_node] == NODE_IF) {
-            if (nd_right[body_node] != NODE_NULL)
-                layout_locals(nd_right[body_node]);
-            if (nd_ival[body_node] != NODE_NULL && nd_kind[nd_ival[body_node]] == NODE_IF) {
-                body_node = nd_ival[body_node];
+        while (body_node != NODE_NULL && nd_kind(body_node) == NODE_IF) {
+            if (nd_right(body_node) != NODE_NULL)
+                layout_locals(nd_right(body_node));
+            if (nd_ival(body_node) != NODE_NULL && nd_kind(nd_ival(body_node)) == NODE_IF) {
+                body_node = nd_ival(body_node);
             } else {
-                if (nd_ival[body_node] != NODE_NULL)
-                    layout_locals(nd_ival[body_node]);
+                if (nd_ival(body_node) != NODE_NULL)
+                    layout_locals(nd_ival(body_node));
                 break;
             }
         }
         return;
     }
-    if (nd_kind[body_node] == NODE_DO_WHILE || nd_kind[body_node] == NODE_DO_COUNT) {
-        if (nd_right[body_node] != NODE_NULL)
-            layout_locals(nd_right[body_node]);
+    if (nd_kind(body_node) == NODE_DO_WHILE || nd_kind(body_node) == NODE_DO_COUNT) {
+        if (nd_right(body_node) != NODE_NULL)
+            layout_locals(nd_right(body_node));
         return;
     }
-    if (nd_kind[body_node] == NODE_SELECT) {
-        int wh = nd_left[body_node];
+    if (nd_kind(body_node) == NODE_SELECT) {
+        int wh = nd_left(body_node);
         while (wh != NODE_NULL) {
-            if (nd_right[wh] != NODE_NULL)
-                layout_locals(nd_right[wh]);
-            wh = nd_next[wh];
+            if (nd_right(wh) != NODE_NULL)
+                layout_locals(nd_right(wh));
+            wh = nd_next(wh);
         }
-        if (nd_ival[body_node] != NODE_NULL)
-            layout_locals(nd_ival[body_node]);
+        if (nd_ival(body_node) != NODE_NULL)
+            layout_locals(nd_ival(body_node));
         return;
     }
 
     /* Walk statements in the body block */
-    stmt = nd_left[body_node];
+    stmt = nd_left(body_node);
     while (stmt != NODE_NULL) {
-        if (nd_kind[stmt] == NODE_DCL) {
+        if (nd_kind(stmt) == NODE_DCL) {
             w = layout_dcl_width(stmt);
 
             /* Insert into symbol table */
-            idx = sym_insert(nd_name[stmt], nd_type[stmt], w, nd_stor[stmt]);
+            idx = sym_insert(nd_name(stmt), nd_type(stmt), w, nd_stor(stmt));
             if (idx >= 0) {
-                if (nd_stor[stmt] == STOR_STATIC) {
+                if (nd_stor(stmt) == STOR_STATIC) {
                     /* Static: assign address from static area */
                     sym_offset[idx] = layout_static_next;
                     layout_static_next = layout_static_next + w;
@@ -201,12 +201,12 @@ void layout_locals(int body_node) {
                      * avoid collisions across modules (PROC__VAR) (#43) */
                     if (layout_current_proc) {
                         int plen = str_len(layout_current_proc);
-                        int nlen = str_len(nd_name[stmt]);
+                        int nlen = str_len(nd_name(stmt));
                         char *mangled = arena_alloc(plen + 2 + nlen + 1);
                         str_copy(mangled, layout_current_proc);
                         mangled[plen] = '_';
                         mangled[plen + 1] = '_';
-                        str_copy(mangled + plen + 2, nd_name[stmt]);
+                        str_copy(mangled + plen + 2, nd_name(stmt));
                         sym_asm_name[idx] = mangled;
                     }
                 } else {
@@ -216,55 +216,55 @@ void layout_locals(int body_node) {
                 }
 
                 /* Set flags and type descriptor for compound types */
-                if (nd_type[stmt] == TYPE_RECORD) {
+                if (nd_type(stmt) == TYPE_RECORD) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_RECORD;
                     sym_tdesc[idx] = layout_last_tdesc;
                 }
-                if (nd_ival[stmt] > 0) {
+                if (nd_ival(stmt) > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;
                 }
                 /* PTR: associate with most recent record type descriptor */
-                if (nd_type[stmt] == TYPE_PTR && layout_last_tdesc >= 0) {
+                if (nd_type(stmt) == TYPE_PTR && layout_last_tdesc >= 0) {
                     sym_tdesc[idx] = layout_last_tdesc;
                 }
             }
         }
         /* Recurse into nested blocks to find DCLs */
-        if (nd_kind[stmt] == NODE_BLOCK) {
+        if (nd_kind(stmt) == NODE_BLOCK) {
             layout_locals(stmt);
-        } else if (nd_kind[stmt] == NODE_IF) {
+        } else if (nd_kind(stmt) == NODE_IF) {
             /* Iterate through ELSE IF chain instead of recursing (#33) */
             {
                 int ifn = stmt;
-                while (ifn != NODE_NULL && nd_kind[ifn] == NODE_IF) {
-                    if (nd_right[ifn] != NODE_NULL)
-                        layout_locals(nd_right[ifn]);
-                    if (nd_ival[ifn] != NODE_NULL && nd_kind[nd_ival[ifn]] == NODE_IF) {
-                        ifn = nd_ival[ifn];
+                while (ifn != NODE_NULL && nd_kind(ifn) == NODE_IF) {
+                    if (nd_right(ifn) != NODE_NULL)
+                        layout_locals(nd_right(ifn));
+                    if (nd_ival(ifn) != NODE_NULL && nd_kind(nd_ival(ifn)) == NODE_IF) {
+                        ifn = nd_ival(ifn);
                     } else {
-                        if (nd_ival[ifn] != NODE_NULL)
-                            layout_locals(nd_ival[ifn]);
+                        if (nd_ival(ifn) != NODE_NULL)
+                            layout_locals(nd_ival(ifn));
                         break;
                     }
                 }
             }
-        } else if (nd_kind[stmt] == NODE_DO_WHILE) {
-            if (nd_right[stmt] != NODE_NULL)
-                layout_locals(nd_right[stmt]);
-        } else if (nd_kind[stmt] == NODE_DO_COUNT) {
-            if (nd_right[stmt] != NODE_NULL)
-                layout_locals(nd_right[stmt]);
-        } else if (nd_kind[stmt] == NODE_SELECT) {
-            int wh = nd_left[stmt];
+        } else if (nd_kind(stmt) == NODE_DO_WHILE) {
+            if (nd_right(stmt) != NODE_NULL)
+                layout_locals(nd_right(stmt));
+        } else if (nd_kind(stmt) == NODE_DO_COUNT) {
+            if (nd_right(stmt) != NODE_NULL)
+                layout_locals(nd_right(stmt));
+        } else if (nd_kind(stmt) == NODE_SELECT) {
+            int wh = nd_left(stmt);
             while (wh != NODE_NULL) {
-                if (nd_right[wh] != NODE_NULL)
-                    layout_locals(nd_right[wh]);
-                wh = nd_next[wh];
+                if (nd_right(wh) != NODE_NULL)
+                    layout_locals(nd_right(wh));
+                wh = nd_next(wh);
             }
-            if (nd_ival[stmt] != NODE_NULL)
-                layout_locals(nd_ival[stmt]);
+            if (nd_ival(stmt) != NODE_NULL)
+                layout_locals(nd_ival(stmt));
         }
-        stmt = nd_next[stmt];
+        stmt = nd_next(stmt);
     }
 }
 
@@ -277,14 +277,14 @@ int layout_proc(int proc_node) {
     if (proc_node == NODE_NULL) return 0;
 
     layout_frame_size = 0;
-    layout_current_proc = nd_name[proc_node];
+    layout_current_proc = nd_name(proc_node);
     sym_enter_scope();
 
     /* Lay out parameters */
-    layout_params(nd_left[proc_node]);
+    layout_params(nd_left(proc_node));
 
     /* Lay out local declarations in body */
-    layout_locals(nd_right[proc_node]);
+    layout_locals(nd_right(proc_node));
 
     layout_current_proc = 0;
     return layout_frame_size;
@@ -301,31 +301,31 @@ void layout_globals(int prog_node) {
 
     if (prog_node == NODE_NULL) return;
 
-    child = nd_left[prog_node];
+    child = nd_left(prog_node);
     while (child != NODE_NULL) {
-        if (nd_kind[child] == NODE_DCL) {
+        if (nd_kind(child) == NODE_DCL) {
             w = layout_dcl_width(child);
 
-            idx = sym_insert(nd_name[child], nd_type[child], w,
-                             nd_stor[child] == STOR_AUTO ? STOR_STATIC : nd_stor[child]);
+            idx = sym_insert(nd_name(child), nd_type(child), w,
+                             nd_stor(child) == STOR_AUTO ? STOR_STATIC : nd_stor(child));
             if (idx >= 0) {
                 sym_offset[idx] = layout_static_next;
                 layout_static_next = layout_static_next + w;
 
-                if (nd_type[child] == TYPE_RECORD) {
+                if (nd_type(child) == TYPE_RECORD) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_RECORD;
                     sym_tdesc[idx] = layout_last_tdesc;
                 }
-                if (nd_ival[child] > 0) {
+                if (nd_ival(child) > 0) {
                     sym_flags[idx] = sym_flags[idx] | SYM_F_ARRAY;
                 }
                 /* PTR: associate with most recent record type descriptor */
-                if (nd_type[child] == TYPE_PTR && layout_last_tdesc >= 0) {
+                if (nd_type(child) == TYPE_PTR && layout_last_tdesc >= 0) {
                     sym_tdesc[idx] = layout_last_tdesc;
                 }
             }
         }
-        child = nd_next[child];
+        child = nd_next(child);
     }
 }
 

@@ -121,23 +121,23 @@ int td_make_record(int dcl_node) {
     offset = 0;
 
     /* Walk child fields of the record DCL node */
-    child = nd_left[dcl_node];
+    child = nd_left(dcl_node);
     while (child != NODE_NULL && fcount < TDESC_FIELD_MAX) {
-        fw = type_width(nd_type[child]);
+        fw = type_width(nd_type(child));
         /* Arrays: width = element_width * dimension */
-        if (nd_ival[child] > 0) {
-            fw = fw * nd_ival[child];
+        if (nd_ival(child) > 0) {
+            fw = fw * nd_ival(child);
         }
         if (fw == 0) fw = 3;  /* default to 24-bit for untyped fields */
 
-        td_fname[fbase + fcount] = nd_name[child];
-        td_ftype[fbase + fcount] = nd_type[child];
+        td_fname[fbase + fcount] = nd_name(child);
+        td_ftype[fbase + fcount] = nd_type(child);
         td_fwidth[fbase + fcount] = fw;
         td_foffset[fbase + fcount] = offset;
 
         offset = offset + fw;
         fcount = fcount + 1;
-        child = nd_next[child];
+        child = nd_next(child);
     }
 
     td_count[i] = fcount;
