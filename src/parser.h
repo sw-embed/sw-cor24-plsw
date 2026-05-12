@@ -116,7 +116,7 @@ int parse_init_attr(void) {
         init_node = nd_alloc(NODE_LITERAL);
         if (init_node != NODE_NULL) {
             nd_set_name(init_node, cur_text);
-            nd_type[init_node] = TYPE_CHAR;
+            nd_type(init_node) = TYPE_CHAR;
         }
         parse_advance();
     } else {
@@ -178,12 +178,12 @@ int parse_dcl_field(int level) {
         return NODE_NULL;
     }
     /* name is already in arena, just assign directly */
-    nd_name[n] = name;
-    nd_type[n] = type;
-    nd_stor[n] = stor;
-    nd_level[n] = level;
-    nd_ival[n] = dim;
-    nd_right[n] = init;  /* init expression, or NODE_NULL */
+    nd_name(n) = name;
+    nd_type(n) = type;
+    nd_stor(n) = stor;
+    nd_level(n) = level;
+    nd_ival(n) = dim;
+    nd_right(n) = init;  /* init expression, or NODE_NULL */
 
     return n;
 }
@@ -208,12 +208,12 @@ int parse_dcl_record(int first_level) {
         return NODE_NULL;
     }
     nd_set_name(rec, cur_text);
-    nd_type[rec] = TYPE_RECORD;
-    nd_level[rec] = first_level;
+    nd_type(rec) = TYPE_RECORD;
+    nd_level(rec) = first_level;
     parse_advance();
 
     /* Parse optional storage class on record itself */
-    nd_stor[rec] = parse_storage();
+    nd_stor(rec) = parse_storage();
 
     /* Expect comma or semicolon after record name */
     if (!parse_match(TOK_COMMA)) {
@@ -372,10 +372,10 @@ int parse_primary(void) {
         /* Create a LITERAL node -- resolved to size during codegen */
         int n = nd_alloc(NODE_LITERAL);
         if (n != NODE_NULL) {
-            nd_name[n] = name;
-            nd_type[n] = TYPE_INT24;
-            nd_ival[n] = -1;  /* marker: resolve in codegen */
-            nd_stor[n] = TOK_SIZEOF;  /* tag for codegen to identify */
+            nd_name(n) = name;
+            nd_type(n) = TYPE_INT24;
+            nd_ival(n) = -1;  /* marker: resolve in codegen */
+            nd_stor(n) = TOK_SIZEOF;  /* tag for codegen to identify */
         }
         return n;
     }
@@ -388,7 +388,7 @@ int parse_primary(void) {
         parse_expect(TOK_RPAREN);
         int n = nd_alloc(NODE_ADDR);
         if (n != NODE_NULL) {
-            nd_left[n] = operand;
+            nd_left(n) = operand;
         }
         return n;
     }
@@ -413,7 +413,7 @@ int parse_primary(void) {
         int n = nd_alloc(NODE_LITERAL);
         if (n != NODE_NULL) {
             nd_set_name(n, cur_text);
-            nd_type[n] = TYPE_CHAR;
+            nd_type(n) = TYPE_CHAR;
         }
         parse_advance();
         return n;
@@ -438,7 +438,7 @@ int parse_primary(void) {
                     parse_advance();
                     int a = parse_expr();
                     if (tail != NODE_NULL) {
-                        nd_next[tail] = a;
+                        nd_next(tail) = a;
                     }
                     tail = a;
                 }
@@ -446,8 +446,8 @@ int parse_primary(void) {
             parse_expect(TOK_RPAREN);
             int n = nd_alloc(NODE_CALL);
             if (n != NODE_NULL) {
-                nd_name[n] = name;
-                nd_left[n] = args;
+                nd_name(n) = name;
+                nd_left(n) = args;
             }
             return n;
         }
@@ -455,7 +455,7 @@ int parse_primary(void) {
         /* Plain identifier */
         int n = nd_alloc(NODE_IDENT);
         if (n != NODE_NULL) {
-            nd_name[n] = name;
+            nd_name(n) = name;
         }
         return n;
     }
@@ -475,7 +475,7 @@ int parse_postfix(int left) {
             }
             int n = nd_alloc(NODE_FIELD_ACCESS);
             if (n != NODE_NULL) {
-                nd_left[n] = left;
+                nd_left(n) = left;
                 nd_set_name(n, cur_text);
             }
             parse_advance();
@@ -490,7 +490,7 @@ int parse_postfix(int left) {
             }
             int n = nd_alloc(NODE_DEREF);
             if (n != NODE_NULL) {
-                nd_left[n] = left;
+                nd_left(n) = left;
                 nd_set_name(n, cur_text);
             }
             parse_advance();
@@ -620,13 +620,13 @@ int parse_stmt(void) {
 
             n = nd_alloc(NODE_IF);
             if (n != NODE_NULL) {
-                nd_left[n] = cond;
-                nd_right[n] = then_body;
-                nd_ival[n] = NODE_NULL;
+                nd_left(n) = cond;
+                nd_right(n) = then_body;
+                nd_ival(n) = NODE_NULL;
             }
 
             if (first_if == NODE_NULL) first_if = n;
-            if (prev_if != NODE_NULL) nd_ival[prev_if] = n;
+            if (prev_if != NODE_NULL) nd_ival(prev_if) = n;
             prev_if = n;
 
             /* Optional ELSE */
@@ -646,7 +646,7 @@ int parse_stmt(void) {
             } else {
                 else_body = parse_stmt();
             }
-            nd_ival[prev_if] = else_body;
+            nd_ival(prev_if) = else_body;
             break;
         }
 
@@ -670,8 +670,8 @@ int parse_stmt(void) {
 
             n = nd_alloc(NODE_DO_WHILE);
             if (n != NODE_NULL) {
-                nd_left[n] = cond;
-                nd_right[n] = body;
+                nd_left(n) = cond;
+                nd_right(n) = body;
             }
             return n;
         }
@@ -695,10 +695,10 @@ int parse_stmt(void) {
 
                 n = nd_alloc(NODE_DO_COUNT);
                 if (n != NODE_NULL) {
-                    nd_name[n] = name;
-                    nd_left[n] = start_expr;
-                    nd_ival[n] = end_expr;  /* end expr node index */
-                    nd_right[n] = body;
+                    nd_name(n) = name;
+                    nd_left(n) = start_expr;
+                    nd_ival(n) = end_expr;  /* end expr node index */
+                    nd_right(n) = body;
                 }
                 return n;
             }
@@ -737,7 +737,7 @@ int parse_stmt(void) {
                 while (cur_type == TOK_COMMA) {
                     parse_advance();
                     expr = parse_expr();
-                    if (tail != NODE_NULL) nd_next[tail] = expr;
+                    if (tail != NODE_NULL) nd_next(tail) = expr;
                     tail = expr;
                 }
             }
@@ -747,9 +747,9 @@ int parse_stmt(void) {
 
         n = nd_alloc(NODE_CALL);
         if (n != NODE_NULL) {
-            nd_name[n] = name;
-            nd_left[n] = args;
-            nd_line[n] = stmt_line;
+            nd_name(n) = name;
+            nd_left(n) = args;
+            nd_line(n) = stmt_line;
         }
         return n;
     }
@@ -765,7 +765,7 @@ int parse_stmt(void) {
         }
         parse_expect(TOK_SEMI);
         n = nd_return(expr);
-        if (n != NODE_NULL) nd_line[n] = stmt_line;
+        if (n != NODE_NULL) nd_line(n) = stmt_line;
         return n;
     }
 
@@ -790,7 +790,7 @@ int parse_stmt(void) {
                     nlen = str_len(cur_text);
                     name = arena_alloc(nlen + 1);
                     if (name) str_copy(name, cur_text);
-                    nd_name[lhs] = name;
+                    nd_name(lhs) = name;
                 }
                 nd_append(n, lhs);
                 parse_advance();
@@ -822,7 +822,7 @@ int parse_stmt(void) {
 
         n = nd_alloc(NODE_SELECT);
         if (n == NODE_NULL) return NODE_NULL;
-        nd_ival[n] = NODE_NULL;  /* OTHERWISE body defaults to none */
+        nd_ival(n) = NODE_NULL;  /* OTHERWISE body defaults to none */
 
         while (!parse_err && cur_type == TOK_WHEN) {
             parse_advance();
@@ -833,8 +833,8 @@ int parse_stmt(void) {
 
             w = nd_alloc(NODE_DO_WHILE);
             if (w != NODE_NULL) {
-                nd_left[w] = wcond;
-                nd_right[w] = wbody;
+                nd_left(w) = wcond;
+                nd_right(w) = wbody;
                 nd_append(n, w);
             }
         }
@@ -843,7 +843,7 @@ int parse_stmt(void) {
         if (cur_type == TOK_OTHERWISE) {
             parse_advance();
             obody = parse_select_block();
-            nd_ival[n] = obody;
+            nd_ival(n) = obody;
         }
 
         parse_expect(TOK_END);
@@ -863,18 +863,18 @@ int parse_stmt(void) {
         parse_expect(TOK_SEMI);
 
         /* Convert CALL to ARRAY_ACCESS for subscript assignment */
-        if (nd_kind[lhs] == NODE_CALL) {
-            nd_kind[lhs] = NODE_ARRAY_ACCESS;
+        if (nd_kind(lhs) == NODE_CALL) {
+            nd_kind(lhs) = NODE_ARRAY_ACCESS;
         }
 
         n = nd_assign(lhs, rhs);
-        if (n != NODE_NULL) nd_line[n] = stmt_line;
+        if (n != NODE_NULL) nd_line(n) = stmt_line;
         return n;
     }
 
     /* Expression statement (e.g., bare function call) */
     parse_expect(TOK_SEMI);
-    if (lhs != NODE_NULL) nd_line[lhs] = stmt_line;
+    if (lhs != NODE_NULL) nd_line(lhs) = stmt_line;
     return lhs;
 }
 
@@ -924,7 +924,7 @@ int parse_program(void) {
                         child = parse_proc();
                         /* Overwrite the PROC name with the label */
                         if (child != NODE_NULL) {
-                            nd_name[child] = name;
+                            nd_name(child) = name;
                         }
                     } else {
                         parse_error("expected PROC after label");
@@ -941,7 +941,7 @@ int parse_program(void) {
         }
 
         if (child != NODE_NULL) {
-            nd_line[child] = top_line;
+            nd_line(child) = top_line;
             nd_append(prog, child);
         }
     }
@@ -972,8 +972,8 @@ int parse_param(void) {
 
     n = nd_alloc(NODE_PARAM);
     if (n != NODE_NULL) {
-        nd_name[n] = name;
-        nd_type[n] = type;
+        nd_name(n) = name;
+        nd_type(n) = type;
     }
     return n;
 }
@@ -1037,7 +1037,7 @@ int parse_proc(void) {
             while (cur_type == TOK_COMMA && !parse_err) {
                 parse_advance();
                 p = parse_param();
-                if (ptail != NODE_NULL) nd_next[ptail] = p;
+                if (ptail != NODE_NULL) nd_next(ptail) = p;
                 ptail = p;
             }
         }
@@ -1098,11 +1098,11 @@ int parse_proc(void) {
     /* Build PROC node */
     n = nd_alloc(NODE_PROC);
     if (n != NODE_NULL) {
-        nd_name[n] = name;
-        nd_left[n] = params;
-        nd_right[n] = body;
-        nd_ival[n] = opts;
-        nd_stor[n] = ret_type;
+        nd_name(n) = name;
+        nd_left(n) = params;
+        nd_right(n) = body;
+        nd_ival(n) = opts;
+        nd_stor(n) = ret_type;
     }
     return n;
 }

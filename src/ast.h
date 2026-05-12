@@ -52,19 +52,33 @@
 /* Null node index sentinel */
 #define NODE_NULL (-1)
 
-/* Node pool -- parallel arrays */
+/* Node pool -- parallel arrays, accessed via macros below.
+   The _arr backing arrays are an implementation detail; callers use
+   the nd_kind(i) / nd_type(i) / ... accessor form so storage can move
+   to chunk-backed allocation without touching ~391 callsites. */
 #define NODE_POOL_MAX 12288
 
-int nd_kind[NODE_POOL_MAX];       /* node kind */
-int nd_type[NODE_POOL_MAX];       /* type info */
-int nd_stor[NODE_POOL_MAX];       /* storage class */
-int nd_level[NODE_POOL_MAX];      /* DCL level (1,3,5,...) */
-int nd_left[NODE_POOL_MAX];       /* left child index */
-int nd_right[NODE_POOL_MAX];      /* right child index */
-int nd_next[NODE_POOL_MAX];       /* sibling/next index */
-int nd_ival[NODE_POOL_MAX];       /* integer value or operator */
-int nd_line[NODE_POOL_MAX];       /* source line number (1-based) */
-char *nd_name[NODE_POOL_MAX];     /* name (arena-allocated) */
+int nd_kind_arr[NODE_POOL_MAX];   /* node kind */
+int nd_type_arr[NODE_POOL_MAX];   /* type info */
+int nd_stor_arr[NODE_POOL_MAX];   /* storage class */
+int nd_level_arr[NODE_POOL_MAX];  /* DCL level (1,3,5,...) */
+int nd_left_arr[NODE_POOL_MAX];   /* left child index */
+int nd_right_arr[NODE_POOL_MAX];  /* right child index */
+int nd_next_arr[NODE_POOL_MAX];   /* sibling/next index */
+int nd_ival_arr[NODE_POOL_MAX];   /* integer value or operator */
+int nd_line_arr[NODE_POOL_MAX];   /* source line number (1-based) */
+char *nd_name_arr[NODE_POOL_MAX]; /* name (arena-allocated) */
+
+#define nd_kind(i)  (nd_kind_arr[(i)])
+#define nd_type(i)  (nd_type_arr[(i)])
+#define nd_stor(i)  (nd_stor_arr[(i)])
+#define nd_level(i) (nd_level_arr[(i)])
+#define nd_left(i)  (nd_left_arr[(i)])
+#define nd_right(i) (nd_right_arr[(i)])
+#define nd_next(i)  (nd_next_arr[(i)])
+#define nd_ival(i)  (nd_ival_arr[(i)])
+#define nd_line(i)  (nd_line_arr[(i)])
+#define nd_name(i)  (nd_name_arr[(i)])
 
 int nd_count;                     /* number of allocated nodes */
 
@@ -87,16 +101,16 @@ int nd_alloc(int kind) {
     }
     int i = nd_count;
     nd_count = nd_count + 1;
-    nd_kind[i]  = kind;
-    nd_type[i]  = TYPE_NONE;
-    nd_stor[i]  = STOR_AUTO;
-    nd_level[i] = 0;
-    nd_left[i]  = NODE_NULL;
-    nd_right[i] = NODE_NULL;
-    nd_next[i]  = NODE_NULL;
-    nd_ival[i]  = 0;
-    nd_line[i]  = lex_line;
-    nd_name[i]  = 0;
+    nd_kind(i)  = kind;
+    nd_type(i)  = TYPE_NONE;
+    nd_stor(i)  = STOR_AUTO;
+    nd_level(i) = 0;
+    nd_left(i)  = NODE_NULL;
+    nd_right(i) = NODE_NULL;
+    nd_next(i)  = NODE_NULL;
+    nd_ival(i)  = 0;
+    nd_line(i)  = lex_line;
+    nd_name(i)  = 0;
     return i;
 }
 
@@ -107,7 +121,7 @@ void nd_set_name(int n, char *name) {
     char *s = arena_alloc(len + 1);
     if (s) {
         str_copy(s, name);
-        nd_name[n] = s;
+        nd_name(n) = s;
     }
 }
 
@@ -115,24 +129,24 @@ void nd_set_name(int n, char *name) {
 void nd_append(int parent, int child) {
     if (parent < 0 || child < 0) return;
     /* Find the appropriate child slot */
-    if (nd_left[parent] == NODE_NULL) {
-        nd_left[parent] = child;
+    if (nd_left(parent) == NODE_NULL) {
+        nd_left(parent) = child;
         return;
     }
     /* Walk the sibling chain from left child */
-    int cur = nd_left[parent];
-    while (nd_next[cur] != NODE_NULL) {
-        cur = nd_next[cur];
+    int cur = nd_left(parent);
+    while (nd_next(cur) != NODE_NULL) {
+        cur = nd_next(cur);
     }
-    nd_next[cur] = child;
+    nd_next(cur) = child;
 }
 
 /* Create a literal node */
 int nd_literal(int value) {
     int n = nd_alloc(NODE_LITERAL);
     if (n != NODE_NULL) {
-        nd_ival[n] = value;
-        nd_type[n] = TYPE_INT24;
+        nd_ival(n) = value;
+        nd_type(n) = TYPE_INT24;
     }
     return n;
 }
@@ -150,9 +164,9 @@ int nd_ident(char *name) {
 int nd_binop(int op, int left, int right) {
     int n = nd_alloc(NODE_BINOP);
     if (n != NODE_NULL) {
-        nd_ival[n] = op;
-        nd_left[n] = left;
-        nd_right[n] = right;
+        nd_ival(n) = op;
+        nd_left(n) = left;
+        nd_right(n) = right;
     }
     return n;
 }
@@ -161,8 +175,8 @@ int nd_binop(int op, int left, int right) {
 int nd_unop(int op, int operand) {
     int n = nd_alloc(NODE_UNOP);
     if (n != NODE_NULL) {
-        nd_ival[n] = op;
-        nd_left[n] = operand;
+        nd_ival(n) = op;
+        nd_left(n) = operand;
     }
     return n;
 }
@@ -171,8 +185,8 @@ int nd_unop(int op, int operand) {
 int nd_assign(int target, int value) {
     int n = nd_alloc(NODE_ASSIGN);
     if (n != NODE_NULL) {
-        nd_left[n] = target;
-        nd_right[n] = value;
+        nd_left(n) = target;
+        nd_right(n) = value;
     }
     return n;
 }
@@ -182,7 +196,7 @@ int nd_call(char *name, int args) {
     int n = nd_alloc(NODE_CALL);
     if (n != NODE_NULL) {
         nd_set_name(n, name);
-        nd_left[n] = args;
+        nd_left(n) = args;
     }
     return n;
 }
@@ -191,7 +205,7 @@ int nd_call(char *name, int args) {
 int nd_return(int expr) {
     int n = nd_alloc(NODE_RETURN);
     if (n != NODE_NULL) {
-        nd_left[n] = expr;
+        nd_left(n) = expr;
     }
     return n;
 }
@@ -246,44 +260,44 @@ void nd_print(int n, int depth) {
         uart_putstr("  ");
         d = d + 1;
     }
-    uart_putstr(nd_kind_name(nd_kind[n]));
-    if (nd_name[n]) {
+    uart_putstr(nd_kind_name(nd_kind(n)));
+    if (nd_name(n)) {
         uart_putstr(" name=");
-        uart_putstr(nd_name[n]);
+        uart_putstr(nd_name(n));
     }
-    if (nd_kind[n] == NODE_LITERAL) {
+    if (nd_kind(n) == NODE_LITERAL) {
         uart_putstr(" val=");
-        print_int(nd_ival[n]);
+        print_int(nd_ival(n));
     }
-    if (nd_kind[n] == NODE_BINOP || nd_kind[n] == NODE_UNOP) {
+    if (nd_kind(n) == NODE_BINOP || nd_kind(n) == NODE_UNOP) {
         uart_putstr(" op=");
-        uart_putstr(tok_name(nd_ival[n]));
+        uart_putstr(tok_name(nd_ival(n)));
     }
-    if (nd_type[n] != TYPE_NONE) {
+    if (nd_type(n) != TYPE_NONE) {
         uart_putstr(" type=");
-        uart_putstr(nd_type_name(nd_type[n]));
+        uart_putstr(nd_type_name(nd_type(n)));
     }
-    if (nd_kind[n] == NODE_DCL) {
-        if (nd_stor[n] == STOR_STATIC) uart_putstr(" STATIC");
-        if (nd_stor[n] == STOR_EXTERNAL) uart_putstr(" EXTERNAL");
-        if (nd_level[n] > 0) {
+    if (nd_kind(n) == NODE_DCL) {
+        if (nd_stor(n) == STOR_STATIC) uart_putstr(" STATIC");
+        if (nd_stor(n) == STOR_EXTERNAL) uart_putstr(" EXTERNAL");
+        if (nd_level(n) > 0) {
             uart_putstr(" lv=");
-            print_int(nd_level[n]);
+            print_int(nd_level(n));
         }
-        if (nd_ival[n] > 0) {
+        if (nd_ival(n) > 0) {
             uart_putstr(" dim=");
-            print_int(nd_ival[n]);
+            print_int(nd_ival(n));
         }
     }
-    if (nd_kind[n] == NODE_PROC) {
+    if (nd_kind(n) == NODE_PROC) {
         /* nd_ival stores option flags (bit 0=FREESTANDING, 1=NAKED, 2=LEAF) */
-        if (nd_ival[n] & 1) uart_putstr(" FREESTANDING");
-        if (nd_ival[n] & 2) uart_putstr(" NAKED");
-        if (nd_ival[n] & 4) uart_putstr(" LEAF");
+        if (nd_ival(n) & 1) uart_putstr(" FREESTANDING");
+        if (nd_ival(n) & 2) uart_putstr(" NAKED");
+        if (nd_ival(n) & 4) uart_putstr(" LEAF");
         /* nd_stor stores return type */
-        if (nd_stor[n] != TYPE_NONE) {
+        if (nd_stor(n) != TYPE_NONE) {
             uart_putstr(" returns=");
-            uart_putstr(nd_type_name(nd_stor[n]));
+            uart_putstr(nd_type_name(nd_stor(n)));
         }
     }
     uart_putchar(10);
@@ -296,57 +310,57 @@ void nd_dump(int n, int depth) {
     if (n == NODE_NULL) return;
     nd_print(n, depth);
     /* PROC: dump params then body with labels */
-    if (nd_kind[n] == NODE_PROC) {
+    if (nd_kind(n) == NODE_PROC) {
         /* Dump parameter list */
-        p = nd_left[n];
+        p = nd_left(n);
         if (p != NODE_NULL) {
             d = 0;
             while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
             uart_puts("(PARAMS)");
             while (p != NODE_NULL) {
                 nd_print(p, depth + 2);
-                p = nd_next[p];
+                p = nd_next(p);
             }
         }
         /* Dump body */
-        if (nd_right[n] != NODE_NULL) {
+        if (nd_right(n) != NODE_NULL) {
             d = 0;
             while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
             uart_puts("(BODY)");
-            nd_dump(nd_right[n], depth + 2);
+            nd_dump(nd_right(n), depth + 2);
         }
-        nd_dump(nd_next[n], depth);
+        nd_dump(nd_next(n), depth);
         return;
     }
-    nd_dump(nd_left[n], depth + 1);
-    nd_dump(nd_right[n], depth + 1);
+    nd_dump(nd_left(n), depth + 1);
+    nd_dump(nd_right(n), depth + 1);
     /* IF: dump else branch stored in nd_ival */
-    if (nd_kind[n] == NODE_IF && nd_ival[n] != NODE_NULL) {
+    if (nd_kind(n) == NODE_IF && nd_ival(n) != NODE_NULL) {
         d = 0;
         while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
         uart_puts("(ELSE)");
-        nd_dump(nd_ival[n], depth + 1);
+        nd_dump(nd_ival(n), depth + 1);
     }
     /* DO_COUNT: dump end expression stored in nd_ival */
-    if (nd_kind[n] == NODE_DO_COUNT && nd_ival[n] != NODE_NULL) {
+    if (nd_kind(n) == NODE_DO_COUNT && nd_ival(n) != NODE_NULL) {
         d = 0;
         while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
         uart_puts("(TO)");
-        nd_dump(nd_ival[n], depth + 1);
+        nd_dump(nd_ival(n), depth + 1);
     }
     /* SELECT: dump WHEN children via nd_left sibling chain,
        OTHERWISE body stored in nd_ival */
-    if (nd_kind[n] == NODE_SELECT) {
-        if (nd_ival[n] != NODE_NULL) {
+    if (nd_kind(n) == NODE_SELECT) {
+        if (nd_ival(n) != NODE_NULL) {
             d = 0;
             while (d < depth + 1) { uart_putstr("  "); d = d + 1; }
             uart_puts("(OTHERWISE)");
-            nd_dump(nd_ival[n], depth + 1);
+            nd_dump(nd_ival(n), depth + 1);
         }
-        nd_dump(nd_next[n], depth);
+        nd_dump(nd_next(n), depth);
         return;
     }
-    nd_dump(nd_next[n], depth);
+    nd_dump(nd_next(n), depth);
 }
 
 #endif

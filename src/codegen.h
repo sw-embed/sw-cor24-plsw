@@ -71,7 +71,7 @@ void cg_source_comment(int node) {
     char buf[120];
     if (!cg_listing) return;
     if (node == NODE_NULL) return;
-    ln = nd_line[node];
+    ln = nd_line(node);
     if (ln <= 0 || ln == cg_last_line) return;
     cg_last_line = ln;
     src_line_text(ln - 1, buf, 120);
@@ -93,18 +93,18 @@ void cg_call(int node);
 
 int cg_is_simple(int node) {
     if (node == NODE_NULL) return 0;
-    if (nd_kind[node] == NODE_LITERAL) return 1;
-    if (nd_kind[node] == NODE_IDENT) return 1;
+    if (nd_kind(node) == NODE_LITERAL) return 1;
+    if (nd_kind(node) == NODE_IDENT) return 1;
     return 0;
 }
 
 /* --- Literal loading --- */
 
 void cg_literal(int node) {
-    int val = nd_ival[node];
+    int val = nd_ival(node);
     /* SIZEOF(name): resolve to symbol width */
-    if (nd_stor[node] == TOK_SIZEOF && nd_name[node]) {
-        int si = sym_lookup(nd_name[node]);
+    if (nd_stor(node) == TOK_SIZEOF && nd_name(node)) {
+        int si = sym_lookup(nd_name(node));
         if (si >= 0) {
             val = sym_width[si];
         } else {
@@ -135,14 +135,14 @@ void cg_load_var(int node) {
     int off;
     int w;
 
-    idx = sym_lookup(nd_name[node]);
+    idx = sym_lookup(nd_name(node));
     if (idx < 0) {
         cg_error("undefined variable");
         emit_comment("ERROR: undefined variable");
-        if (nd_name[node]) {
+        if (nd_name(node)) {
             emit_str(EMIT_INDENT);
             emit_str("; name: ");
-            emit_line(nd_name[node]);
+            emit_line(nd_name(node));
         }
         emit_str(EMIT_INDENT);
         emit_line("lc      r0,0");
@@ -201,7 +201,7 @@ void cg_store_var(int node) {
     int off;
     int w;
 
-    idx = sym_lookup(nd_name[node]);
+    idx = sym_lookup(nd_name(node));
     if (idx < 0) {
         cg_error("undefined variable for store");
         emit_comment("ERROR: undefined variable for store");
@@ -258,11 +258,11 @@ void cg_load_simple_into(int node, char *reg) {
     int off;
     int w;
 
-    if (nd_kind[node] == NODE_LITERAL) {
-        val = nd_ival[node];
+    if (nd_kind(node) == NODE_LITERAL) {
+        val = nd_ival(node);
         /* SIZEOF(name): resolve to symbol width at codegen time */
-        if (nd_stor[node] == TOK_SIZEOF && nd_name[node]) {
-            idx = sym_lookup(nd_name[node]);
+        if (nd_stor(node) == TOK_SIZEOF && nd_name(node)) {
+            idx = sym_lookup(nd_name(node));
             if (idx >= 0) {
                 val = sym_width[idx];
             } else {
@@ -286,8 +286,8 @@ void cg_load_simple_into(int node, char *reg) {
             emit_int(val);
             emit_nl();
         }
-    } else if (nd_kind[node] == NODE_IDENT) {
-        idx = sym_lookup(nd_name[node]);
+    } else if (nd_kind(node) == NODE_IDENT) {
+        idx = sym_lookup(nd_name(node));
         if (idx < 0) {
             cg_error("undefined variable");
             emit_comment("ERROR: undefined variable in simple load");
@@ -411,9 +411,9 @@ void cg_binop(int node) {
     int lbl_false;
     int lbl_end;
 
-    op = nd_ival[node];
-    lhs = nd_left[node];
-    rhs = nd_right[node];
+    op = nd_ival(node);
+    lhs = nd_left(node);
+    rhs = nd_right(node);
 
     if (cg_is_simple(rhs)) {
         /* Optimization: evaluate LHS into r0, load RHS directly into r1 */
@@ -500,10 +500,10 @@ void cg_binop(int node) {
 /* --- Unary operators --- */
 
 void cg_unop(int node) {
-    int op = nd_ival[node];
+    int op = nd_ival(node);
 
     /* Evaluate operand into r0 */
-    cg_expr(nd_left[node]);
+    cg_expr(nd_left(node));
 
     if (op == TOK_MINUS) {
         /* Negate: 0 - r0 */
@@ -539,17 +539,17 @@ int cg_field_addr(int node) {
     int fw;
     int rec_off;
 
-    rec_node = nd_left[node];
+    rec_node = nd_left(node);
 
     /* Currently only support simple record identifiers (REC.FIELD) */
-    if (nd_kind[rec_node] != NODE_IDENT) {
+    if (nd_kind(rec_node) != NODE_IDENT) {
         cg_error("field access requires record variable");
         emit_comment("ERROR: field access on non-ident");
         return 0;
     }
 
     /* Look up the record symbol */
-    sym_idx = sym_lookup(nd_name[rec_node]);
+    sym_idx = sym_lookup(nd_name(rec_node));
     if (sym_idx < 0) {
         cg_error("undefined record variable");
         emit_comment("ERROR: undefined record variable");
@@ -572,14 +572,14 @@ int cg_field_addr(int node) {
     }
 
     /* Look up the field */
-    fidx = td_field_lookup(desc, nd_name[node]);
+    fidx = td_field_lookup(desc, nd_name(node));
     if (fidx < 0) {
         cg_error("undefined field in record");
         emit_comment("ERROR: undefined field");
-        if (nd_name[node]) {
+        if (nd_name(node)) {
             emit_str(EMIT_INDENT);
             emit_str("; field: ");
-            emit_line(nd_name[node]);
+            emit_line(nd_name(node));
         }
         return 0;
     }
@@ -664,7 +664,7 @@ int cg_array_addr(int node) {
     int elem_w;
     int arr_off;
 
-    sym_idx = sym_lookup(nd_name[node]);
+    sym_idx = sym_lookup(nd_name(node));
     if (sym_idx < 0) {
         cg_error("undefined array variable");
         emit_comment("ERROR: undefined array variable");
@@ -684,7 +684,7 @@ int cg_array_addr(int node) {
     arr_off = sym_offset[sym_idx];
 
     /* Evaluate index expression into r0 */
-    cg_expr(nd_left[node]);
+    cg_expr(nd_left(node));
 
     /* Compute element offset: r0 = index * elem_w */
     if (elem_w == 3) {
@@ -768,7 +768,7 @@ void cg_addr(int node) {
     int idx;
     int off;
 
-    operand = nd_left[node];
+    operand = nd_left(node);
     if (operand == NODE_NULL) {
         cg_error("ADDR with no operand");
         emit_comment("ERROR: ADDR with no operand");
@@ -776,8 +776,8 @@ void cg_addr(int node) {
         return;
     }
 
-    if (nd_kind[operand] == NODE_IDENT) {
-        idx = sym_lookup(nd_name[operand]);
+    if (nd_kind(operand) == NODE_IDENT) {
+        idx = sym_lookup(nd_name(operand));
         if (idx < 0) {
             cg_error("undefined variable in ADDR");
             emit_comment("ERROR: undefined variable in ADDR");
@@ -805,11 +805,11 @@ void cg_addr(int node) {
             }
             emit_instr("add     r0,fp");
         }
-    } else if (nd_kind[operand] == NODE_FIELD_ACCESS) {
+    } else if (nd_kind(operand) == NODE_FIELD_ACCESS) {
         /* ADDR(rec.field) -- compute field address into r2, move to r0 */
         cg_field_addr(operand);
         emit_instr("mov     r0,r2");
-    } else if (nd_kind[operand] == NODE_ARRAY_ACCESS) {
+    } else if (nd_kind(operand) == NODE_ARRAY_ACCESS) {
         /* ADDR(arr(i)) -- compute element address into r2, move to r0 */
         cg_array_addr(operand);
         emit_instr("mov     r0,r2");
@@ -836,19 +836,19 @@ int cg_deref_addr(int node) {
     int foff;
     int fw;
 
-    ptr_node = nd_left[node];
+    ptr_node = nd_left(node);
 
     /* Evaluate pointer expression into r0 */
     cg_expr(ptr_node);
 
     /* Look up the pointer symbol to find the pointed-to record type */
-    if (nd_kind[ptr_node] != NODE_IDENT) {
+    if (nd_kind(ptr_node) != NODE_IDENT) {
         cg_error("dereference requires pointer variable");
         emit_comment("ERROR: deref on non-ident");
         return 0;
     }
 
-    sym_idx = sym_lookup(nd_name[ptr_node]);
+    sym_idx = sym_lookup(nd_name(ptr_node));
     if (sym_idx < 0) {
         cg_error("undefined pointer variable");
         emit_comment("ERROR: undefined pointer variable");
@@ -868,19 +868,19 @@ int cg_deref_addr(int node) {
        then search all BASED record descriptors */
     fidx = -1;
     if (desc >= 0) {
-        fidx = td_field_lookup(desc, nd_name[node]);
+        fidx = td_field_lookup(desc, nd_name(node));
     }
     if (fidx < 0) {
         /* Search all record descriptors for this field */
-        fidx = td_field_search(nd_name[node], &desc);
+        fidx = td_field_search(nd_name(node), &desc);
     }
     if (fidx < 0) {
         cg_error("undefined field in pointer dereference");
         emit_comment("ERROR: undefined field in deref");
-        if (nd_name[node]) {
+        if (nd_name(node)) {
             emit_str(EMIT_INDENT);
             emit_str("; field: ");
-            emit_line(nd_name[node]);
+            emit_line(nd_name(node));
         }
         return 0;
     }
@@ -948,21 +948,21 @@ void cg_expr(int node) {
         return;
     }
 
-    if (nd_kind[node] == NODE_LITERAL) {
+    if (nd_kind(node) == NODE_LITERAL) {
         cg_literal(node);
-    } else if (nd_kind[node] == NODE_IDENT) {
+    } else if (nd_kind(node) == NODE_IDENT) {
         cg_load_var(node);
-    } else if (nd_kind[node] == NODE_BINOP) {
+    } else if (nd_kind(node) == NODE_BINOP) {
         cg_binop(node);
-    } else if (nd_kind[node] == NODE_UNOP) {
+    } else if (nd_kind(node) == NODE_UNOP) {
         cg_unop(node);
-    } else if (nd_kind[node] == NODE_ARRAY_ACCESS) {
+    } else if (nd_kind(node) == NODE_ARRAY_ACCESS) {
         /* Array element access: arr(i) */
         cg_array_load(node);
-    } else if (nd_kind[node] == NODE_CALL) {
+    } else if (nd_kind(node) == NODE_CALL) {
         /* Check if this is actually an array access (parsed as CALL) */
-        if (nd_name[node]) {
-            int _si = sym_lookup(nd_name[node]);
+        if (nd_name(node)) {
+            int _si = sym_lookup(nd_name(node));
             if (_si >= 0 && (sym_flags[_si] & SYM_F_ARRAY)) {
                 cg_array_load(node);
             } else {
@@ -971,13 +971,13 @@ void cg_expr(int node) {
         } else {
             cg_call(node);
         }
-    } else if (nd_kind[node] == NODE_FIELD_ACCESS) {
+    } else if (nd_kind(node) == NODE_FIELD_ACCESS) {
         /* Record field access: rec.field */
         cg_field_load(node);
-    } else if (nd_kind[node] == NODE_ADDR) {
+    } else if (nd_kind(node) == NODE_ADDR) {
         /* ADDR(var) -- address-of */
         cg_addr(node);
-    } else if (nd_kind[node] == NODE_DEREF) {
+    } else if (nd_kind(node) == NODE_DEREF) {
         /* ptr->field -- pointer dereference */
         cg_deref_load(node);
     } else {
@@ -985,7 +985,7 @@ void cg_expr(int node) {
         emit_comment("ERROR: unsupported expr kind");
         emit_str(EMIT_INDENT);
         emit_str("; kind=");
-        emit_int(nd_kind[node]);
+        emit_int(nd_kind(node));
         emit_nl();
     }
 }
@@ -1032,15 +1032,15 @@ void cg_string_to_deref(int deref_node, char *s, int len) {
 }
 
 void cg_assign(int node) {
-    int lhs = nd_left[node];
-    int rhs = nd_right[node];
+    int lhs = nd_left(node);
+    int rhs = nd_right(node);
 
     /* Special case: string literal assigned to ptr->field (CHAR array) */
-    if (nd_kind[lhs] == NODE_DEREF
-        && nd_kind[rhs] == NODE_LITERAL
-        && nd_type[rhs] == TYPE_CHAR
-        && nd_name[rhs]) {
-        cg_string_to_deref(lhs, nd_name[rhs], str_len(nd_name[rhs]));
+    if (nd_kind(lhs) == NODE_DEREF
+        && nd_kind(rhs) == NODE_LITERAL
+        && nd_type(rhs) == TYPE_CHAR
+        && nd_name(rhs)) {
+        cg_string_to_deref(lhs, nd_name(rhs), str_len(nd_name(rhs)));
         return;
     }
 
@@ -1048,13 +1048,13 @@ void cg_assign(int node) {
     cg_expr(rhs);
 
     /* Store r0 into LHS */
-    if (nd_kind[lhs] == NODE_IDENT) {
+    if (nd_kind(lhs) == NODE_IDENT) {
         cg_store_var(lhs);
-    } else if (nd_kind[lhs] == NODE_FIELD_ACCESS) {
+    } else if (nd_kind(lhs) == NODE_FIELD_ACCESS) {
         cg_field_store(lhs);
-    } else if (nd_kind[lhs] == NODE_ARRAY_ACCESS) {
+    } else if (nd_kind(lhs) == NODE_ARRAY_ACCESS) {
         cg_array_store(lhs);
-    } else if (nd_kind[lhs] == NODE_DEREF) {
+    } else if (nd_kind(lhs) == NODE_DEREF) {
         cg_deref_store(lhs);
     } else {
         cg_error("unsupported assignment target");
@@ -1149,12 +1149,12 @@ void cg_emit_static_var(int sym_idx, int init_node) {
      * .byte per byte. cor24-asm assembles ".zero N" to N zero
      * bytes, byte-identical to the previous spelled-out forms. */
 
-    if (init_node != NODE_NULL && nd_kind[init_node] == NODE_LITERAL) {
+    if (init_node != NODE_NULL && nd_kind(init_node) == NODE_LITERAL) {
         /* (1) Non-empty string init: emit chars + zero-pad to width. */
-        if (nd_type[init_node] == TYPE_CHAR
-            && nd_name[init_node]
-            && nd_name[init_node][0]) {
-            sval = nd_name[init_node];
+        if (nd_type(init_node) == TYPE_CHAR
+            && nd_name(init_node)
+            && nd_name(init_node)[0]) {
+            sval = nd_name(init_node);
             emit_str(EMIT_INDENT);
             emit_str(".byte   ");
             i = 0;
@@ -1174,8 +1174,8 @@ void cg_emit_static_var(int sym_idx, int init_node) {
          * the size of one element -- a non-zero INIT on an array
          * doesn't fan out to fill the array. Pre-existing
          * behavior; out of scope for this saga.) */
-        if (nd_type[init_node] != TYPE_CHAR && nd_ival[init_node] != 0) {
-            val = nd_ival[init_node];
+        if (nd_type(init_node) != TYPE_CHAR && nd_ival(init_node) != 0) {
+            val = nd_ival(init_node);
             emit_str(EMIT_INDENT);
             if (w == 1) emit_str(".byte   ");
             else        emit_str(".word   ");
@@ -1204,50 +1204,50 @@ void cg_emit_proc_static_data(int body_node) {
     if (body_node == NODE_NULL) return;
 
     /* Handle non-block statement nodes */
-    if (nd_kind[body_node] == NODE_IF) {
-        while (body_node != NODE_NULL && nd_kind[body_node] == NODE_IF) {
-            cg_emit_proc_static_data(nd_right[body_node]);
-            if (nd_ival[body_node] != NODE_NULL && nd_kind[nd_ival[body_node]] == NODE_IF) {
-                body_node = nd_ival[body_node];
+    if (nd_kind(body_node) == NODE_IF) {
+        while (body_node != NODE_NULL && nd_kind(body_node) == NODE_IF) {
+            cg_emit_proc_static_data(nd_right(body_node));
+            if (nd_ival(body_node) != NODE_NULL && nd_kind(nd_ival(body_node)) == NODE_IF) {
+                body_node = nd_ival(body_node);
             } else {
-                cg_emit_proc_static_data(nd_ival[body_node]);
+                cg_emit_proc_static_data(nd_ival(body_node));
                 break;
             }
         }
         return;
     }
-    if (nd_kind[body_node] == NODE_DO_WHILE || nd_kind[body_node] == NODE_DO_COUNT) {
-        cg_emit_proc_static_data(nd_right[body_node]);
+    if (nd_kind(body_node) == NODE_DO_WHILE || nd_kind(body_node) == NODE_DO_COUNT) {
+        cg_emit_proc_static_data(nd_right(body_node));
         return;
     }
-    if (nd_kind[body_node] == NODE_SELECT) {
-        int wh = nd_left[body_node];
+    if (nd_kind(body_node) == NODE_SELECT) {
+        int wh = nd_left(body_node);
         while (wh != NODE_NULL) {
-            cg_emit_proc_static_data(nd_right[wh]);
-            wh = nd_next[wh];
+            cg_emit_proc_static_data(nd_right(wh));
+            wh = nd_next(wh);
         }
-        cg_emit_proc_static_data(nd_ival[body_node]);
+        cg_emit_proc_static_data(nd_ival(body_node));
         return;
     }
 
     /* Walk block children */
-    stmt = nd_left[body_node];
+    stmt = nd_left(body_node);
     while (stmt != NODE_NULL) {
-        if (nd_kind[stmt] == NODE_DCL && nd_stor[stmt] == STOR_STATIC) {
-            idx = sym_lookup(nd_name[stmt]);
+        if (nd_kind(stmt) == NODE_DCL && nd_stor(stmt) == STOR_STATIC) {
+            idx = sym_lookup(nd_name(stmt));
             if (idx >= 0) {
-                cg_emit_static_var(idx, nd_right[stmt]);
+                cg_emit_static_var(idx, nd_right(stmt));
             }
-        } else if (nd_kind[stmt] == NODE_BLOCK) {
+        } else if (nd_kind(stmt) == NODE_BLOCK) {
             cg_emit_proc_static_data(stmt);
-        } else if (nd_kind[stmt] == NODE_IF) {
+        } else if (nd_kind(stmt) == NODE_IF) {
             cg_emit_proc_static_data(stmt);
-        } else if (nd_kind[stmt] == NODE_DO_WHILE || nd_kind[stmt] == NODE_DO_COUNT) {
+        } else if (nd_kind(stmt) == NODE_DO_WHILE || nd_kind(stmt) == NODE_DO_COUNT) {
             cg_emit_proc_static_data(stmt);
-        } else if (nd_kind[stmt] == NODE_SELECT) {
+        } else if (nd_kind(stmt) == NODE_SELECT) {
             cg_emit_proc_static_data(stmt);
         }
-        stmt = nd_next[stmt];
+        stmt = nd_next(stmt);
     }
 }
 
@@ -1263,9 +1263,9 @@ void cg_emit_static_data(int prog_node) {
     /* Reset listing state so DCL lines show in data section */
     cg_last_line = 0;
 
-    child = nd_left[prog_node];
+    child = nd_left(prog_node);
     while (child != NODE_NULL) {
-        if (nd_kind[child] == NODE_DCL) {
+        if (nd_kind(child) == NODE_DCL) {
             /* In LIBRARY mode, suppress ALL top-level DCL data emission.
              * Top-level globals (BASED records, shared globals from
              * .msw includes, and any other DCLs) are owned by the main
@@ -1275,16 +1275,16 @@ void cg_emit_static_data(int prog_node) {
              * Library modules must use procedure-local STATIC variables
              * for module-private persistent state, not top-level DCLs. */
             if (def_defined("LIBRARY")) {
-                child = nd_next[child];
+                child = nd_next(child);
                 continue;
             }
-            idx = sym_lookup(nd_name[child]);
+            idx = sym_lookup(nd_name(child));
             cg_source_comment(child);
             if (idx >= 0) {
-                cg_emit_static_var(idx, nd_right[child]);
+                cg_emit_static_var(idx, nd_right(child));
             }
         }
-        child = nd_next[child];
+        child = nd_next(child);
     }
 
     /* Emit any collected string literals */
@@ -1313,7 +1313,7 @@ int cg_count_args(int first_arg) {
     arg = first_arg;
     while (arg != NODE_NULL) {
         count = count + 1;
-        arg = nd_next[arg];
+        arg = nd_next(arg);
     }
     return count;
 }
@@ -1340,22 +1340,22 @@ void cg_call(int node) {
 
     if (node == NODE_NULL) return;
 
-    nargs = cg_count_args(nd_left[node]);
+    nargs = cg_count_args(nd_left(node));
 
     if (nargs == 0) {
         /* No arguments: just call */
         emit_str(EMIT_INDENT);
         emit_str("la      r2,_");
-        emit_line(nd_name[node]);
+        emit_line(nd_name(node));
         emit_instr("jal     r1,(r2)");
     } else {
         /* Collect arg nodes into array for reverse-order push */
-        arg = nd_left[node];
+        arg = nd_left(node);
         i = 0;
         while (arg != NODE_NULL && i < CG_MAX_ARGS) {
             arg_nodes[i] = arg;
             i = i + 1;
-            arg = nd_next[arg];
+            arg = nd_next(arg);
         }
 
         /* Push args R-to-L: evaluate last arg first, push it */
@@ -1369,7 +1369,7 @@ void cg_call(int node) {
         /* Call the procedure */
         emit_str(EMIT_INDENT);
         emit_str("la      r2,_");
-        emit_line(nd_name[node]);
+        emit_line(nd_name(node));
         emit_instr("jal     r1,(r2)");
 
         /* Clean up args from stack */
@@ -1397,10 +1397,10 @@ void cg_if(int node) {
     lbl_end = emit_new_label();
 
     while (1) {
-        else_body = nd_ival[node];
+        else_body = nd_ival(node);
 
         /* Evaluate condition into r0 */
-        cg_expr(nd_left[node]);
+        cg_expr(nd_left(node));
 
         if (else_body != NODE_NULL) {
             /* IF/THEN/ELSE */
@@ -1411,14 +1411,14 @@ void cg_if(int node) {
             emit_branch_true(lbl_else);
 
             /* Then body */
-            cg_stmt(nd_right[node]);
+            cg_stmt(nd_right(node));
             emit_branch(lbl_end);
 
             /* Else label */
             emit_label(lbl_else);
 
             /* ELSE IF chain: iterate instead of recursing */
-            if (nd_kind[else_body] == NODE_IF) {
+            if (nd_kind(else_body) == NODE_IF) {
                 node = else_body;
                 continue;
             }
@@ -1433,7 +1433,7 @@ void cg_if(int node) {
             emit_branch_true(lbl_end);
 
             /* Then body */
-            cg_stmt(nd_right[node]);
+            cg_stmt(nd_right(node));
         }
         break;
     }
@@ -1451,31 +1451,31 @@ void cg_select(int node) {
     int when;
 
     lbl_end = emit_new_label();
-    when = nd_left[node];
+    when = nd_left(node);
 
     while (when != NODE_NULL) {
         int lbl_next = emit_new_label();
 
         /* Evaluate condition into r0 */
-        cg_expr(nd_left[when]);
+        cg_expr(nd_left(when));
 
         /* Branch to next WHEN if r0 == 0 (condition false) */
         emit_instr("ceq     r0,z");
         emit_branch_true(lbl_next);
 
         /* WHEN body */
-        cg_stmt(nd_right[when]);
+        cg_stmt(nd_right(when));
         emit_branch(lbl_end);
 
         /* Next WHEN label */
         emit_label(lbl_next);
 
-        when = nd_next[when];
+        when = nd_next(when);
     }
 
     /* OTHERWISE body */
-    if (nd_ival[node] != NODE_NULL) {
-        cg_stmt(nd_ival[node]);
+    if (nd_ival(node) != NODE_NULL) {
+        cg_stmt(nd_ival(node));
     }
 
     emit_label(lbl_end);
@@ -1494,14 +1494,14 @@ void cg_do_while(int node) {
     emit_label(lbl_top);
 
     /* Evaluate condition into r0 */
-    cg_expr(nd_left[node]);
+    cg_expr(nd_left(node));
 
     /* Branch to end if r0 == 0 (condition false) */
     emit_instr("ceq     r0,z");
     emit_branch_true(lbl_end);
 
     /* Loop body */
-    cg_stmt(nd_right[node]);
+    cg_stmt(nd_right(node));
 
     /* Branch back to header */
     emit_branch(lbl_top);
@@ -1521,8 +1521,8 @@ void cg_do_count(int node) {
     lbl_end = emit_new_label();
 
     /* I = start: evaluate start expr into r0, store to loop var */
-    cg_expr(nd_left[node]);
-    cg_store_var(node);  /* nd_name[node] = loop var name */
+    cg_expr(nd_left(node));
+    cg_store_var(node);  /* nd_name(node) = loop var name */
 
     /* Loop header label */
     emit_label(lbl_top);
@@ -1530,7 +1530,7 @@ void cg_do_count(int node) {
     /* Compare: load I into r0, save, eval end into r0, then compare */
     cg_load_var(node);       /* r0 = I */
     emit_instr("push    r0");
-    cg_expr(nd_ival[node]);  /* r0 = end */
+    cg_expr(nd_ival(node));  /* r0 = end */
     emit_instr("mov     r1,r0");  /* r1 = end */
     emit_instr("pop     r0");     /* r0 = I */
 
@@ -1539,7 +1539,7 @@ void cg_do_count(int node) {
     emit_branch_true(lbl_end);
 
     /* Loop body */
-    cg_stmt(nd_right[node]);
+    cg_stmt(nd_right(node));
 
     /* Increment: I = I + 1 */
     cg_load_var(node);
@@ -1562,13 +1562,13 @@ void cg_do_count(int node) {
 void cg_asm_block(int node) {
     int child;
     emit_comment("ASM DO block");
-    child = nd_left[node];
+    child = nd_left(node);
     while (child != NODE_NULL) {
-        if (nd_name[child]) {
+        if (nd_name(child)) {
             emit_str(EMIT_INDENT);
-            emit_line(nd_name[child]);
+            emit_line(nd_name(child));
         }
-        child = nd_next[child];
+        child = nd_next(child);
     }
 }
 
@@ -1581,45 +1581,45 @@ void cg_stmt(int node) {
     /* Emit source line comment if listing enabled */
     cg_source_comment(node);
 
-    if (nd_kind[node] == NODE_ASSIGN) {
+    if (nd_kind(node) == NODE_ASSIGN) {
         cg_assign(node);
-    } else if (nd_kind[node] == NODE_SELECT) {
+    } else if (nd_kind(node) == NODE_SELECT) {
         cg_select(node);
-    } else if (nd_kind[node] == NODE_RETURN) {
+    } else if (nd_kind(node) == NODE_RETURN) {
         /* Evaluate return expression into r0 (if present) */
-        if (nd_left[node] != NODE_NULL) {
-            cg_expr(nd_left[node]);
+        if (nd_left(node) != NODE_NULL) {
+            cg_expr(nd_left(node));
         }
         /* Epilogue emitted by caller at procedure end.
          * For early returns, emit epilogue inline. */
         emit_epilogue();
-    } else if (nd_kind[node] == NODE_CALL) {
+    } else if (nd_kind(node) == NODE_CALL) {
         /* Bare CALL statement (result in r0 discarded) */
         cg_call(node);
-    } else if (nd_kind[node] == NODE_BLOCK) {
+    } else if (nd_kind(node) == NODE_BLOCK) {
         cg_block(node);
-    } else if (nd_kind[node] == NODE_IF) {
+    } else if (nd_kind(node) == NODE_IF) {
         /* IF/THEN/ELSE: evaluate condition, branch on false */
         cg_if(node);
-    } else if (nd_kind[node] == NODE_DO_WHILE) {
+    } else if (nd_kind(node) == NODE_DO_WHILE) {
         /* DO WHILE: loop with condition at top */
         cg_do_while(node);
-    } else if (nd_kind[node] == NODE_DO_COUNT) {
+    } else if (nd_kind(node) == NODE_DO_COUNT) {
         /* DO I = start TO end: counted loop */
         cg_do_count(node);
-    } else if (nd_kind[node] == NODE_SELECT) {
+    } else if (nd_kind(node) == NODE_SELECT) {
         /* SELECT/WHEN/OTHERWISE: linear compare-and-branch chain */
         cg_select(node);
-    } else if (nd_kind[node] == NODE_DCL) {
+    } else if (nd_kind(node) == NODE_DCL) {
         /* Local DCL: no code emission needed (handled by layout) */
-    } else if (nd_kind[node] == NODE_ASM_BLOCK) {
+    } else if (nd_kind(node) == NODE_ASM_BLOCK) {
         cg_asm_block(node);
     } else {
         cg_error("unsupported statement kind");
         emit_comment("ERROR: unsupported statement");
         emit_str(EMIT_INDENT);
         emit_str("; kind=");
-        emit_int(nd_kind[node]);
+        emit_int(nd_kind(node));
         emit_nl();
     }
 }
@@ -1629,10 +1629,10 @@ void cg_block(int block_node) {
     int stmt;
     if (block_node == NODE_NULL) return;
 
-    stmt = nd_left[block_node];
+    stmt = nd_left(block_node);
     while (stmt != NODE_NULL) {
         cg_stmt(stmt);
-        stmt = nd_next[stmt];
+        stmt = nd_next(stmt);
     }
 }
 
@@ -1655,13 +1655,13 @@ void cg_proc(int proc_node) {
     int body;
 
     if (proc_node == NODE_NULL) return;
-    if (nd_kind[proc_node] != NODE_PROC) {
+    if (nd_kind(proc_node) != NODE_PROC) {
         cg_error("expected PROC node");
         return;
     }
 
-    opts = nd_ival[proc_node];
-    body = nd_right[proc_node];
+    opts = nd_ival(proc_node);
+    body = nd_right(proc_node);
 
     /* Emit source line comment for PROC */
     cg_source_comment(proc_node);
@@ -1670,9 +1670,9 @@ void cg_proc(int proc_node) {
     emit_text_section();
 
     /* Emit .globl directive and label */
-    if (nd_name[proc_node]) {
-        emit_global(nd_name[proc_node]);
-        emit_named_label(nd_name[proc_node]);
+    if (nd_name(proc_node)) {
+        emit_global(nd_name(proc_node));
+        emit_named_label(nd_name(proc_node));
     }
 
     /* NAKED procedures: no prologue/epilogue, body is raw */
@@ -1724,13 +1724,13 @@ void cg_program_procs(int prog_node) {
 
     if (prog_node == NODE_NULL) return;
 
-    child = nd_left[prog_node];
+    child = nd_left(prog_node);
     while (child != NODE_NULL) {
-        if (nd_kind[child] == NODE_PROC) {
+        if (nd_kind(child) == NODE_PROC) {
             /* In LIBRARY mode, skip the MAIN wrapper procedure */
-            if (def_defined("LIBRARY") && nd_name[child] &&
-                str_eq(nd_name[child], "MAIN")) {
-                child = nd_next[child];
+            if (def_defined("LIBRARY") && nd_name(child) &&
+                str_eq(nd_name(child), "MAIN")) {
+                child = nd_next(child);
                 continue;
             }
             /* Layout procedure (enters scope, assigns offsets) */
@@ -1740,7 +1740,7 @@ void cg_program_procs(int prog_node) {
             /* Exit procedure scope */
             sym_exit_scope();
         }
-        child = nd_next[child];
+        child = nd_next(child);
     }
 }
 
