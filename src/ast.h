@@ -5,6 +5,7 @@
 #define AST_H
 
 #include "arena.h"
+#include "chunk.h"
 
 /* Node kind constants */
 #define NODE_NONE          0
@@ -52,52 +53,91 @@
 /* Null node index sentinel */
 #define NODE_NULL (-1)
 
-/* Node pool -- parallel arrays, accessed via macros below.
-   The _arr backing arrays are an implementation detail; callers use
-   the nd_kind(i) / nd_type(i) / ... accessor form so storage can move
-   to chunk-backed allocation without touching ~391 callsites. */
-#define NODE_POOL_MAX 12288
+/* Node pool -- chunk-backed parallel arrays, accessed via macros below.
+   Each chunk holds AST_NODES_PER_CHUNK slots of every field as a
+   struct-of-arrays; the chunk allocator (chunk.h) owns the underlying
+   4 KB blocks. Per-node footprint is 10 fields x 3 bytes = 30 bytes,
+   so AST_NODES_PER_CHUNK = floor(4096 / 30) = 136 with 16 bytes slack
+   per chunk. Callers index through the nd_kind(i) / nd_type(i) / ...
+   accessor macros and never see the chunk decomposition. */
+#define AST_NODES_PER_CHUNK 136
+#define AST_CHUNKS_MAX      CHUNK_MAX   /* worst case: AST owns the whole pool */
 
-int nd_kind_arr[NODE_POOL_MAX];   /* node kind */
-int nd_type_arr[NODE_POOL_MAX];   /* type info */
-int nd_stor_arr[NODE_POOL_MAX];   /* storage class */
-int nd_level_arr[NODE_POOL_MAX];  /* DCL level (1,3,5,...) */
-int nd_left_arr[NODE_POOL_MAX];   /* left child index */
-int nd_right_arr[NODE_POOL_MAX];  /* right child index */
-int nd_next_arr[NODE_POOL_MAX];   /* sibling/next index */
-int nd_ival_arr[NODE_POOL_MAX];   /* integer value or operator */
-int nd_line_arr[NODE_POOL_MAX];   /* source line number (1-based) */
-char *nd_name_arr[NODE_POOL_MAX]; /* name (arena-allocated) */
+/* Deprecated -- kept so anything that greps for the old cap finds
+   the new effective ceiling. The real cap is now
+   AST_CHUNKS_MAX * AST_NODES_PER_CHUNK (= 2176 with CHUNK_MAX=16). */
+#define NODE_POOL_MAX (AST_CHUNKS_MAX * AST_NODES_PER_CHUNK)
 
-#define nd_kind(i)  (nd_kind_arr[(i)])
-#define nd_type(i)  (nd_type_arr[(i)])
-#define nd_stor(i)  (nd_stor_arr[(i)])
-#define nd_level(i) (nd_level_arr[(i)])
-#define nd_left(i)  (nd_left_arr[(i)])
-#define nd_right(i) (nd_right_arr[(i)])
-#define nd_next(i)  (nd_next_arr[(i)])
-#define nd_ival(i)  (nd_ival_arr[(i)])
-#define nd_line(i)  (nd_line_arr[(i)])
-#define nd_name(i)  (nd_name_arr[(i)])
+struct ast_block {
+    int    kind  [AST_NODES_PER_CHUNK];
+    int    type  [AST_NODES_PER_CHUNK];
+    int    stor  [AST_NODES_PER_CHUNK];
+    int    level [AST_NODES_PER_CHUNK];
+    int    left  [AST_NODES_PER_CHUNK];
+    int    right [AST_NODES_PER_CHUNK];
+    int    next  [AST_NODES_PER_CHUNK];
+    int    ival  [AST_NODES_PER_CHUNK];
+    int    line  [AST_NODES_PER_CHUNK];
+    char  *name  [AST_NODES_PER_CHUNK];
+};
+
+struct ast_block *ast_chunks[AST_CHUNKS_MAX];
+int ast_chunk_count;
+
+#define nd_kind(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->kind [(i) % AST_NODES_PER_CHUNK])
+#define nd_type(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->type [(i) % AST_NODES_PER_CHUNK])
+#define nd_stor(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->stor [(i) % AST_NODES_PER_CHUNK])
+#define nd_level(i) (ast_chunks[(i) / AST_NODES_PER_CHUNK]->level[(i) % AST_NODES_PER_CHUNK])
+#define nd_left(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->left [(i) % AST_NODES_PER_CHUNK])
+#define nd_right(i) (ast_chunks[(i) / AST_NODES_PER_CHUNK]->right[(i) % AST_NODES_PER_CHUNK])
+#define nd_next(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->next [(i) % AST_NODES_PER_CHUNK])
+#define nd_ival(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->ival [(i) % AST_NODES_PER_CHUNK])
+#define nd_line(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->line [(i) % AST_NODES_PER_CHUNK])
+#define nd_name(i)  (ast_chunks[(i) / AST_NODES_PER_CHUNK]->name [(i) % AST_NODES_PER_CHUNK])
 
 int nd_count;                     /* number of allocated nodes */
 
+int ast_pool_exhausted;
+
+/* Return all AST chunks to the pool and reset the node count. Safe to
+   call repeatedly (REPL mode compiles back-to-back). */
 void ast_init(void) {
+    int i;
+    i = 0;
+    while (i < ast_chunk_count) {
+        chunk_free((char *)ast_chunks[i]);
+        ast_chunks[i] = 0;
+        i = i + 1;
+    }
+    ast_chunk_count = 0;
     nd_count = 0;
     ast_pool_exhausted = 0;
 }
 
-/* Allocate a new node. Returns node index or NODE_NULL on OOM. */
-int ast_pool_exhausted;
-
+/* Allocate a new node. Grows the chunk array on demand. Returns node
+   index or NODE_NULL on chunk exhaustion. */
 int nd_alloc(int kind) {
-    if (nd_count >= NODE_POOL_MAX) {
-        if (!ast_pool_exhausted) {
-            ast_pool_exhausted = 1;
-            uart_puts("ERROR: AST node pool exhausted (12288 nodes)");
-            uart_puts("Program too large for single compilation unit.");
+    int chunk_idx = nd_count / AST_NODES_PER_CHUNK;
+    if (chunk_idx >= ast_chunk_count) {
+        if (ast_chunk_count >= AST_CHUNKS_MAX) {
+            if (!ast_pool_exhausted) {
+                ast_pool_exhausted = 1;
+                uart_puts("ERROR: AST pool exhausted (chunk table full)");
+                uart_puts("Program too large for single compilation unit.");
+            }
+            return NODE_NULL;
         }
-        return NODE_NULL;
+        char *p = chunk_alloc();
+        if (p == 0) {
+            if (!ast_pool_exhausted) {
+                ast_pool_exhausted = 1;
+                uart_puts("ERROR: chunk_alloc returned NULL for AST node");
+                uart_puts("Program too large for single compilation unit.");
+            }
+            return NODE_NULL;
+        }
+        ast_chunks[ast_chunk_count] = (struct ast_block *)p;
+        ast_chunk_count = ast_chunk_count + 1;
     }
     int i = nd_count;
     nd_count = nd_count + 1;
