@@ -238,32 +238,32 @@ void test_ast(void) {
     uart_putstr("  program node idx=");
     print_int(prog);
     uart_putstr(" kind=");
-    uart_puts(nd_kind_name(nd_kind[prog]));
+    uart_puts(nd_kind_name(nd_kind(prog)));
 
     /* Test 2: literal and ident nodes */
     int lit = nd_literal(42);
     uart_putstr("  literal idx=");
     print_int(lit);
     uart_putstr(" val=");
-    print_int(nd_ival[lit]);
+    print_int(nd_ival(lit));
     uart_putchar(10);
 
     int id = nd_ident("counter");
     uart_putstr("  ident idx=");
     print_int(id);
     uart_putstr(" name=");
-    uart_puts(nd_name[id]);
+    uart_puts(nd_name(id));
 
     /* Test 3: binary op tree: counter + 42 */
     int add = nd_binop(TOK_PLUS, id, lit);
     uart_putstr("  binop idx=");
     print_int(add);
     uart_putstr(" op=");
-    uart_putstr(tok_name(nd_ival[add]));
+    uart_putstr(tok_name(nd_ival(add)));
     uart_putstr(" left=");
-    print_int(nd_left[add]);
+    print_int(nd_left(add));
     uart_putstr(" right=");
-    print_int(nd_right[add]);
+    print_int(nd_right(add));
     uart_putchar(10);
 
     /* Test 4: assignment: x = counter + 42 */
@@ -272,9 +272,9 @@ void test_ast(void) {
     uart_putstr("  assign idx=");
     print_int(asgn);
     uart_putstr(" target=");
-    print_int(nd_left[asgn]);
+    print_int(nd_left(asgn));
     uart_putstr(" value=");
-    print_int(nd_right[asgn]);
+    print_int(nd_right(asgn));
     uart_putchar(10);
 
     /* Test 5: unary op: ~x */
@@ -282,7 +282,7 @@ void test_ast(void) {
     uart_putstr("  unop idx=");
     print_int(neg);
     uart_putstr(" op=");
-    uart_putstr(tok_name(nd_ival[neg]));
+    uart_putstr(tok_name(nd_ival(neg)));
     uart_putchar(10);
 
     /* Test 6: call node: print(x) */
@@ -290,9 +290,9 @@ void test_ast(void) {
     uart_putstr("  call idx=");
     print_int(call);
     uart_putstr(" name=");
-    uart_putstr(nd_name[call]);
+    uart_putstr(nd_name(call));
     uart_putstr(" args=");
-    print_int(nd_left[call]);
+    print_int(nd_left(call));
     uart_putchar(10);
 
     /* Test 7: return node */
@@ -300,7 +300,7 @@ void test_ast(void) {
     uart_putstr("  return idx=");
     print_int(ret);
     uart_putstr(" expr=");
-    print_int(nd_left[ret]);
+    print_int(nd_left(ret));
     uart_putchar(10);
 
     /* Test 8: append children to program */
@@ -308,11 +308,14 @@ void test_ast(void) {
     nd_append(prog, call);
     nd_append(prog, ret);
     uart_putstr("  program children: ");
-    print_int(nd_left[prog]);
+    int child1 = nd_left(prog);
+    int child2 = nd_next(child1);
+    int child3 = nd_next(child2);
+    print_int(child1);
     uart_putstr(" -> ");
-    print_int(nd_next[nd_left[prog]]);
+    print_int(child2);
     uart_putstr(" -> ");
-    print_int(nd_next[nd_next[nd_left[prog]]]);
+    print_int(child3);
     uart_putchar(10);
 
     /* Test 9: pool count */
@@ -329,15 +332,15 @@ void test_ast(void) {
     /* Test 11: DCL node with type info */
     int dcl = nd_alloc(NODE_DCL);
     nd_set_name(dcl, "buffer");
-    nd_type[dcl] = TYPE_BYTE;
-    nd_stor[dcl] = STOR_STATIC;
-    nd_level[dcl] = 1;
+    nd_type(dcl) = TYPE_BYTE;
+    nd_stor(dcl) = STOR_STATIC;
+    nd_level(dcl) = 1;
     uart_putstr("  dcl name=");
-    uart_putstr(nd_name[dcl]);
+    uart_putstr(nd_name(dcl));
     uart_putstr(" type=");
-    uart_putstr(nd_type_name(nd_type[dcl]));
+    uart_putstr(nd_type_name(nd_type(dcl)));
     uart_putstr(" level=");
-    print_int(nd_level[dcl]);
+    print_int(nd_level(dcl));
     uart_putchar(10);
 }
 
@@ -1635,9 +1638,9 @@ void test_layout(void) {
         uart_putchar(10);
 
         /* Now lay out the proc */
-        int child = nd_left[prog];
+        int child = nd_left(prog);
         while (child != NODE_NULL) {
-            if (nd_kind[child] == NODE_PROC) {
+            if (nd_kind(child) == NODE_PROC) {
                 fsize = layout_proc(child);
                 uart_putstr("  INCR frame_size=");
                 print_int(fsize);
@@ -1651,7 +1654,7 @@ void test_layout(void) {
                 sym_exit_scope();
                 break;
             }
-            child = nd_next[child];
+            child = nd_next(child);
         }
 
         layout_print_frame();
