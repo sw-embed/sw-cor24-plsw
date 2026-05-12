@@ -121,7 +121,12 @@ void emit_runtime_uart_puts(void) {
 char *compile_program(char *source) {
     int prog;
 
-    /* Initialize all subsystems */
+    /* Initialize all subsystems. chunk_init() resets the 64 KB chunk
+       pool that backs AST storage (and, eventually, other migrated
+       buffers). Calling it here makes REPL-mode back-to-back compiles
+       fully chunk-clean; ast_init() also frees its own chunks on the
+       way in, so the two together form a belt-and-suspenders reset. */
+    chunk_init();
     arena_init();
     ast_init();
     sym_init();
