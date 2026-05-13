@@ -1,0 +1,10 @@
+number = 3
+slug = "baseline"
+status = "pending"
+description = """
+Capture post-fix baseline measurements, write the rebuild-required
+CHANGES.md..."""
+role = "production"
+context_files = []
+created_at = "2026-05-12T17:44:03"
+commits = []

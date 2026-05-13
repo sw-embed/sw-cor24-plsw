@@ -1,0 +1,10 @@
+number = 2
+slug = "apply-bumps-and-stress-test"
+status = "pending"
+description = """
+Apply both capacity bumps and add the regression test that would
+have caught ..."""
+role = "production"
+context_files = []
+created_at = "2026-05-12T17:44:03"
+commits = []
