@@ -1,0 +1,1 @@
+ast-to-chunks complete (4/4 steps, ~50% plsw.lgo shrink); next saga is enlarge-src-buf per dcsno's brief 2026-05-12

@@ -1,10 +1,11 @@
 number = 4
 slug = "ast-baseline"
-status = "in-progress"
+status = "completed"
 description = """
 Capture post-Phase-2b baseline measurements and close the
 ast-to-chunks saga...."""
 role = "production"
 context_files = []
 created_at = "2026-05-10T09:54:01"
-commits = []
+completed_at = "2026-05-12T16:44:46"
+commits = ["afabeb2073ce0d41e48f246f7f3a24750c31b180"]

@@ -1,0 +1,10 @@
+number = 1
+slug = "measure-real-inputs"
+status = "pending"
+description = """
+Re-do Phase 0 measurement against realistic inputs to size the
+chunk pool cor..."""
+role = "production"
+context_files = []
+created_at = "2026-05-12T17:44:03"
+commits = []
