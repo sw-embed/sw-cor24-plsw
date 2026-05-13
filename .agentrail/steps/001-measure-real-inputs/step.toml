@@ -1,6 +1,6 @@
 number = 1
 slug = "measure-real-inputs"
-status = "pending"
+status = "in-progress"
 description = """
 Re-do Phase 0 measurement against realistic inputs to size the
 chunk pool cor..."""
