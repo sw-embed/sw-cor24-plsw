@@ -1,10 +1,11 @@
 number = 2
 slug = "apply-bumps-and-stress-test"
-status = "in-progress"
+status = "completed"
 description = """
 Apply both capacity bumps and add the regression test that would
 have caught ..."""
 role = "production"
 context_files = []
 created_at = "2026-05-12T17:44:03"
-commits = []
+completed_at = "2026-05-14T12:14:09"
+commits = ["9001921e627b9f3eed813c4ccac42367b1bb29be"]

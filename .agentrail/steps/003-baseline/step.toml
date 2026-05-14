@@ -1,6 +1,6 @@
 number = 3
 slug = "baseline"
-status = "pending"
+status = "in-progress"
 description = """
 Capture post-fix baseline measurements, write the rebuild-required
 CHANGES.md..."""
