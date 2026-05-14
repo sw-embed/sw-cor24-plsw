@@ -14,8 +14,13 @@
 
 #define LINE_MAX 128
 
-/* Source buffer for compile mode -- 64KB */
-#define SRC_BUF_SIZE 65536
+/* Source buffer for compile mode -- 192 KiB (interim, per
+   dcpls-enlarge-src-buf.md, 2026-05-12). Bumped from 65,536 to
+   unblock dcsno's sno_engine.plsw consolidation (137,994 bytes
+   single source). The overflow detector below stays as a
+   tripwire if growth ever needs the next bump (the brief's
+   long-term recommendation is 262,144 / 256 KiB). */
+#define SRC_BUF_SIZE 196608
 char src_buf[SRC_BUF_SIZE];
 
 /* Include file buffer -- stores content for FILE: uploads */

@@ -14,10 +14,16 @@
 /* One chunk == the 4 KB static-block ceiling. */
 #define CHUNK_SIZE 4096
 
-/* 16 chunks * 4 KB = 64 KB total dynamic-memory budget for the
- * production compiler. Bump if Phase 0-style measurements during
- * ast-to-chunks show this is too tight. */
-#define CHUNK_MAX  16
+/* 128 chunks * 4 KB = 512 KB total dynamic-memory budget for the
+ * production compiler. Sized per the 2026-05-12 re-measurement
+ * (docs/memory-audit-2026-05-12.md): worst measurable input
+ * sno_exec.plsw peaks at 45 chunks; CHUNK_MAX=128 gives 2.85x
+ * headroom, exceeds the 332 KB pre-Phase-3 static AST floor by
+ * 1.54x, and covers the estimated ~95-chunk sno_engine.plsw
+ * peak with 1.35x headroom. Prior CHUNK_MAX=16 (64 KB) was
+ * undersized and caused the capacity regression that the
+ * capacity-and-test saga fixes. */
+#define CHUNK_MAX  128
 
 struct chunk_desc {
     int   in_use;   /* 0 = free, 1 = allocated */
