@@ -4,7 +4,80 @@ Notable PL/SW changes that affect the shipped `plsw.lgo`. Not a
 full changelog -- only entries that signal "rebuild and reinstall
 the compiler" are recorded here.
 
-## 2026-05-12 -- AST onto chunks: production compiler shrinks ~47%
+## 2026-05-14 -- AST chunk capacity fix + SRC_BUF bump (capacity-and-test saga)
+
+* Saga: `capacity-and-test` (three steps `pr/measure-real-inputs`
+  -> `pr/apply-bumps-and-stress-test` -> `pr/baseline`).
+  Addresses two same-day briefs: mike's
+  `dcpls-ast-chunk-capacity-and-test.md` (2026-05-12 17:01,
+  capacity regression in the prior 2026-05-12 install) and
+  dcsno's `dcpls-enlarge-src-buf.md` (2026-05-12 15:01,
+  consolidated `sno_engine.plsw` too big for `src_buf`).
+* **Rebuild signal: REQUIRED.** This entry supersedes the
+  prior 2026-05-12 entry below (which described the 872 KB
+  binary that **was rolled back** because it could not
+  compile real downstream inputs). Install this `plsw.lgo`
+  instead. Cap-boundary error message is unchanged from the
+  prior entry ("AST pool exhausted (chunk table full)") --
+  the change is in the *size* of the cap, not its surface.
+* Effect: two coupled constants change.
+  - `src/chunk.h`: `CHUNK_MAX` 16 -> 128 (pool grows from
+    64 KB to 512 KB). Sized per
+    `docs/memory-audit-2026-05-12.md`: worst measurable
+    input `sno_exec.plsw` peaks at 45 of 128 chunks
+    (**2.85x headroom**), 1.54x over the 332 KB pre-Phase-3
+    static-AST floor, 1.35x over the estimated 95-chunk
+    `sno_engine.plsw` peak.
+  - `src/main.c`: `SRC_BUF_SIZE` 65,536 -> 196,608 (192 KiB,
+    interim per dcsno's brief). Unblocks the consolidated
+    `sno_engine.plsw` (137,994 bytes single source). The
+    brief's long-term recommendation is 256 KiB; deferred
+    until headroom analysis says it's needed.
+* New regression test: `reg-rs/plsw_chunk_stress`. Synthetic
+  fixture (`examples/chunk_stress.plsw`, 2,213 lines, peaks
+  at 12,028 AST nodes / 89 chunks during compile) compiled
+  via a dedicated runner (`scripts/run-chunk-stress.sh`) that
+  bypasses `scripts/pipeline.sh` because the fixture takes
+  ~620M instructions to compile (over pipeline.sh's 200M
+  default budget). Verified to *fail* with the prior
+  `CHUNK_MAX=16` and *pass* with 128 -- it would have caught
+  the under-sizing. `just test` is now **16/16 green**
+  (15 prior fixtures + chunk_stress).
+* Real-workload unblock verified end-to-end:
+  - `sno_lex.plsw` (60 KB) -> 10,569 lines of `.s`,
+    no errors.
+  - `sno_exec.plsw` (63 KB) -> 12,043 lines of `.s`,
+    no errors.
+  Both previously failed with `AST pool exhausted (chunk
+  table full)` on the rolled-back 872 KB binary.
+* Build SHAs:
+  - `build/plsw.lgo` SHA-256
+    `f361b8287fdd7c1c89fc46c942d21d212fa53b3a55014e6c7afe4eb53a09bdc8`
+    (**2,185,150 bytes**; **+527,720 bytes / +31.8%** vs.
+    the rolled-back pre-Phase-3 build of 1,657,430; the prior
+    872,174-byte broken build is not an honest baseline
+    because it was incapable of compiling realistic inputs).
+  - `build/plsw_test.lgo` SHA-256
+    `3e99c3d0167f39501d384010c262c9434c81c602ce81988793067236cd34528f`
+    (1,906,594 bytes).
+* Why the binary grew: see `docs/shrink-lgo-size.md` Phase 2b
+  "CAPACITY-CORRECTED 2026-05-14" block. Short version:
+  +180 KB structural for proper chunk pool headroom,
+  +128 KiB structural for SRC_BUF, plus ~2x `.lgo` text-hex
+  encoding overhead on the 512 KB `chunk_storage`'s `.zero`
+  region. Runtime SRAM footprint is roughly half the on-disk
+  figure since the emulator loads sparse `.zero` regions
+  efficiently.
+* Rebuild / install command (unchanged):
+  ```sh
+  cd $SRCROOT
+  just clean
+  just build-lgo
+  just test    # gate: must report 16/16 green before install
+  install -m 0640 build/plsw.lgo $TOOLROOT/../lib/cor24/plsw.lgo
+  ```
+
+## 2026-05-12 -- AST onto chunks: production compiler shrinks ~47% (SUPERSEDED -- see 2026-05-14 entry above)
 
 * Saga: `ast-to-chunks` (Phase 2b of
   `docs/shrink-lgo-size.md`, four steps `pr/measure-ast` →
