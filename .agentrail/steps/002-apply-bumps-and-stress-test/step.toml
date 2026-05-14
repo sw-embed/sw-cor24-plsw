@@ -1,6 +1,6 @@
 number = 2
 slug = "apply-bumps-and-stress-test"
-status = "pending"
+status = "in-progress"
 description = """
 Apply both capacity bumps and add the regression test that would
 have caught ..."""

@@ -40,9 +40,15 @@ case "$case_name" in
     storage_oom)           args=("$inc/_plsw_storage.msw" "$ex/storage_oom.plsw") ;;
     storage_double_free)   args=("$inc/_plsw_storage.msw" "$ex/storage_double_free.plsw") ;;
     storage_size_mismatch) args=("$inc/_plsw_storage.msw" "$ex/storage_size_mismatch.plsw") ;;
+    chunk_stress)
+        # Compile-only stress test; bypasses pipeline.sh because
+        # the fixture takes ~620M instructions to compile (over
+        # pipeline.sh's 200M default). See scripts/run-chunk-stress.sh.
+        exec "$repo/scripts/run-chunk-stress.sh"
+        ;;
     *)
         echo "driver.sh: unknown case '$case_name'" >&2
-        echo "available cases: hello led loop record define select_demo select_nested macro hello_macro chain storage_basic storage_coalesce storage_oom storage_double_free storage_size_mismatch" >&2
+        echo "available cases: hello led loop record define select_demo select_nested macro hello_macro chain storage_basic storage_coalesce storage_oom storage_double_free storage_size_mismatch chunk_stress" >&2
         exit 2
         ;;
 esac

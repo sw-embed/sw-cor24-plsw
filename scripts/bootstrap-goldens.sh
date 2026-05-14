@@ -60,6 +60,7 @@ cases=(
     storage_oom
     storage_double_free
     storage_size_mismatch
+    chunk_stress
 )
 
 # Ensure the compiler .lgo exists before we start. Without it the
