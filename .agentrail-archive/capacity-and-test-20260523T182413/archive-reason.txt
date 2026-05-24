@@ -1,0 +1,1 @@
+All 3 steps complete and merged. Baseline verified on Arch: plsw.lgo 2,185,150 bytes, 16/16 tests green, parallel mktemp race confirmed fixed.
