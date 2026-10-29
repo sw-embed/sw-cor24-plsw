@@ -1,9 +1,11 @@
 # sw-cor24-plsw
 
+<img src="images/sw-pl-badge2.png" alt="PL/SW badge" width="160" align="right">
+
 PL/SW (Programming Language for Software Wrighter) compiler for the
 COR24 24-bit RISC ISA.
 
-A freestanding, PL/I-inspired systems language with compile-time macro
+A freestanding, PL/S-inspired systems language with compile-time macro
 metaprogramming, BASED record templates, and controlled inline assembly.
 Transpiles to human-readable COR24 assembler source (.s) with
 interleaved source-line comments.
