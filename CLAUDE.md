@@ -18,6 +18,18 @@ See `docs/` for detailed documentation:
 
 ## CRITICAL: Git Branching Workflow (devgroup policy)
 
+**Scope -- check the account first (`whoami`):**
+
+- **Linux accounts whose names start with `d`** (unprivileged
+  developer accounts, no gh credentials): follow every rule in this
+  section and in the AgentRail protocol below exactly. No push, no
+  `gh` commands.
+- **Account `mike`** (the coordinator, with gh credentials): the
+  rules are relaxed. When the user asks, you may `git push` feature,
+  fix, or `pr/*` branches and open GitHub PRs with `gh pr create`.
+  Quick out-of-process fixes do not need AgentRail steps. Still work
+  on a branch rather than committing to `main` or `dev` directly.
+
 This clone is downstream of a coordinator-gated integration model:
 
 - `main` and `dev` are coordinator-only. **Never commit to them
