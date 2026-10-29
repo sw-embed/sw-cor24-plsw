@@ -132,6 +132,7 @@ Regression testing details: see [docs/testing.md](docs/testing.md).
 - [Design Decisions](docs/design.md)
 - [Implementation Plan](docs/plan.md)
 - [Research Notes](docs/research.txt)
+- [PL/S History](docs/pl-s-history.md)
 - [Assembler Directive Report](docs/byte-comm.md)
 - [Testing & Regression Suite](docs/testing.md)
 
