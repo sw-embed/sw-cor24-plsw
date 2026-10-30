@@ -133,6 +133,7 @@ Regression testing details: see [docs/testing.md](docs/testing.md).
 - [Implementation Plan](docs/plan.md)
 - [Research Notes](docs/research.txt)
 - [PL/S History](docs/pl-s-history.md)
+- [Migration Plan: C to HLASM](docs/migrate-from-c-to-hlasm.md)
 - [Assembler Directive Report](docs/byte-comm.md)
 - [Testing & Regression Suite](docs/testing.md)
 
